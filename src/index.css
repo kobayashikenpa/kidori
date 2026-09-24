@@ -607,3 +607,14 @@ select.input {
   color: var(--accent-ink);
   font-weight: 700;
 }
+.part-dim.bad {
+  background: var(--err-soft);
+}
+.part-dim.bad .v {
+  color: var(--err);
+}
+.part-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -1,7 +1,7 @@
 // W・H・D の式の入力欄。欄の下に、登録済みの部材の寸法ボタンと、数字・演算子のボタンを並べる。
 // ボタンだけで式を作れる。キーボードでも打てる
 import { useRef, type PointerEvent } from 'react'
-import { AXES, type Axis, type Part } from '../../engine/types'
+import { AXES, type Axis, type DimensionError, type Part } from '../../engine/types'
 import { fmt } from '../format'
 import { backspace, insertKey, insertRef, type Edit, type PadKey } from '../formulaEdit'
 
@@ -25,12 +25,14 @@ interface Props {
   finishedOf: (partId: string) => Record<Axis, number> | null
   /** この欄の仕上がり寸法（計算できなければ null） */
   finished: number | null
+  /** この欄の式のエラー */
+  errors: DimensionError[]
   /** ボタンの並びを開いているか */
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function FormulaInput({ axis, value, onChange, parts, finishedOf, finished, open, onOpenChange }: Props) {
+export function FormulaInput({ axis, value, onChange, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   // 最後のカーソル位置。欄の外のボタンを押したときも、ここに入れる
   const caret = useRef<number | null>(null)
@@ -65,7 +67,9 @@ export function FormulaInput({ axis, value, onChange, parts, finishedOf, finishe
         <input
           ref={inputRef}
           id={id}
-          className="input num"
+          className={`input num${errors.length > 0 ? ' bad' : ''}`}
+          aria-invalid={errors.length > 0}
+          aria-describedby={errors.length > 0 ? `${id}-err` : undefined}
           value={value}
           placeholder="数値または式"
           autoComplete="off"
@@ -91,6 +95,11 @@ export function FormulaInput({ axis, value, onChange, parts, finishedOf, finishe
           ボタン
         </button>
       </div>
+      {errors.length > 0 && (
+        <p className="msg err" id={`${id}-err`} role="alert">
+          {errors.map((e) => e.message).join('。')}
+        </p>
+      )}
 
       {open && (
         <div className="pad" id={`${id}-pad`}>

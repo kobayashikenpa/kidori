@@ -114,6 +114,7 @@ export function PartEditor({ part, onClose }: Props) {
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}
           finishedOf={finishedOf}
+          errors={dims.errors.filter((e) => e.axis === axis)}
           open={padAxis === axis}
           onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
         />

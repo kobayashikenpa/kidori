@@ -71,7 +71,10 @@ function PartCard({ part, board, dims: d, onOpen }: CardProps) {
           const v = d.finished?.[a]
           const thick = d.thicknessAxis === a
           return (
-            <span key={a} className={`part-dim${thick ? ' thick' : ''}`}>
+            <span
+              key={a}
+              className={`part-dim${thick ? ' thick' : ''}${d.errors.some((e) => e.axis === a) ? ' bad' : ''}`}
+            >
               <span className="ax">
                 {a}
                 {thick && '・厚み'}
@@ -81,6 +84,15 @@ function PartCard({ part, board, dims: d, onOpen }: CardProps) {
           )
         })}
       </span>
+      {d.errors.length > 0 && (
+        <span className="part-errors">
+          {d.errors.map((e, i) => (
+            <span key={`${e.axis}-${i}`} className="msg err">
+              {e.axis}：{e.message}
+            </span>
+          ))}
+        </span>
+      )}
     </button>
   )
 }
