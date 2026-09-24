@@ -1,15 +1,16 @@
 // 部材名を変えたときの、式の中の参照（旧名.W など）のつけ替え
 import type { Part } from '../types'
-import { parseRefText, splitChunks, validatePartName } from './tokenize'
+import { normalizePartName, parseRefText, splitChunks, validatePartName } from './tokenize'
 
-/** 式の中の「旧名.W/H/D」を「新名.W/H/D」に書き換える。ほかの部分（空白など）はそのまま残す */
+/** 式の中の「旧名.W/H/D」（全角で書いたものも）を「新名.W/H/D」に書き換える。ほかの部分（空白など）はそのまま残す */
 export function renameRefsInExpr(expr: string, oldName: string, newName: string): string {
+  const oldKey = normalizePartName(oldName)
   let out = ''
   let last = 0
   for (const item of splitChunks(expr)) {
     if ('type' in item) continue
     const ref = parseRefText(item.text)
-    if (!ref || ref.part !== oldName) continue
+    if (!ref || ref.part !== oldKey) continue
     out += expr.slice(last, item.start) + `${newName}.${ref.axis}`
     last = item.end
   }

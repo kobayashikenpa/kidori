@@ -1,6 +1,7 @@
 // 参照の依存関係の整理：計算順（参照先が先）・存在しない部材・循環参照
 import { refsOf } from '../formula/evaluate'
 import { parse, type Expr } from '../formula/parse'
+import { normalizePartName } from '../formula/tokenize'
 import { AXES, type Axis, type DimensionError, type Part } from '../types'
 
 /** 部材の1つの寸法（部材.W など） */
@@ -32,9 +33,12 @@ export function dimKey(partId: string, axis: Axis): string {
 
 /** 部材の式から依存関係を作り、計算順と、存在しない部材・循環参照を求める */
 export function resolve(parts: readonly Part[]): Resolution {
-  // 部材名 → 部材（名前は重複しない前提。重複していれば先のものを使う）
+  // そろえた部材名 → 部材（名前は重複しない前提。重複していれば先のものを使う）
   const byName = new Map<string, Part>()
-  for (const p of parts) if (!byName.has(p.name)) byName.set(p.name, p)
+  for (const p of parts) {
+    const key = normalizePartName(p.name)
+    if (!byName.has(key)) byName.set(key, p)
+  }
   const nameOf = new Map(parts.map((p) => [p.id, p.name]))
 
   const nodes = new Map<string, DimNode>()

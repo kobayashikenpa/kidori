@@ -118,3 +118,25 @@ describe('refsOf（参照の一覧）', () => {
     expect(evaluate(r.ast, () => 600)).toEqual({ ok: true, value: 300 })
   })
 })
+
+describe('全角の記号・数字の式も計算できる', () => {
+  it.each([
+    ['900＋10', 910],
+    ['９００×2', 1800],
+    ['（900）', 900],
+    ['900 ÷ 2', 450],
+    ['900 − 10', 890],
+    ['900 – 10 — 10', 880],
+    ['3 ✕ 3', 9],
+    ['－５＋１０', 5],
+  ])('%s = %d', (expr, value) => {
+    expect(calc(expr)).toEqual({ ok: true, value })
+  })
+
+  it('全体．Ｗ の参照', () => {
+    expect(evaluateExpr('全体．Ｗ − 100', (part, axis) => (part === '全体' && axis === 'W' ? 900 : null))).toEqual({
+      ok: true,
+      value: 800,
+    })
+  })
+})

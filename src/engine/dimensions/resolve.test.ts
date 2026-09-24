@@ -100,3 +100,11 @@ describe('resolve（参照の依存関係）', () => {
     expect(at('id-全体')).toBeLessThan(at('id-棚板'))
   })
 })
+
+describe('全角・半角の違う部材名', () => {
+  it('式の「棚板１．Ｗ」は部材「棚板１」を指す', () => {
+    const r = resolve([mkPart('棚板１', { W: '300' }), mkPart('X', { W: '棚板１．Ｗ + 1' })])
+    expect(r.errors).toEqual([])
+    expect(r.nodes.get('id-X:W')!.deps).toEqual([{ partId: 'id-棚板１', axis: 'W' }])
+  })
+})

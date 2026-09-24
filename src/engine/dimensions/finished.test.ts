@@ -138,3 +138,11 @@ describe('computeFinished（仕上がり寸法）', () => {
     expect(finishedOf(job, 'Y').finished?.W).toBeCloseTo(100)
   })
 })
+
+describe('全角の式', () => {
+  it('全角で書いた参照も、全角の名前の部材も計算できる', () => {
+    const job = withParts(mkPart('棚板１', { W: '（全体．Ｗ − １００）÷２' }), mkPart('Y', { W: '棚板１.W × 2' }))
+    expect(finishedOf(job, '棚板１').finished?.W).toBe(400)
+    expect(finishedOf(job, 'Y').finished?.W).toBe(800)
+  })
+})

@@ -60,3 +60,9 @@ describe('renamePart（部材名の変更と参照のつけ替え）', () => {
     expect(renamePart(bookshelfJob().parts, 'nope', 'X').ok).toBe(false)
   })
 })
+
+describe('全角で書いた参照のつけ替え', () => {
+  it('側板．Ｗ も書き換える（ほかの部分は入力したまま）', () => {
+    expect(renameRefsInExpr('側板．Ｗ　＋　１０', '側板', '側')).toBe('側.W　＋　１０')
+  })
+})

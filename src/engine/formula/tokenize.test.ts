@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tokenize, validatePartName } from './tokenize'
+import { normalizeFormulaText, tokenize, validatePartName } from './tokenize'
 
 /** 位置の情報を除いて、字句の中身だけを比べる */
 function kinds(expr: string) {
@@ -110,5 +110,47 @@ describe('validatePartName（部材名に使えるか）', () => {
 
   it('ほかの部材と同じ名前は使えない', () => {
     expect(validatePartName('側板', ['全体', '側板'])).toContain('側板')
+  })
+})
+
+describe('全角の記号・数字（入力の揺れを吸収する）', () => {
+  it('normalizeFormulaText：全角を半角に、× ✕ ÷ − – — を * / - に', () => {
+    expect(normalizeFormulaText('（９００＋１０）×２÷４−１–１—１✕１')).toBe('(900+10)*2/4-1-1-1*1')
+  })
+
+  it('ー（長音）は置き換えない（部材名に使うため）', () => {
+    expect(normalizeFormulaText('ボード.W')).toBe('ボード.W')
+  })
+
+  it('全体．Ｗ は 全体.W の参照', () => {
+    expect(kinds('全体．Ｗ')).toEqual([{ ref: ['全体', 'W'] }])
+  })
+
+  it('字句の位置は、入力したままの文字の位置', () => {
+    const r = tokenize('９００　＋　全体．Ｗ')
+    expect(r.ok && r.tokens.map((t) => [t.start, t.end])).toEqual([
+      [0, 3],
+      [4, 5],
+      [6, 10],
+    ])
+  })
+
+  it('全角の数字は数値', () => {
+    expect(kinds('１２．５')).toEqual([{ number: 12.5 }])
+  })
+
+  it.each(['側＋板', '側−板', '側×板', '側÷板', '側．板', '側（板', '側–板'])(
+    '全角の記号や × ÷ − を含む名前（%s）は使えない',
+    (name) => {
+      expect(validatePartName(name)).not.toBeNull()
+    },
+  )
+
+  it('全角・半角だけが違う名前は同じ名前とみなす', () => {
+    expect(validatePartName('棚板１', ['棚板1'])).not.toBeNull()
+  })
+
+  it('長音 ー を含む名前は使える', () => {
+    expect(validatePartName('ボード')).toBeNull()
   })
 })

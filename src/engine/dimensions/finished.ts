@@ -1,5 +1,6 @@
 // 仕上がり寸法：計算順に式を計算し、逃げを引く（厚みの寸法には引かない）。0 以下はエラー
 import { evaluate } from '../formula/evaluate'
+import { normalizePartName } from '../formula/tokenize'
 import { round1 } from '../round'
 import { AXES, type Axis, type DimensionError, type Job, type Part } from '../types'
 import { dimKey, resolve, type DimRef } from './resolve'
@@ -29,7 +30,10 @@ export function computeFinished(job: Pick<Job, 'parts' | 'boards'>): Map<string,
   const partById = new Map(job.parts.map((p) => [p.id, p]))
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
   const idByName = new Map<string, string>()
-  for (const p of job.parts) if (!idByName.has(p.name)) idByName.set(p.name, p.id)
+  for (const p of job.parts) {
+    const key = normalizePartName(p.name)
+    if (!idByName.has(key)) idByName.set(key, p.id)
+  }
   const ownErrors = new Map<string, DimensionError[]>()
   for (const e of res.errors) {
     const key = dimKey(e.partId, e.axis)
