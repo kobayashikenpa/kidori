@@ -5,7 +5,7 @@ import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
 import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
-import { ExprField } from './ExprField'
+import { FormulaInput } from './FormulaInput'
 import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
@@ -28,7 +28,11 @@ export function PartEditor({ part, onClose }: Props) {
     () => ({ ...job, parts: part ? job.parts.map((p) => (p.id === part.id ? draft : p)) : [...job.parts, draft] }),
     [job, part, draft],
   )
-  const dims = useMemo(() => computeDimensions(draftJob).parts.find((p) => p.partId === draft.id)!, [draftJob, draft.id])
+  const allDims = useMemo(() => computeDimensions(draftJob), [draftJob])
+  const dims = allDims.parts.find((p) => p.partId === draft.id)!
+  const finishedOf = (partId: string) => allDims.parts.find((p) => p.partId === partId)?.finished ?? null
+  // ボタンの並びを開いている欄（1つだけ）
+  const [padAxis, setPadAxis] = useState<Axis | null>(null)
   const faces = dims.faceAxes
   const board = job.boards.find((b) => b.id === draft.boardId) ?? null
   const cutting = draft.quantity > 0
@@ -102,13 +106,16 @@ export function PartEditor({ part, onClose }: Props) {
       )}
 
       {AXES.map((axis) => (
-        <ExprField
+        <FormulaInput
           key={axis}
           axis={axis}
           value={draft.expr[axis]}
           onChange={(v) => patch({ expr: { ...draft.expr, [axis]: v } })}
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}
+          finishedOf={finishedOf}
+          open={padAxis === axis}
+          onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
         />
       ))}
 
