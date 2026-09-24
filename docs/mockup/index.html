@@ -1,0 +1,536 @@
+<title>kidori 木取り</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#F1F3F0; --surface:#FFFFFF; --sunk:#E7EAE6; --ink:#1B211E; --muted:#5C6762; --line:#D5DAD5;
+  --accent:#1D5C86; --accent-soft:#DCE8F1; --accent-ink:#FFFFFF;
+  --sheet:#F4EBDA; --wood:#E3CB9C; --wood-edge:#9C7A45; --wood-ink:#3A2B12; --grain:#C9AE7C;
+  --trim:#C8553D; --warn:#9A6212; --warn-soft:#F6E9D3; --err:#B3261E; --err-soft:#F8DEDB; --ok:#2E7A4D;
+  --sans:"BIZ UDPGothic","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111513; --surface:#1A1F1C; --sunk:#232925; --ink:#E6EBE8; --muted:#9AA6A0; --line:#2E3632;
+    --accent:#72B4E2; --accent-soft:#1B3445; --accent-ink:#08161F;
+    --sheet:#3A3122; --wood:#8A6E42; --wood-edge:#D2AC6E; --wood-ink:#FFF5E2; --grain:#6E5836;
+    --trim:#E47B62; --warn:#E5B062; --warn-soft:#3A2E1A; --err:#F28B82; --err-soft:#3E1F1C; --ok:#7CC897;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111513; --surface:#1A1F1C; --sunk:#232925; --ink:#E6EBE8; --muted:#9AA6A0; --line:#2E3632;
+  --accent:#72B4E2; --accent-soft:#1B3445; --accent-ink:#08161F;
+  --sheet:#3A3122; --wood:#8A6E42; --wood-edge:#D2AC6E; --wood-ink:#FFF5E2; --grain:#6E5836;
+  --trim:#E47B62; --warn:#E5B062; --warn-soft:#3A2E1A; --err:#F28B82; --err-soft:#3E1F1C; --ok:#7CC897;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.app{max-width:520px;margin:0 auto;padding-inline:16px;padding-block:0 96px}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin-inline:-16px;padding:12px 16px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+header.top .brand{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--muted)}
+header.top h1{font-size:17px;margin:0;line-height:1.3;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:11px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;background:var(--warn-soft);color:var(--warn);white-space:nowrap}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+nav.tabs button{appearance:none;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;padding:12px 0 14px;position:relative;cursor:pointer}
+nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
+nav.tabs button[aria-current="page"]::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
+h2{font-size:20px;margin:20px 0 4px;text-wrap:balance}
+.lead{color:var(--muted);font-size:13px;margin:0 0 14px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:15px;padding:10px 16px;border-radius:8px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.ghost{background:none;border-style:dashed;color:var(--accent);width:100%}
+.btn.danger{color:var(--err);border-color:var(--err)}
+.btn.danger.armed{background:var(--err);color:var(--surface)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.grain{background:var(--sheet);color:var(--wood-ink)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.err{background:var(--err-soft);color:var(--err)}
+.msg{font-size:13px;padding:6px 10px;border-radius:6px;margin-top:8px}
+.msg.err{background:var(--err-soft);color:var(--err)}
+.msg.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* 部材カード */
+.part{cursor:pointer;display:block;width:100%;text-align:left;font:inherit;color:inherit}
+.part:hover{border-color:var(--accent)}
+.part .row1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.part .name{font-size:17px;font-weight:700}
+.part .qty{font-family:var(--mono);color:var(--accent);font-weight:500}
+.part .row1 .chip:first-of-type{margin-left:auto}
+.dims{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.dim{background:var(--sunk);border-radius:6px;padding:6px 8px;min-width:0}
+.dim .ax{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+.dim .v{font-family:var(--mono);font-size:17px;line-height:1.3}
+.dim .f{font-family:var(--mono);font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.35}
+.dim.thick{background:none;border:1px dashed var(--line)}
+.dim.thick .v{color:var(--muted)}
+.dim.bad{background:var(--err-soft)}
+.dim.bad .v{color:var(--err)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+
+/* 寸法表 */
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:460px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;color:var(--muted);font-weight:400;letter-spacing:.04em;background:var(--sunk)}
+td.n{font-family:var(--mono);text-align:right}
+tr.muted td{color:var(--muted)}
+tr:last-child td{border-bottom:0}
+.grp td{background:var(--bg);font-weight:700;font-size:12px}
+
+/* 木取り */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--sunk);border-radius:9px;padding:3px;gap:3px}
+.seg button{appearance:none;border:0;background:none;color:var(--muted);font-size:13px;padding:8px 4px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mat{margin-top:22px}
+.mat h3{font-size:16px;margin:0 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.mat h3 small{font-weight:400;color:var(--muted);font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat .k{font-size:11px;color:var(--muted)}
+.stat .v{font-family:var(--mono);font-size:20px;line-height:1.2}
+.stat .v small{font-size:12px;color:var(--muted)}
+.boardcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.boardcard .hd{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:8px}
+.boardcard .hd b{font-size:15px}
+.boardsvg{display:block;width:100%;max-width:300px;height:auto;margin:0 auto}
+.boardsvg .sheet{fill:var(--sheet)}
+.boardsvg .grainln{stroke:var(--grain);stroke-width:2}
+.boardsvg .pc{fill:var(--wood);stroke:var(--wood-edge);stroke-width:3}
+.boardsvg .scrap{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:10 8}
+.boardsvg .trim{fill:var(--trim);opacity:.55}
+.boardsvg text{fill:var(--wood-ink);font-family:var(--sans);text-anchor:middle;dominant-baseline:central}
+.boardsvg text.dm{font-family:var(--mono)}
+.boardsvg text.sc{fill:var(--muted)}
+.boardsvg .outline{fill:none;stroke:var(--wood-edge);stroke-width:4}
+details{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--accent);padding:4px 0}
+ol.steps{margin:6px 0 0;padding-left:0;list-style:none;counter-reset:s;font-size:13px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:28px auto 1fr;gap:8px;align-items:start;padding:6px 0;border-bottom:1px dotted var(--line)}
+ol.steps li::before{content:counter(s);font-family:var(--mono);color:var(--muted);text-align:right}
+ol.steps .kind{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+ol.steps .kind.t{background:var(--err-soft);color:var(--trim)}
+ol.steps .kind.s{background:var(--sunk);color:var(--muted)}
+.scraps{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:4px}
+
+/* フォーム */
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--muted)}
+.field .hint{font-size:11px;color:var(--muted)}
+input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:9px 10px;width:100%;min-width:0}
+input.mono{font-family:var(--mono)}
+input:disabled,select:disabled{background:var(--sunk);color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chips button{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:var(--mono);font-size:14px;padding:7px 14px;border-radius:99px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chips input{width:90px}
+.sec{font-size:12px;color:var(--muted);letter-spacing:.06em;margin:22px 0 8px}
+
+/* シート */
+.overlay{position:fixed;inset:0;background:rgba(10,14,12,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheetpanel{background:var(--bg);width:100%;max-width:520px;max-height:92%;overflow-y:auto;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.sheetpanel h3{margin:0 0 12px;font-size:18px}
+.preview{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px}
+.preview .mono{font-size:14px}
+.actions{display:flex;gap:8px;margin-top:16px}
+.actions .sp{flex:1}
+.job{display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer;width:100%;text-align:left;font:inherit;color:inherit}
+.job.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.job .meta{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.sheetpanel{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div style="min-width:0;flex:1">
+      <div class="brand">KIDORI · 木取り</div>
+      <h1 id="jobTitle"></h1>
+    </div>
+    <span class="badge">試作・見本データ</span>
+  </header>
+  <main id="view"></main>
+</div>
+<nav class="tabs" aria-label="画面の切り替え"><div class="in" id="tabs"></div></nav>
+<div id="sheet"></div>
+
+<script>
+const TABS=[['jobs','仕事'],['parts','部材'],['table','寸法表'],['cut','木取り'],['settings','設定']];
+const PRESETS={saburoku:{label:'サブロク 910×1820',S:910,L:1820},shihachi:{label:'シハチ 1220×2440',S:1220,L:2440},free:{label:'自由入力'}};
+const MODES=[['vertical','縦切り優先'],['horizontal','横切り優先'],['auto','おまかせ']];
+const AX=['W','H','D'];
+const KEY='kidori-proto-v1';
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r1=v=>Math.round(v*10)/10;
+const fmt=v=>{v=r1(v);return Number.isInteger(v)?String(v):v.toFixed(1)};
+const today=()=>new Date().toISOString().slice(0,10);
+
+function sampleJob(){
+  return {id:uid(),name:'本棚 W900（見本）',updated:today(),
+    settings:{kerf:3,trim:5,allowance:10,mode:'vertical'},
+    boards:[
+      {id:'b1',name:'シナランバー',t:18,preset:'saburoku',S:910,L:1820,grain:'long'},
+      {id:'b2',name:'シナベニヤ',t:4,preset:'saburoku',S:910,L:1820,grain:'long'}],
+    parts:[
+      {id:uid(),name:'全体',board:'',W:'900',H:'1800',D:'400',qty:0,thick:'auto',grain:'any',nige:{},allow:''},
+      {id:uid(),name:'側板',board:'b1',W:'18',H:'全体.H',D:'全体.D',qty:2,thick:'auto',grain:'H',nige:{},allow:''},
+      {id:uid(),name:'天地板',board:'b1',W:'全体.W - 側板.W * 2',H:'18',D:'全体.D',qty:2,thick:'auto',grain:'W',nige:{},allow:''},
+      {id:uid(),name:'棚板',board:'b1',W:'天地板.W',H:'18',D:'全体.D - 20',qty:4,thick:'auto',grain:'W',nige:{W:1},allow:''},
+      {id:uid(),name:'背板',board:'b2',W:'全体.W',H:'全体.H',D:'4',qty:1,thick:'auto',grain:'H',nige:{},allow:'0'}]};
+}
+function blankJob(){
+  const j=sampleJob();
+  return {...j,id:uid(),name:'新しい仕事',parts:[{id:uid(),name:'全体',board:'',W:'900',H:'720',D:'600',qty:0,thick:'auto',grain:'any',nige:{},allow:''}]};
+}
+
+let state=load();
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.jobs&&s.jobs.length)return s}catch(e){}
+  return {jobs:[sampleJob()],cur:0,tab:'parts'};
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+const job=()=>state.jobs[state.cur];
+function touch(){job().updated=today();save();render()}
+
+/* ---------- 式 ---------- */
+function tokenize(src){
+  src=String(src).normalize('NFKC').replace(/[×✕]/g,'*').replace(/÷/g,'/').replace(/[−–—]/g,'-');
+  const t=[];let i=0;
+  while(i<src.length){
+    const c=src[i];
+    if(/\s/.test(c)){i++;continue}
+    if('+-*/()'.includes(c)){t.push({k:'op',v:c});i++;continue}
+    if(/[0-9.]/.test(c)){let j=i;while(j<src.length&&/[0-9.]/.test(src[j]))j++;const n=Number(src.slice(i,j));if(isNaN(n))throw new Error('数値「'+src.slice(i,j)+'」が読めません');t.push({k:'num',v:n});i=j;continue}
+    let j=i;while(j<src.length&&!/[\s+\-*/()]/.test(src[j]))j++;
+    const w=src.slice(i,j),m=w.match(/^(.+)\.([WHDwhd])$/);
+    if(!m)throw new Error('「'+w+'」は「部材名.W」のように書いてください');
+    t.push({k:'ref',name:m[1],ax:m[2].toUpperCase()});i=j;
+  }
+  return t;
+}
+function evalExpr(src,ref){
+  const t=tokenize(src);let p=0;
+  if(!t.length)throw new Error('値が入っていません');
+  const peek=()=>t[p],take=()=>t[p++];
+  const isOp=s=>peek()&&peek().k==='op'&&s.includes(peek().v);
+  function expr(){let v=term();while(isOp('+-')){const o=take().v,r=term();v=o==='+'?v+r:v-r}return v}
+  function term(){let v=factor();while(isOp('*/')){const o=take().v,r=factor();if(o==='/'&&r===0)throw new Error('0で割っています');v=o==='*'?v*r:v/r}return v}
+  function factor(){const x=take();if(!x)throw new Error('式が途中で終わっています');
+    if(x.k==='num')return x.v;if(x.k==='ref')return ref(x.name,x.ax);
+    if(x.v==='-')return -factor();
+    if(x.v==='('){const v=expr(),y=take();if(!y||y.v!==')')throw new Error('「)」が足りません');return v}
+    throw new Error('「'+x.v+'」の位置がおかしいです')}
+  const v=expr();if(p<t.length)throw new Error('式の終わりに余分なものがあります');return v;
+}
+
+/* ---------- 寸法の計算 ---------- */
+function compute(j){
+  const byName=new Map(j.parts.map(p=>[p.name.trim(),p]));
+  const memo=new Map(),visiting=new Set();
+  function fin(p,ax){
+    const key=p.id+ax;
+    if(memo.has(key)){const m=memo.get(key);if('v' in m)return m.v;throw new Error('参照先「'+p.name+'.'+ax+'」が計算できません')}
+    if(visiting.has(key))throw new Error('循環参照になっています（「'+p.name+'.'+ax+'」が自分に戻ってきます）');
+    visiting.add(key);
+    try{
+      const raw=evalExpr(p[ax],(n,a)=>{const q=byName.get(n);if(!q)throw new Error('「'+n+'」という部材はありません');return fin(q,a)});
+      const v=r1(raw-(Number(p.nige?.[ax])||0));
+      if(!(v>0))throw new Error('計算結果が0以下です（'+fmt(v)+'）');
+      memo.set(key,{v});return v;
+    }catch(e){if(!memo.has(key))memo.set(key,{err:e.message});throw e}
+    finally{visiting.delete(key)}
+  }
+  return j.parts.map(p=>{
+    const vals={},errs={};
+    AX.forEach(a=>{try{vals[a]=fin(p,a)}catch(e){errs[a]=memo.get(p.id+a)?.err||e.message}});
+    const board=j.boards.find(b=>b.id===p.board)||null;
+    const warns=[];let thick=p.thick,thickAuto=false;
+    const ok=!Object.keys(errs).length;
+    if(ok&&thick==='auto'){
+      thickAuto=true;
+      const hits=board?AX.filter(a=>vals[a]===board.t):[];
+      if(hits.length)thick=hits[0];
+      else{thick=AX.reduce((m,a)=>vals[a]<vals[m]?a:m,'W');if(board&&p.qty>0)warns.push('材料の厚み '+board.t+'mm と同じ寸法がありません。一番小さい '+thick+' を厚みとして扱っています')}
+    }else if(ok&&board&&p.qty>0&&vals[thick]!==board.t){warns.push('厚みの寸法 '+thick+'='+fmt(vals[thick])+' が材料の厚み '+board.t+'mm と違います')}
+    if(thick==='auto')thick='H';
+    const faces=AX.filter(a=>a!==thick);
+    const allow=p.allow===''||p.allow==null?j.settings.allowance:Number(p.allow)||0;
+    const cut={};if(ok)faces.forEach(a=>cut[a]=r1(vals[a]+allow));
+    let grain=p.grain;
+    if(grain!=='any'&&!faces.includes(grain)){if(p.qty>0)warns.push('木目の '+grain+'方向 は厚みの寸法なので、どちらでもよいとして扱っています');grain='any'}
+    if(p.qty>0&&!board)warns.push('板が選ばれていません');
+    return {p,vals,errs,ok,thick,thickAuto,faces,allow,cut,grain,board,warns};
+  });
+}
+
+/* ---------- 木取り（ギロチン・帯詰め） ---------- */
+function packCols(items,W,H,k){
+  const boards=[],unplaced=[];
+  items.sort((a,b)=>Math.min(...b.opts.map(o=>o.w))-Math.min(...a.opts.map(o=>o.w))||Math.max(...b.opts.map(o=>o.h))-Math.max(...a.opts.map(o=>o.h)));
+  for(const it of items){
+    let best=null;
+    for(const bd of boards)for(const c of bd.cols)for(const o of it.opts){
+      if(o.w<=c.w&&c.y+o.h<=H){const waste=c.w-o.w;if(!best||waste<best.waste)best={c,o,waste}}
+    }
+    if(best){best.c.items.push({...best.o,name:it.name,x:best.c.x,y:best.c.y});best.c.y+=best.o.h+k;continue}
+    let nb=null;
+    for(const bd of boards){for(const o of [...it.opts].sort((a,b)=>a.w-b.w))if(bd.usedW+o.w<=W&&o.h<=H){nb={bd,o};break}if(nb)break}
+    if(!nb){const o=[...it.opts].sort((a,b)=>a.w-b.w).find(o=>o.w<=W&&o.h<=H);if(!o){unplaced.push(it.name);continue}const bd={cols:[],usedW:0};boards.push(bd);nb={bd,o}}
+    const c={x:nb.bd.usedW,w:nb.o.w,y:0,items:[]};nb.bd.cols.push(c);nb.bd.usedW+=nb.o.w+k;
+    c.items.push({...nb.o,name:it.name,x:c.x,y:0});c.y=nb.o.h+k;
+  }
+  return {boards,unplaced};
+}
+function layout(group,mode,s){
+  const b=group.board,k=s.kerf,trim=s.trim;
+  const gv=b.grain==='long';
+  const items=[];
+  group.parts.forEach(r=>{
+    const [A,B]=r.faces,a=r.cut[A],bb=r.cut[B];let opts;
+    if(r.grain==='any')opts=a===bb?[{w:a,h:bb}]:[{w:a,h:bb},{w:bb,h:a}];
+    else{const g=r.cut[r.grain],o=r.grain===A?bb:a;opts=[gv?{w:o,h:g}:{w:g,h:o}]}
+    for(let i=0;i<r.p.qty;i++)items.push({name:r.p.name,opts});
+  });
+  const tr=mode==='horizontal';
+  const W0=b.S-trim,H0=b.L;
+  const W=tr?H0:W0,H=tr?W0:H0;
+  const its=tr?items.map(it=>({...it,opts:it.opts.map(o=>({w:o.h,h:o.w}))})):items;
+  const res=packCols(its,W,H,k);
+  const map=r=>tr?{x:r.y,y:r.x,w:r.h,h:r.w}:r;
+  const P=tr?'横切り':'縦切り',Q=tr?'縦切り':'横切り';
+  const boards=res.boards.map(bd=>{
+    const pieces=[],scraps=[],steps=[{kind:'t',t:'耳落とし',d:'右側の長辺を '+trim+'mm 落とす'}];
+    bd.cols.forEach((c,ci)=>{
+      steps.push({kind:'p',t:P,d:'帯'+(ci+1)+'：幅 '+fmt(c.w)+'mm で切り出す'});
+      c.items.forEach(it=>{
+        pieces.push({...map(it),name:it.name});
+        steps.push({kind:'q',t:Q,d:'帯'+(ci+1)+' から 長さ '+fmt(it.h)+'mm → '+it.name});
+        if(it.w<c.w){steps.push({kind:'p',t:P,d:it.name+' の幅を '+fmt(it.w)+'mm に揃える'});const sw=c.w-it.w-k;if(sw>=30&&it.h>=30)scraps.push(map({x:it.x+it.w+k,y:it.y,w:sw,h:it.h}))}
+      });
+      const rest=H-c.y;if(rest>=30&&c.w>=30)scraps.push(map({x:c.x,y:c.y,w:c.w,h:rest}));
+    });
+    const rw=W-bd.usedW;if(rw>=30)scraps.push(map({x:bd.usedW,y:0,w:rw,h:H}));
+    const area=pieces.reduce((s,p)=>s+p.w*p.h,0);
+    return {pieces,scraps:scraps.sort((a,b)=>b.w*b.h-a.w*a.h),steps,yield:area/(b.S*b.L),area};
+  });
+  const total=boards.reduce((s,x)=>s+x.area,0);
+  return {mode,boards,unplaced:res.unplaced,yield:boards.length?total/(boards.length*b.S*b.L):0,
+    bestScrap:Math.max(0,...boards.flatMap(x=>x.scraps.map(s=>s.w*s.h)))};
+}
+function solve(group,s){
+  if(s.mode!=='auto')return layout(group,s.mode,s);
+  const v=layout(group,'vertical',s),h=layout(group,'horizontal',s);
+  const pick=(h.unplaced.length<v.unplaced.length)||(h.unplaced.length===v.unplaced.length&&(h.boards.length<v.boards.length||(h.boards.length===v.boards.length&&h.bestScrap>v.bestScrap)))?h:v;
+  return {...pick,auto:true};
+}
+
+/* ---------- 描画 ---------- */
+function render(){
+  document.getElementById('jobTitle').textContent=job().name;
+  document.getElementById('tabs').innerHTML=TABS.map(([id,l])=>`<button data-tab="${id}" ${state.tab===id?'aria-current="page"':''}>${l}</button>`).join('');
+  const rows=compute(job());
+  const v=document.getElementById('view');
+  v.innerHTML={jobs:vJobs,parts:vParts,table:vTable,cut:vCut,settings:vSettings}[state.tab](rows);
+}
+const boardLabel=b=>b?esc(b.name)+' '+b.t+'mm':'—';
+
+function vJobs(){
+  return `<h2>仕事</h2><p class="lead">保存した仕事を開きます。入力した内容はこのスマホの中に保存されます。</p>
+  <div class="stack">${state.jobs.map((j,i)=>`<button class="card job ${i===state.cur?'on':''}" data-open="${i}">
+    <span><b>${esc(j.name)}</b><br><span class="meta">部材 ${j.parts.filter(p=>p.qty>0).length}種類・${j.parts.reduce((s,p)=>s+(+p.qty||0),0)}枚　／　更新 ${esc(j.updated)}</span></span>
+    <span class="chip">${i===state.cur?'開いています':'開く'}</span></button>`).join('')}
+  <button class="btn ghost" data-act="newjob">＋ 新しい仕事を作る</button>
+  <button class="btn" data-act="reset" id="resetBtn">見本データに戻す</button></div>`;
+}
+
+function vParts(rows){
+  return `<h2>部材</h2><p class="lead">W・H・D は数値のほか「<span class="mono">全体.W - 側板.W * 2</span>」のような式で書けます。カードを押すと編集できます。</p>
+  <div class="stack">${rows.map(r=>{
+    const p=r.p,isF=v=>!/^\s*[\d.]+\s*$/.test(v);
+    const dims=AX.map(a=>`<div class="dim ${r.ok&&a===r.thick?'thick':''} ${r.errs[a]?'bad':''}">
+      <div class="ax"><span>${a}</span><span>${r.ok&&a===r.thick?'厚み':''}${p.nige?.[a]?'逃げ −'+fmt(p.nige[a]):''}</span></div>
+      <div class="v">${r.errs[a]?'エラー':fmt(r.vals[a])}</div>
+      ${isF(p[a])?`<div class="f">= ${esc(p[a])}</div>`:''}</div>`).join('');
+    const errs=Object.entries(r.errs).map(([a,m])=>`<div class="msg err">${a}：${esc(m)}</div>`).join('');
+    const warns=r.warns.map(w=>`<div class="msg warn">${esc(w)}</div>`).join('');
+    const tags=p.qty>0?`<span class="chip grain">木目 ${r.grain==='any'?'どちらでもよい':r.grain+'方向'}</span>
+      <span class="chip">木取り ${r.ok?r.faces.map(a=>fmt(r.cut[a])).join(' × '):'—'}</span>
+      <span class="chip">切り代 ${fmt(r.allow)}${p.allow===''?'（初期値）':''}</span>`:`<span class="chip">寸法のみ（切り出さない）</span>`;
+    return `<button class="card part" data-edit="${p.id}"><div class="row1"><span class="name">${esc(p.name)}</span>${p.qty>0?`<span class="qty">×${p.qty}</span>`:''}
+      <span class="chip">${p.qty>0?boardLabel(r.board):'—'}</span></div>
+      <div class="dims">${dims}</div><div class="tags">${tags}</div>${errs}${warns}</button>`;
+  }).join('')}
+  <button class="btn ghost" data-act="addpart">＋ 部材を追加</button></div>`;
+}
+
+function vTable(rows){
+  const groups=[];
+  job().boards.forEach(b=>{const rs=rows.filter(r=>r.p.qty>0&&r.board===b);if(rs.length)groups.push([boardLabel(b),rs])});
+  const other=rows.filter(r=>r.p.qty===0||!r.board);if(other.length)groups.push(['寸法のみ・板なし',other]);
+  const cell=(r,a)=>r.errs[a]?'<span style="color:var(--err)">エラー</span>':(a===r.thick&&r.ok?'<span style="color:var(--muted)">'+fmt(r.vals[a])+'</span>':fmt(r.vals[a]));
+  return `<h2>寸法表</h2><p class="lead">仕上がり寸法は逃げを引いた後の値、木取り寸法は切り代を足した値です。厚みの寸法はグレーで表示します。</p>
+  <div class="tablewrap"><table><thead><tr><th>部材</th><th>枚数</th><th>仕上がり W</th><th>H</th><th>D</th><th>木取り寸法</th><th>木目</th></tr></thead><tbody>
+  ${groups.map(([l,rs])=>`<tr class="grp"><td colspan="7">${l}</td></tr>`+rs.map(r=>`<tr class="${r.p.qty?'':'muted'}"><td>${esc(r.p.name)}</td><td class="n">${r.p.qty}</td>
+    ${AX.map(a=>`<td class="n">${cell(r,a)}</td>`).join('')}
+    <td class="n">${r.p.qty&&r.ok?r.faces.map(a=>a+' '+fmt(r.cut[a])).join(' × '):'—'}</td><td>${r.p.qty?(r.grain==='any'?'どちらでも':r.grain+'方向'):'—'}</td></tr>`).join('')).join('')}
+  </tbody></table></div>`;
+}
+
+function boardSVG(b,L,trim){
+  const S=b.S,Lb=b.L,pad=6;
+  const gv=b.grain==='long';
+  let grain='';const n=Math.round((gv?S:Lb)/38);
+  for(let i=1;i<n;i++){const t=i*(gv?S:Lb)/n;grain+=gv?`<line class="grainln" x1="${t}" y1="0" x2="${t+((i%3)-1)*14}" y2="${Lb}"/>`:`<line class="grainln" x1="0" y1="${t}" x2="${S}" y2="${t+((i%3)-1)*14}"/>`}
+  const txt=(x,y,w,h,a,bb,cls)=>{
+    const fs=Math.max(22,Math.min(64,Math.min(w,h)/4.2));
+    const len=Math.max(a.length*fs,bb.length*fs*.62);
+    const rot=len>w*.92&&h>w;
+    const cx=x+w/2,cy=y+h/2,tf=rot?` transform="rotate(-90 ${cx} ${cy})"`:'';
+    if(rot&&len>h*.92)return'';
+    if(!rot&&len>w*.92)return'';
+    return `<g${tf}><text x="${cx}" y="${cy-fs*.62}" font-size="${fs}" font-weight="700" class="${cls||''}">${esc(a)}</text><text x="${cx}" y="${cy+fs*.62}" font-size="${fs*.82}" class="dm ${cls||''}">${bb}</text></g>`;
+  };
+  return `<svg class="boardsvg" viewBox="${-pad} ${-pad} ${S+pad*2} ${Lb+pad*2}" role="img" aria-label="板の配置図">
+    <rect class="sheet" x="0" y="0" width="${S}" height="${Lb}"/>${grain}
+    <rect class="trim" x="${S-trim}" y="0" width="${trim}" height="${Lb}"/>
+    ${L.scraps.map(s=>`<rect class="scrap" x="${s.x+4}" y="${s.y+4}" width="${Math.max(0,s.w-8)}" height="${Math.max(0,s.h-8)}"/>${txt(s.x,s.y,s.w,s.h,'端材',fmt(s.w)+'×'+fmt(s.h),'sc')}`).join('')}
+    ${L.pieces.map(p=>`<rect class="pc" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"/>${txt(p.x,p.y,p.w,p.h,p.name,fmt(p.w)+'×'+fmt(p.h))}`).join('')}
+    <rect class="outline" x="0" y="0" width="${S}" height="${Lb}"/></svg>`;
+}
+
+function vCut(rows){
+  const s=job().settings;
+  const groups=job().boards.map(b=>({board:b,parts:rows.filter(r=>r.board===b&&r.p.qty>0&&r.ok)})).filter(g=>g.parts.length);
+  const broken=rows.filter(r=>r.p.qty>0&&(!r.ok||!r.board));
+  let html=`<h2>木取り</h2><p class="lead">刃厚 ${s.kerf}mm・耳落とし ${s.trim}mm（右側の長辺）・切り代 初期値 ${s.allowance}mm で計算しています。</p>
+  <div class="seg" role="group" aria-label="切り方">${MODES.map(([m,l])=>`<button data-mode="${m}" aria-pressed="${s.mode===m}">${l}</button>`).join('')}</div>`;
+  if(broken.length)html+=`<div class="msg err">計算に入れていない部材：${broken.map(r=>esc(r.p.name)).join('、')}（部材の画面でエラーを直してください）</div>`;
+  groups.forEach(g=>{
+    const L=solve(g,s),b=g.board;
+    const nPieces=g.parts.reduce((t,r)=>t+r.p.qty,0);
+    html+=`<section class="mat"><h3>${boardLabel(b)} <small>${b.preset==='free'?'自由 '+b.S+'×'+b.L:PRESETS[b.preset].label}・部材 ${nPieces}枚</small></h3>
+      <div class="stats"><div class="stat"><div class="k">必要な板</div><div class="v">${L.boards.length}<small> 枚</small></div></div>
+      <div class="stat"><div class="k">歩留まり</div><div class="v">${(L.yield*100).toFixed(1)}<small> %</small></div></div>
+      <div class="stat"><div class="k">切り方</div><div class="v" style="font-size:14px;font-family:var(--sans);padding-top:4px">${MODES.find(m=>m[0]===L.mode)[1]}${L.auto?'<br><small>おまかせで採用</small>':''}</div></div></div>
+      ${L.unplaced.length?`<div class="msg err">板に入らない部材：${[...new Set(L.unplaced)].map(esc).join('、')}（寸法・木目・板のサイズを確認してください）</div>`:''}
+      ${L.boards.map((bd,i)=>`<div class="boardcard"><div class="hd"><b>${i+1}枚目</b><span>歩留まり <span class="num">${(bd.yield*100).toFixed(1)}%</span></span></div>
+        ${boardSVG(b,bd,s.trim)}
+        <details><summary>切る順番（${bd.steps.length}工程）</summary><ol class="steps">${bd.steps.map(st=>`<li><span class="kind ${st.kind==='t'?'t':st.kind==='q'?'s':''}">${st.t}</span><span>${esc(st.d)}</span></li>`).join('')}</ol></details>
+        <details><summary>端材（${bd.scraps.length}個）</summary><div class="scraps">${bd.scraps.length?bd.scraps.map(x=>`<span class="chip mono">${fmt(x.w)} × ${fmt(x.h)}</span>`).join(''):'<span class="chip">30mm以上の端材はありません</span>'}</div></details>
+      </div>`).join('')}</section>`;
+  });
+  html+=`<div class="legend"><span><i style="background:var(--wood)"></i>部材</span><span><i style="border:1px dashed var(--muted)"></i>端材</span><span><i style="background:var(--trim);opacity:.55"></i>耳落とし</span><span><i style="background:var(--sheet);border:1px solid var(--grain)"></i>板（線は木目）</span></div>`;
+  return html;
+}
+
+function vSettings(){
+  const j=job(),s=j.settings,al=[0,5,10];
+  return `<h2>設定</h2><p class="lead">この仕事だけに使う設定です。</p>
+  <div class="stack">
+  <div class="field"><label for="s-name">仕事の名前</label><input id="s-name" data-set="name" value="${esc(j.name)}"></div>
+  <div class="grid2"><div class="field"><label for="s-kerf">刃厚（mm）</label><input id="s-kerf" class="mono" type="number" inputmode="decimal" data-set="kerf" value="${s.kerf}"></div>
+  <div class="field"><label for="s-trim">耳落とし（mm）</label><input id="s-trim" class="mono" type="number" inputmode="decimal" data-set="trim" value="${s.trim}"><span class="hint">右側の長辺を落とします</span></div></div>
+  <div class="field"><label>切り代の初期値（mm）</label><div class="chips">${al.map(v=>`<button data-allow="${v}" aria-pressed="${s.allowance===v}">${v}</button>`).join('')}
+    <input id="s-allow" class="mono" type="number" inputmode="decimal" data-set="allowance" value="${al.includes(s.allowance)?'':s.allowance}" placeholder="その他" aria-label="切り代をmmで入力"></div>
+    <span class="hint">部材ごとに別の値にもできます</span></div>
+  <div class="field"><label>切り方</label><div class="seg" role="group" aria-label="切り方">${MODES.map(([m,l])=>`<button data-mode="${m}" aria-pressed="${s.mode===m}">${l}</button>`).join('')}</div></div>
+  </div>
+  <div class="sec">板（材料）</div>
+  <div class="stack">${j.boards.map(b=>`<div class="card stack">
+    <div class="grid2"><div class="field"><label for="b-name-${b.id}">材料名</label><input id="b-name-${b.id}" data-b="${b.id}" data-k="name" value="${esc(b.name)}"></div>
+    <div class="field"><label for="b-t-${b.id}">厚み（mm）</label><input id="b-t-${b.id}" class="mono" type="number" inputmode="decimal" data-b="${b.id}" data-k="t" value="${b.t}"></div></div>
+    <div class="field"><label for="b-p-${b.id}">サイズ</label><select id="b-p-${b.id}" data-b="${b.id}" data-k="preset">${Object.entries(PRESETS).map(([k,v])=>`<option value="${k}" ${b.preset===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+    ${b.preset==='free'?`<div class="grid3"><div class="field"><label for="b-S-${b.id}">短辺</label><input id="b-S-${b.id}" class="mono" type="number" data-b="${b.id}" data-k="S" value="${b.S}"></div>
+      <div class="field"><label for="b-L-${b.id}">長辺</label><input id="b-L-${b.id}" class="mono" type="number" data-b="${b.id}" data-k="L" value="${b.L}"></div>
+      <div class="field"><label for="b-g-${b.id}">木目の方向</label><select id="b-g-${b.id}" data-b="${b.id}" data-k="grain"><option value="long" ${b.grain==='long'?'selected':''}>長辺方向</option><option value="short" ${b.grain==='short'?'selected':''}>短辺方向</option></select></div></div>`
+      :`<span class="hint">木目は長辺方向</span>`}
+  </div>`).join('')}
+  <button class="btn ghost" data-act="addboard">＋ 板を追加</button></div>`;
+}
+
+/* ---------- 部材の編集シート ---------- */
+let draft=null;
+function openSheet(id){
+  const p=job().parts.find(x=>x.id===id);
+  draft=p?JSON.parse(JSON.stringify(p)):{id:uid(),name:'新しい部材',board:job().boards[0]?.id||'',W:'',H:'',D:'',qty:1,thick:'auto',grain:'any',nige:{},allow:'',_new:true};
+  const d=draft,opt=(v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`;
+  document.getElementById('sheet').innerHTML=`<div class="overlay" data-act="close"><div class="sheetpanel" role="dialog" aria-modal="true" aria-labelledby="sh-t">
+    <h3 id="sh-t">${d._new?'部材を追加':'部材を編集'}</h3>
+    <div class="stack">
+      <div class="grid2"><div class="field"><label for="f-name">名前</label><input id="f-name" data-f="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="f-qty">枚数</label><input id="f-qty" class="mono" type="number" inputmode="numeric" data-f="qty" value="${d.qty}"><span class="hint">0 で寸法のみ</span></div></div>
+      <div class="field"><label for="f-board">板</label><select id="f-board" data-f="board">${opt('','なし（寸法のみ）',d.board)}${job().boards.map(b=>opt(b.id,esc(b.name)+' '+b.t+'mm',d.board)).join('')}</select></div>
+      <div class="grid3">${AX.map(a=>`<div class="field"><label for="f-${a}">${a}</label><input id="f-${a}" class="mono" data-f="${a}" value="${esc(d[a])}" placeholder="数値や式"></div>`).join('')}</div>
+      <span class="hint">式の例：<span class="mono">全体.W - 側板.W * 2</span></span>
+      <div class="grid2"><div class="field"><label for="f-thick">厚みの寸法</label><select id="f-thick" data-f="thick">${opt('auto','自動',d.thick)}${AX.map(a=>opt(a,a,d.thick)).join('')}</select></div>
+      <div class="field"><label for="f-grain">木目</label><select id="f-grain" data-f="grain">${opt('any','どちらでもよい',d.grain)}${AX.map(a=>opt(a,a+'方向',d.grain)).join('')}</select></div></div>
+      <div class="field"><label>逃げ（mm・仕上がりから引く）</label><div class="grid3">${AX.map(a=>`<input id="f-n${a}" class="mono" type="number" inputmode="decimal" data-n="${a}" value="${d.nige?.[a]||''}" placeholder="${a}" aria-label="${a}の逃げ">`).join('')}</div></div>
+      <div class="field"><label for="f-allow">切り代（mm）</label><input id="f-allow" class="mono" type="number" inputmode="decimal" data-f="allow" value="${esc(d.allow)}" placeholder="空欄で初期値（${job().settings.allowance}）"></div>
+      <div class="preview" id="pv"></div>
+    </div>
+    <div class="actions">${d._new?'':'<button class="btn danger" data-act="del" id="delBtn">削除</button>'}<span class="sp"></span><button class="btn" data-act="close">キャンセル</button><button class="btn primary" data-act="savepart">保存</button></div>
+  </div></div>`;
+  preview();
+}
+function preview(){
+  const j=job(),d=draft;
+  const parts=j.parts.some(p=>p.id===d.id)?j.parts.map(p=>p.id===d.id?d:p):[...j.parts,d];
+  const r=compute({...j,parts}).find(x=>x.p.id===d.id);
+  const pv=document.getElementById('pv');if(!pv)return;
+  AX.forEach(a=>{const g=document.querySelector(`#f-grain option[value="${a}"]`);if(g)g.disabled=r.ok&&a===r.thick;const n=document.getElementById('f-n'+a);if(n)n.disabled=r.ok&&a===r.thick});
+  const e=Object.entries(r.errs);
+  pv.innerHTML=e.length?e.map(([a,m])=>`<div style="color:var(--err)">${a}：${esc(m)}</div>`).join('')
+    :`仕上がり <span class="mono">${AX.map(a=>a+' '+fmt(r.vals[a])).join('  ')}</span><br>厚み <b>${r.thick}</b>${r.thickAuto?'（自動）':''}${d.qty>0?`　木取り <span class="mono">${r.faces.map(a=>a+' '+fmt(r.cut[a])).join(' × ')}</span>`:''}`
+      +r.warns.map(w=>`<div style="color:var(--warn);margin-top:4px">${esc(w)}</div>`).join('');
+}
+function closeSheet(){draft=null;document.getElementById('sheet').innerHTML=''}
+
+/* ---------- 操作 ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab],[data-open],[data-edit],[data-act],[data-mode],[data-allow]');if(!t)return;
+  if(t.dataset.act==='close'&&t.classList.contains('overlay')&&e.target!==t)return;
+  if(t.dataset.tab){state.tab=t.dataset.tab;save();render();window.scrollTo(0,0);return}
+  if(t.dataset.open){state.cur=+t.dataset.open;state.tab='parts';save();render();return}
+  if(t.dataset.edit){openSheet(t.dataset.edit);return}
+  if(t.dataset.mode){job().settings.mode=t.dataset.mode;touch();return}
+  if(t.dataset.allow){job().settings.allowance=+t.dataset.allow;touch();return}
+  const a=t.dataset.act,j=job();
+  if(a==='addpart')openSheet(null);
+  else if(a==='close')closeSheet();
+  else if(a==='savepart'){const d=draft;delete d._new;d.qty=Math.max(0,parseInt(d.qty)||0);const i=j.parts.findIndex(p=>p.id===d.id);if(i>=0)j.parts[i]=d;else j.parts.push(d);closeSheet();touch()}
+  else if(a==='del'){if(!t.classList.contains('armed')){t.classList.add('armed');t.textContent='本当に削除';return}j.parts=j.parts.filter(p=>p.id!==draft.id);closeSheet();touch()}
+  else if(a==='newjob'){state.jobs.push(blankJob());state.cur=state.jobs.length-1;state.tab='parts';touch()}
+  else if(a==='addboard'){j.boards.push({id:uid(),name:'新しい板',t:18,preset:'saburoku',S:910,L:1820,grain:'long'});touch()}
+  else if(a==='reset'){if(!t.classList.contains('armed')){t.classList.add('armed','danger');t.textContent='もう一度押すと、すべての仕事を消して見本に戻します';return}state={jobs:[sampleJob()],cur:0,tab:'parts'};save();render()}
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(draft&&t.dataset.f){draft[t.dataset.f]=t.value;preview();return}
+  if(draft&&t.dataset.n){draft.nige={...draft.nige,[t.dataset.n]:t.value===''?0:Number(t.value)};preview();return}
+});
+document.addEventListener('change',e=>{
+  const t=e.target,j=job();
+  if(t.dataset.set){const k=t.dataset.set;if(k==='name'){j.name=t.value||'名前なし'}else{const v=Number(t.value);if(t.value===''||isNaN(v))return;j.settings[k]=v}touch();return}
+  if(t.dataset.b){const b=j.boards.find(x=>x.id===t.dataset.b),k=t.dataset.k;
+    if(k==='name')b.name=t.value;else if(k==='grain')b.grain=t.value;
+    else if(k==='preset'){b.preset=t.value;if(t.value!=='free'){b.S=PRESETS[t.value].S;b.L=PRESETS[t.value].L;b.grain='long'}}
+    else{const v=Number(t.value);if(v>0)b[k]=v;if(b.S>b.L)[b.S,b.L]=[b.L,b.S]}
+    touch();}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&draft)closeSheet()});
+render();
+</script>
