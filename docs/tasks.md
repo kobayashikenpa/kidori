@@ -29,7 +29,7 @@
 - やること：`src/engine/types.ts` に architecture.md 2章の型（Settings, Board, Part, Job, PartDimensions, DimensionResult, Rect, Placement, CutStep, SheetLayout, MaterialResult, PackingResult など）と `DEFAULT_SETTINGS`・`BOARD_SIZES` を定義する
 - 完了の条件：`DEFAULT_SETTINGS` が 刃厚3・耳落とし5・切り代10・縦切り優先、`BOARD_SIZES` がサブロク 910×1820・シハチ 1220×2440 であるテストが通る
 
-### [~] E-02 見本データ（本棚 W900）
+### [x] E-02 見本データ（本棚 W900）
 - 担当：engine-dev ／ 依存：E-01 ／ 仕様書：5.2, 6
 - やること：`src/engine/fixtures/bookshelf.ts` に見本の Job を作る。全体 W900 H1800 D400 枚数0 ／ 側板 W18 H`全体.H` D`全体.D` 枚数2 木目H ／ 天地板 W`全体.W - 側板.W * 2` H18 D`全体.D` 枚数2 木目W ／ 棚板 W`天地板.W` H18 D`全体.D - 20` 枚数4 木目W 逃げW1 ／ 背板 W`全体.W` H`全体.H` D4 シナベニヤ4 枚数1 木目H 切り代0。板はシナランバー18・シナベニヤ4（サブロク、木目 長辺方向）。設定は初期値
 - 完了の条件：見本が Job 型として型チェックを通り、部材5つ・板2つ・部材名の重複なしを確かめるテストが通る
