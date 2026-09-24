@@ -123,3 +123,26 @@ describe('computeDimensions（寸法表のまとめ）', () => {
     expect(d['側板'].thicknessMismatch).toBe(false)
   })
 })
+
+describe('自分の寸法を参照する部材（W = A.H、逃げ H1）', () => {
+  it('厚みの寸法は W（逃げを引く前の 18 で判定）。仕上がり W は 17 なので不一致の印が付く', () => {
+    const job = bookshelfJob()
+    job.parts.push({
+      ...job.parts[1],
+      id: 'a',
+      name: 'A',
+      expr: { W: 'A.H', H: '18', D: '600' },
+      clearance: { H: 1 },
+    })
+    const r = computeDimensions(job)
+    const a = r.parts.find((p) => p.partId === 'a')!
+    expect(r.errors).toEqual([])
+    expect(a).toMatchObject({
+      finished: { W: 17, H: 17, D: 600 },
+      thicknessAxis: 'W',
+      thicknessMismatch: true,
+      faceAxes: ['H', 'D'],
+      cutSize: { W: 17, H: 27, D: 610 },
+    })
+  })
+})

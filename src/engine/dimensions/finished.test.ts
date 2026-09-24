@@ -146,3 +146,65 @@ describe('全角の式', () => {
     expect(finishedOf(job, 'Y').finished?.W).toBe(800)
   })
 })
+
+describe('自分の寸法を参照する部材の逃げと厚みの判定', () => {
+  // A：W = A.H、H 18、D 600、逃げ H1、板の厚み 18
+  const selfRef = () => mkPart('A', { W: 'A.H', H: '18', D: '600' }, { clearance: { H: 1 } })
+
+  it('厚みの判定は自分の逃げを引く前の値で行い（W 18 → 厚みは W）、参照は逃げを引いた後の値（W = 17）', () => {
+    const f = finishedOf(withParts(selfRef()), 'A')
+    expect(f.errors).toEqual([])
+    expect(f.finished).toEqual({ W: 17, H: 17, D: 600 })
+    expect(f.input).toEqual({ W: 17, H: 18, D: 600 })
+    expect(f.thicknessInput).toEqual({ W: 18 })
+  })
+
+  it('隠れたエラーを残さない（全部材のエラーが空）', () => {
+    const fin = computeFinished(withParts(selfRef()))
+    expect([...fin.values()].flatMap((f) => f.errors)).toEqual([])
+  })
+
+  it('部材の並び順が変わっても同じ結果', () => {
+    const job = bookshelfJob()
+    job.parts.unshift(selfRef())
+    expect(finishedOf(job, 'A').finished).toEqual({ W: 17, H: 17, D: 600 })
+  })
+
+  it('A.W を参照するほかの部材も 17 を受け取る', () => {
+    const job = withParts(mkPart('B', { W: 'A.W * 10' }), selfRef())
+    expect(finishedOf(job, 'B').finished?.W).toBe(170)
+  })
+
+  it('ほかの部材を通って自分の逃げに戻るとき（P.W = Q.W、Q.W = P.H、P の逃げ H1）は循環参照', () => {
+    const job = withParts(
+      mkPart('P', { W: 'Q.W', H: '18', D: '600' }, { clearance: { H: 1 } }),
+      mkPart('Q', { W: 'P.H', H: '18', D: '100' }, { quantity: 0, boardId: null }),
+    )
+    const p = finishedOf(job, 'P')
+    const q = finishedOf(job, 'Q')
+    expect(p.errors.map((e) => [e.axis, e.kind])).toEqual([
+      ['W', 'cycle'],
+      ['H', 'cycle'],
+    ])
+    const ph = p.errors.find((e) => e.axis === 'H')!
+    expect(ph.from).toBeUndefined()
+    expect(ph.message).toContain('厚み')
+    expect(p.errors.find((e) => e.axis === 'W')!.from).toEqual({ partId: 'id-P', axis: 'H' })
+    // 元のエラーのメッセージを1回だけ含む（入れ子にならない）
+    const pwMessage = p.errors.find((e) => e.axis === 'W')!.message
+    expect(pwMessage.split('参照している').length - 1).toBe(1)
+    expect(pwMessage).toContain(ph.message)
+    expect(q.errors).toEqual([expect.objectContaining({ axis: 'W', kind: 'cycle', from: { partId: 'id-P', axis: 'H' } })])
+    // 循環に関係しない寸法は計算できている
+    expect(p.input).toMatchObject({ H: 18, D: 600 })
+  })
+
+  it('循環参照の結果は、計算を始める部材の順に左右されない', () => {
+    const P = mkPart('P', { W: 'Q.W', H: '18', D: '600' }, { clearance: { H: 1 } })
+    const Q = mkPart('Q', { W: 'P.H', H: '18', D: '100' }, { quantity: 0, boardId: null })
+    const a = computeFinished(withParts(P, Q))
+    const b = computeFinished(withParts(Q, P))
+    expect(a.get('id-P')).toEqual(b.get('id-P'))
+    expect(a.get('id-Q')).toEqual(b.get('id-Q'))
+  })
+})
