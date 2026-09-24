@@ -1,0 +1,438 @@
+/* kidori の見た目。色はすべてここの変数で決め、ライト／ダークで切り替える */
+:root {
+  color-scheme: light;
+  --bg: #f1f3f0;
+  --surface: #ffffff;
+  --sunk: #e7eae6;
+  --ink: #1b211e;
+  --muted: #5c6762;
+  --line: #d5dad5;
+  --accent: #1d5c86;
+  --accent-soft: #dce8f1;
+  --accent-ink: #ffffff;
+  /* 仕上がり寸法＝青系、木取り寸法＝橙系 */
+  --fin: #1d5c86;
+  --fin-soft: #e2edf6;
+  --cut: #a8480f;
+  --cut-soft: #fbe9dc;
+  --warn: #8a5a0e;
+  --warn-soft: #f6e9d3;
+  --err: #b3261e;
+  --err-soft: #f8dedb;
+  --ok: #2e7a4d;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  --sans: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'BIZ UDPGothic', 'Noto Sans JP', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, 'Roboto Mono', monospace;
+  --tabbar-h: 60px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #111513;
+    --surface: #1a1f1c;
+    --sunk: #252b27;
+    --ink: #e6ebe8;
+    --muted: #9aa6a0;
+    --line: #333b37;
+    --accent: #72b4e2;
+    --accent-soft: #1b3445;
+    --accent-ink: #08161f;
+    --fin: #8cc4ec;
+    --fin-soft: #172a38;
+    --cut: #f2a36b;
+    --cut-soft: #3a2616;
+    --warn: #e5b062;
+    --warn-soft: #3a2e1a;
+    --err: #f28b82;
+    --err-soft: #3e1f1c;
+    --ok: #7cc897;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #111513;
+  --surface: #1a1f1c;
+  --sunk: #252b27;
+  --ink: #e6ebe8;
+  --muted: #9aa6a0;
+  --line: #333b37;
+  --accent: #72b4e2;
+  --accent-soft: #1b3445;
+  --accent-ink: #08161f;
+  --fin: #8cc4ec;
+  --fin-soft: #172a38;
+  --cut: #f2a36b;
+  --cut-soft: #3a2616;
+  --warn: #e5b062;
+  --warn-soft: #3a2e1a;
+  --err: #f28b82;
+  --err-soft: #3e1f1c;
+  --ok: #7cc897;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 骨組み ---------- */
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 16px calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px));
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 -16px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.topbar .brand {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.topbar h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.tabbar .in {
+  max-width: 560px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.tabbar button {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  min-height: var(--tabbar-h);
+  padding: 0 2px;
+  position: relative;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabbar button[aria-current='page'] {
+  color: var(--accent);
+  font-weight: 700;
+}
+.tabbar button[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 22%;
+  right: 22%;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent);
+}
+.tabbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+h2 {
+  font-size: 20px;
+  margin: 20px 0 4px;
+}
+h3 {
+  font-size: 16px;
+  margin: 22px 0 8px;
+}
+.lead {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  min-width: 0;
+}
+.placeholder {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 16px;
+}
+
+/* ---------- ボタン ---------- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.btn.ghost {
+  background: none;
+  border-style: dashed;
+  color: var(--accent);
+  width: 100%;
+}
+.btn.danger {
+  color: var(--err);
+  border-color: var(--err);
+  background: none;
+}
+.btn.danger.solid {
+  background: var(--err);
+  color: var(--surface);
+}
+.btn.wide {
+  width: 100%;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 切り替えボタン（どれか1つ） */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  background: var(--sunk);
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+}
+.seg button {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  min-height: 44px;
+  padding: 4px;
+  border-radius: 7px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.seg button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- 入力 ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field > .label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.field .hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.input,
+select.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 16px; /* 16px 未満だと iPhone で入力時に拡大される */
+}
+.input.bad {
+  border-color: var(--err);
+}
+.unit-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.unit-input .unit {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- 小さな印 ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: var(--sunk);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 700;
+}
+.chip.err {
+  background: var(--err-soft);
+  color: var(--err);
+  font-weight: 700;
+}
+.msg {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.msg.err {
+  background: var(--err-soft);
+  color: var(--err);
+}
+.msg.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.banner {
+  margin: 10px 0 0;
+}
+
+/* ---------- 下から出る編集シート ---------- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 94dvh;
+  background: var(--bg);
+  border-radius: 14px 14px 0 0;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-head h2 {
+  margin: 0;
+  font-size: 17px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sheet-foot {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+.sheet-foot .btn {
+  flex: 1;
+}
