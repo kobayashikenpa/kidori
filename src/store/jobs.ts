@@ -1,8 +1,11 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { renamePart } from '../engine/formula/rename'
-import { validatePartName } from '../engine/formula/tokenize'
+import { refsOf } from '../engine/formula/evaluate'
+import { parse } from '../engine/formula/parse'
+import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
 import { eq1 } from '../engine/round'
 import {
+  AXES,
   BOARD_SIZES,
   DEFAULT_SETTINGS,
   type Board,
@@ -212,4 +215,20 @@ export function updatePart(job: Job, partId: string, patch: Partial<Omit<Part, '
 export function removePart(job: Job, partId: string): OpResult {
   if (!job.parts.some((p) => p.id === partId)) return fail('部材が見つかりません')
   return ok({ ...job, parts: job.parts.filter((p) => p.id !== partId) })
+}
+
+/** その部材の寸法を式で参照している、ほかの部材の名前（消す前の確認に使う） */
+export function partsReferencing(job: Job, partId: string): string[] {
+  const target = job.parts.find((p) => p.id === partId)
+  if (!target) return []
+  const key = normalizePartName(target.name)
+  return job.parts
+    .filter((p) => p.id !== partId)
+    .filter((p) =>
+      AXES.some((axis) => {
+        const r = parse(p.expr[axis])
+        return r.ok && refsOf(r.ast).some((ref) => normalizePartName(ref.part) === key)
+      }),
+    )
+    .map((p) => p.name)
 }

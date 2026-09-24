@@ -8,6 +8,7 @@ import {
   createJob,
   newBoard,
   newPart,
+  partsReferencing,
   partsUsingBoard,
   removeBoard,
   removePart,
@@ -164,5 +165,17 @@ describe('板', () => {
 
   it('自分と同じ材料名＋厚みのまま変えるのはよい', () => {
     expect(updateBoard(bookshelfJob(), LUMBER_18_ID, { sizeKind: 'shihachi' }).ok).toBe(true)
+  })
+})
+
+describe('partsReferencing', () => {
+  it('見本で全体を参照している部材', () => {
+    expect(partsReferencing(bookshelfJob(), 'part-zentai')).toEqual(['側板', '天地板', '棚板', '背板'])
+  })
+  it('天地板を参照しているのは棚板だけ', () => {
+    expect(partsReferencing(bookshelfJob(), 'part-tenchiita')).toEqual(['棚板'])
+  })
+  it('だれも参照していなければ空', () => {
+    expect(partsReferencing(bookshelfJob(), 'part-seita')).toEqual([])
   })
 })
