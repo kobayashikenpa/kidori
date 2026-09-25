@@ -153,6 +153,9 @@ interface SheetCardProps {
 }
 
 function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
+  const landscape = sheet.orientation === 'landscape'
+  // 図の上で木目の線が横に通るか（横長で長手方向、または縦長で妻手方向）
+  const grainAcross = (grain === 'long') === landscape
   return (
     <article className="card kd-sheet">
       <header className="kd-sheet-head">
@@ -167,19 +170,21 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
       </p>
       <SheetDiagram sheet={sheet} grain={grain} colorOf={colorOf} />
       <p className="dg-legend">
-        <span>
-          <i className="dg-key trim" />
-          端切り {fmt(trim)}mm（{sheet.orientation === 'landscape' ? '上・右' : '右'}）
-        </span>
+        {sheet.trims.length > 0 && (
+          <span>
+            <i className="dg-key trim" />
+            端切り {fmt(trim)}mm（{landscape ? '上・右' : '右'}）
+          </span>
+        )}
         <span>
           <i className="dg-key scrap" />
           端材
         </span>
         <span>
-          <i className={`dg-key grain ${grain}`} />
+          <i className={`dg-key grain ${grainAcross ? 'across' : 'down'}`} />
           木目：{grain === 'long' ? '長手方向' : '妻手方向'}
         </span>
-        <span>下が手前・部材の寸法は木取り寸法・端材は 横×縦</span>
+        <span>部材は右上から詰める・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>
       <CutSteps sheet={sheet} />
     </article>

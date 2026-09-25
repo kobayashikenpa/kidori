@@ -930,6 +930,10 @@ select.input {
   margin: 0 auto;
   font-family: var(--sans);
 }
+/* 横長（横切り優先）はカードの幅いっぱいに描く */
+.diagram.landscape {
+  max-width: none;
+}
 .dg-board {
   fill: var(--dg-board);
 }
@@ -1014,10 +1018,10 @@ select.input {
   background: var(--dg-board);
   border: 1px solid var(--line);
 }
-.dg-key.grain.long {
+.dg-key.grain.down {
   background-image: repeating-linear-gradient(90deg, var(--dg-grain) 0 1px, transparent 1px 4px);
 }
-.dg-key.grain.short {
+.dg-key.grain.across {
   background-image: repeating-linear-gradient(0deg, var(--dg-grain) 0 1px, transparent 1px 4px);
 }
 

@@ -80,17 +80,18 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
   // 図の横（W）と縦（L）。横長なら長辺が横
   const W = landscape ? sheet.boardLength : sheet.boardWidth
   const L = landscape ? sheet.boardWidth : sheet.boardLength
-  // 文字の大きさ（mm）。板の短辺に対する割合で決める（暫定。横長の見た目は ui-dev が調整する）
-  const maxFont = sheet.boardWidth * 0.042
-  const minFont = sheet.boardWidth * 0.026
-  const gap = sheet.boardWidth * 0.03 // 木目の線の間隔
+  // 文字の大きさ（mm）。図はいつもカードの幅いっぱいに描くので、図の横幅（W）に対する割合で決める。
+  // 幅 375px の画面で、どちらの置き方でもおよそ 8〜14px になる
+  const maxFont = W * 0.042
+  const minFont = W * 0.026
+  const gap = W * 0.03 // 木目の線の間隔
   // 木目の線が図の縦に通るか：縦長で長辺方向、または横長で短辺方向
   const grainVertical = (grain === 'long') !== landscape
   const grainPath = grainVertical ? `M ${gap / 2} 0 V ${L}` : `M 0 ${gap / 2} H ${W}`
 
   return (
     <svg
-      className="diagram"
+      className={landscape ? 'diagram landscape' : 'diagram'}
       viewBox={`0 0 ${W} ${L}`}
       role="img"
       aria-label={`${sheet.index}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
