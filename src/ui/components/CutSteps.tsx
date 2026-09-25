@@ -1,4 +1,5 @@
 // 切る順番と端材（板ごと）。どちらも開け閉めできる。中身は engine の結果（cuts・scraps）をそのまま並べる
+import { MIN_SCRAP } from '../../engine/packing'
 import type { CutStep, SheetLayout } from '../../engine/types'
 import { fmt } from '../format'
 
@@ -39,10 +40,10 @@ export function CutSteps({ sheet }: { sheet: SheetLayout }) {
           端材<span className="fold-count num">{sheet.scraps.length}枚</span>
         </summary>
         {sheet.scraps.length === 0 ? (
-          <p className="band-note">使える大きさ（30mm 以上）の端材はありません。</p>
+          <p className="band-note">使える大きさ（{MIN_SCRAP}mm 以上）の端材はありません。</p>
         ) : (
           <>
-            <p className="band-note">大きい順・横×縦（mm）。30mm 未満の細い残りは出していません。</p>
+            <p className="band-note">大きい順・横×縦（mm）。{MIN_SCRAP}mm 未満の細い残りは出していません。</p>
             <ul className="scrap-list">
               {sheet.scraps.map((r, i) => (
                 <li key={i} className="num">

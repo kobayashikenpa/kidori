@@ -15,7 +15,7 @@ import { fmt, pct } from '../format'
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
   noBoard: '板が未設定',
   dimensionError: '寸法を計算できない',
-  noThickness: '厚みの寸法が決まらない',
+  noThickness: '厚みの寸法が決まらない（部材の画面で厚みの寸法を選んでください）',
 }
 
 export function KidoriScreen() {

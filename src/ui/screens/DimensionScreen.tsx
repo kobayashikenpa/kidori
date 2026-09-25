@@ -35,7 +35,8 @@ export function DimensionScreen() {
 
 function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensions; board: Board | null }) {
   const cutting = part.quantity > 0
-  const clearances = AXES.filter((a) => (part.clearance[a] ?? 0) > 0 && d.faceAxes?.includes(a))
+  // engine が逃げを引いた軸（厚みの寸法以外。厚みが決まらなければ3つとも）
+  const clearances = AXES.filter((a) => (part.clearance[a] ?? 0) !== 0 && a !== d.thicknessAxis)
 
   return (
     <article className="card dim-card">
