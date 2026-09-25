@@ -140,7 +140,11 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       {notice && <p className="msg ok banner">{notice}</p>}
 
       <h3>保存した仕事（{jobs.length}件）</h3>
-      {jobs.length === 0 && <p className="lead">保存した仕事はありません。</p>}
+      {jobs.length === 0 && (
+        <p className="lead">
+          まだ仕事がありません。上の「＋ 新しい仕事を作る」から始めてください。
+        </p>
+      )}
       <div className="stack">
         {jobs.map((job) => {
           const isOpen = job.id === state.currentJobId
@@ -234,9 +238,12 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       </div>
 
       {!hasSample && (
-        <button type="button" className="btn ghost" style={{ marginTop: 16 }} onClick={addSample}>
-          見本（本棚 W900）を足して開く
-        </button>
+        <div className="stack" style={{ marginTop: 24 }}>
+          <button type="button" className="btn ghost" onClick={addSample}>
+            見本（本棚 W900）を追加
+          </button>
+          <p className="lead" style={{ margin: 0 }}>使い方を試したいときだけ使ってください（なくても困りません。あとで削除できます）</p>
+        </div>
       )}
     </section>
   )

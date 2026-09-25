@@ -1,5 +1,4 @@
 // 仕事データの状態と、その変え方（reducer）。React に依存しないのでテストしやすい
-import { bookshelfJob } from '../engine/fixtures/bookshelf'
 import type { Job } from '../engine/types'
 import { deleteJob, type JobOp } from './jobs'
 import type { LoadResult } from './storage'
@@ -24,12 +23,10 @@ export type StoreAction =
   /** 仕事に操作を当てる。失敗した操作は何も変えない。now は更新日時（ISO 文字列） */
   | { type: 'applyOp'; jobId: string; op: JobOp; now: string }
 
-/** 読み込みの結果から最初の状態を作る。何も保存されていなければ見本（本棚 W900）を開いた状態で始める */
-export function initialState(load: LoadResult, now: Date = new Date()): StoreState {
+/** 読み込みの結果から最初の状態を作る。何も保存されていなければ、仕事が1つもない空の状態で始める（仕様書 10） */
+export function initialState(load: LoadResult): StoreState {
   if (load.status === 'empty') {
-    const t = now.toISOString()
-    const sample = { ...bookshelfJob(), createdAt: t, updatedAt: t }
-    return { jobs: [sample], currentJobId: sample.id, loadError: null, canSave: true }
+    return { jobs: [], currentJobId: null, loadError: null, canSave: true }
   }
   if (load.status === 'error' || load.status === 'repaired') {
     return { ...load.data, loadError: load.message, canSave: load.canSave }

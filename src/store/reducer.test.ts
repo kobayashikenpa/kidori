@@ -5,16 +5,19 @@ import { currentJob, initialState, storeReducer, type StoreState } from './reduc
 
 const NOW = new Date('2026-09-24T10:00:00.000Z')
 
+/** 見本（本棚 W900）を1つ開いた状態 */
 function stateWithSample(): StoreState {
-  return initialState({ status: 'empty', data: { jobs: [], currentJobId: null } }, NOW)
+  const t = NOW.toISOString()
+  const sample = { ...bookshelfJob(), createdAt: t, updatedAt: t }
+  return initialState({ status: 'ok', data: { jobs: [sample], currentJobId: sample.id } })
 }
 
 describe('initialState', () => {
-  it('何も保存されていなければ、見本（本棚 W900）を開いて始める', () => {
-    const s = stateWithSample()
-    expect(s.jobs).toHaveLength(1)
-    expect(currentJob(s)?.name).toBe('本棚 W900')
-    expect(currentJob(s)?.updatedAt).toBe(NOW.toISOString())
+  it('何も保存されていなければ、仕事が1つもない空の状態で始める（見本は自動で開かない）', () => {
+    const s = initialState({ status: 'empty', data: { jobs: [], currentJobId: null } })
+    expect(s.jobs).toEqual([])
+    expect(s.currentJobId).toBeNull()
+    expect(currentJob(s)).toBeNull()
     expect(s.loadError).toBeNull()
     expect(s.canSave).toBe(true)
   })
