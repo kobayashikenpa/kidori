@@ -47,6 +47,71 @@ export function createJob(name: string, now: Date = new Date(), id: string = new
   }
 }
 
+/** 仕事の名前を変える。空の名前は断る */
+export function renameJob(job: Job, name: string): OpResult {
+  const t = name.trim()
+  if (!t) return fail('仕事の名前を入れてください')
+  return ok({ ...job, name: t })
+}
+
+/** コピーの名前（例：「本棚 W900 のコピー」）。すでにある名前と重なれば「のコピー 2」「のコピー 3」…にする */
+export function copyName(name: string, existingNames: readonly string[]): string {
+  const taken = new Set(existingNames.map((n) => n.trim()))
+  const base = `${name.trim()} のコピー`
+  if (!taken.has(base)) return base
+  for (let i = 2; ; i++) {
+    const n = `${base} ${i}`
+    if (!taken.has(n)) return n
+  }
+}
+
+/**
+ * 仕事をコピーする（似た家具を作るとき用）。仕事・板・部材の id は新しくし、部材が使う板は新しい板の id につけ替える。
+ * 式は部材の名前で参照しているので、そのままで同じように計算できる。元の仕事は書き換えない
+ */
+export function copyJob(
+  job: Job,
+  existingNames: readonly string[],
+  now: Date = new Date(),
+  id: string = newId('job'),
+): Job {
+  const t = now.toISOString()
+  const boardIds = new Map<string, string>()
+  const boards = job.boards.map((b) => {
+    const nid = newId('board')
+    boardIds.set(b.id, nid)
+    return { ...b, id: nid }
+  })
+  const parts = job.parts.map((p) => ({
+    ...p,
+    id: newId('part'),
+    boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
+    expr: { ...p.expr },
+    clearance: { ...p.clearance },
+  }))
+  return {
+    id,
+    name: copyName(job.name, existingNames),
+    settings: { ...job.settings },
+    boards,
+    parts,
+    createdAt: t,
+    updatedAt: t,
+  }
+}
+
+/** 仕事を一覧から消す。開いていた仕事を消したときは、何も開いていない状態にする */
+export function deleteJob(
+  jobs: readonly Job[],
+  currentJobId: string | null,
+  jobId: string,
+): { jobs: Job[]; currentJobId: string | null } {
+  return {
+    jobs: jobs.filter((j) => j.id !== jobId),
+    currentJobId: currentJobId === jobId ? null : currentJobId,
+  }
+}
+
 /** 設定の一部を変える。数値は 0 以上 */
 export function updateSettings(job: Job, patch: Partial<Settings>): OpResult {
   for (const key of ['kerf', 'trim', 'allowance'] as const) {

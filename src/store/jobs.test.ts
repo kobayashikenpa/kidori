@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../engine/fixtures/bookshelf'
+import { computeDimensions } from '../engine/dimensions'
 import { DEFAULT_SETTINGS, type Job } from '../engine/types'
 import {
   addBoard,
   addPart,
   boardLabel,
+  copyJob,
+  copyName,
   createJob,
+  deleteJob,
   newBoard,
   newPart,
   partsReferencing,
   partsUsingBoard,
   removeBoard,
   removePart,
+  renameJob,
   updateBoard,
   updatePart,
   updateSettings,
@@ -177,5 +182,69 @@ describe('partsReferencing', () => {
   })
   it('だれも参照していなければ空', () => {
     expect(partsReferencing(bookshelfJob(), 'part-seita')).toEqual([])
+  })
+})
+
+describe('仕事の名前・コピー・削除', () => {
+  it('名前を変える。前後の空白は落とし、空の名前は断る', () => {
+    expect(unwrap(renameJob(bookshelfJob(), '  食器棚 ')).name).toBe('食器棚')
+    expect(renameJob(bookshelfJob(), '   ').ok).toBe(false)
+  })
+
+  it('コピーの名前は「〇〇 のコピー」。重なれば番号を付ける', () => {
+    expect(copyName('本棚 W900', ['本棚 W900'])).toBe('本棚 W900 のコピー')
+    expect(copyName('本棚 W900', ['本棚 W900', '本棚 W900 のコピー'])).toBe('本棚 W900 のコピー 2')
+    expect(copyName('本棚 W900', ['本棚 W900 のコピー', '本棚 W900 のコピー 2'])).toBe('本棚 W900 のコピー 3')
+  })
+
+  it('コピーは新しい id で、板・部材の id も新しく、部材の板は新しい板につけ替わる', () => {
+    const src = bookshelfJob()
+    const copy = copyJob(src, [src.name], new Date('2026-09-25T00:00:00Z'), 'job-copy')
+    expect(copy.id).toBe('job-copy')
+    expect(copy.name).toBe('本棚 W900 のコピー')
+    expect(copy.createdAt).toBe('2026-09-25T00:00:00.000Z')
+    expect(copy.updatedAt).toBe('2026-09-25T00:00:00.000Z')
+    expect(copy.settings).toEqual(src.settings)
+    expect(copy.boards).toHaveLength(src.boards.length)
+    expect(copy.parts).toHaveLength(src.parts.length)
+    const srcBoardIds = new Set(src.boards.map((b) => b.id))
+    const srcPartIds = new Set(src.parts.map((p) => p.id))
+    for (const b of copy.boards) expect(srcBoardIds.has(b.id)).toBe(false)
+    for (const p of copy.parts) expect(srcPartIds.has(p.id)).toBe(false)
+    // シナランバー18 を使っている部材は、コピーでもコピーのシナランバー18 を使う
+    const lumber = copy.boards.find((b) => b.material === 'シナランバー' && b.thickness === 18)
+    expect(lumber).toBeDefined()
+    expect(partsUsingBoard(copy, lumber!.id)).toEqual(partsUsingBoard(src, LUMBER_18_ID))
+    // 式は名前で参照しているので、そのまま
+    expect(copy.parts.map((p) => p.expr)).toEqual(src.parts.map((p) => p.expr))
+  })
+
+  it('コピーの寸法は元と同じに計算できる', () => {
+    const src = bookshelfJob()
+    const copy = copyJob(src, [])
+    const strip = (job: Job) =>
+      computeDimensions(job).parts.map((d) => ({ name: d.name, finished: d.finished, cutSize: d.cutSize }))
+    expect(computeDimensions(copy).errors).toEqual([])
+    expect(strip(copy)).toEqual(strip(src))
+  })
+
+  it('コピーを変えても元の仕事は変わらない（深いコピー）', () => {
+    const src = bookshelfJob()
+    const copy = copyJob(src, [])
+    const side = copy.parts.find((p) => p.name === '側板')!
+    side.expr.H = '1'
+    side.clearance.H = 99
+    copy.settings.kerf = 9
+    expect(src.parts.find((p) => p.name === '側板')!.expr.H).not.toBe('1')
+    expect(src.parts.find((p) => p.name === '側板')!.clearance.H).not.toBe(99)
+    expect(src.settings.kerf).toBe(3)
+  })
+
+  it('仕事を消す。開いていた仕事を消すと、何も開いていない状態になる', () => {
+    const a = createJob('a', new Date(), 'a')
+    const b = createJob('b', new Date(), 'b')
+    expect(deleteJob([a, b], 'a', 'a')).toEqual({ jobs: [b], currentJobId: null })
+    expect(deleteJob([a, b], 'b', 'a')).toEqual({ jobs: [b], currentJobId: 'b' })
+    expect(deleteJob([a, b], null, 'x')).toEqual({ jobs: [a, b], currentJobId: null })
   })
 })
