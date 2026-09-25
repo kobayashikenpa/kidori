@@ -4,7 +4,7 @@ import type { CutStep, SheetLayout } from '../../engine/types'
 import { fmt } from '../format'
 
 const KIND_LABEL: Record<CutStep['kind'], string> = {
-  trim: '耳落とし',
+  trim: '端切り',
   strip: '帯を切る',
   crosscut: '切り分け',
   rip: '幅を揃える',

@@ -10,7 +10,7 @@ const KERF = 3
 
 function packBoard(job: Job, boardId: string, mode: 'vertical' | 'horizontal'): GuillotineResult {
   const g = expandPieces(job, computeDimensions(job)).groups.find((x) => x.board.id === boardId)!
-  return packGuillotine(g.pieces, usableRect(g.board, job.settings.trim), job.settings.kerf, mode)
+  return packGuillotine(g.pieces, usableRect(g.board, job.settings.trim, mode), job.settings.kerf, mode)
 }
 
 function placements(r: GuillotineResult, sheet: number): Placement[] {
@@ -202,8 +202,11 @@ describe('packGuillotine 縦切り優先（右から帯詰め、帯の中は上�
   })
 })
 
-describe('packGuillotine 横切り優先（手前から横長の帯、帯の中は右から）', () => {
-  it('見本：シナランバー18 は3枚、シナベニヤ4 は1枚', () => {
+/** 横長に置いたサブロク（端切り5）：x は長手方向 0〜1815、y は妻手方向 0〜905 */
+const LANDSCAPE_USABLE: Rect = { x: 0, y: 0, w: 1815, h: 905 }
+
+describe('packGuillotine 横切り優先（横長に置き、右から妻手の幅いっぱいの帯、帯の中は上から）', () => {
+  it('見本：シナランバー18 は3枚（1枚目 側板×2、2枚目 天地板×2＋棚板×2、3枚目 棚板×2）、シナベニヤ4 は1枚', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
     expect(names(r)).toEqual([
       ['側板', '側板'],
@@ -213,56 +216,95 @@ describe('packGuillotine 横切り優先（手前から横長の帯、帯の中�
     expect(packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal').sheets).toHaveLength(1)
   })
 
-  it('帯は横長（幅＝使える範囲の幅 905）で y=0 から積み、刃厚をあけて次の帯', () => {
+  it('1枚目：帯は右端 x=1815 に接し、妻手の高さいっぱい（y 0〜905）。側板は長手方向に寝かせ、上端 y=905 から下へ詰める', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
-    expect(r.sheets[1].strips.map((s) => rect(s.rect))).toEqual([
-      { x: 0, y: 0, w: 905, h: 874 },
-      { x: 0, y: 877, w: 905, h: 873 },
+    expect(r.sheets[0].strips.map((s) => rect(s.rect))).toEqual([{ x: 5, y: 0, w: 1810, h: 905 }])
+    expect(placements(r, 0).map((p) => rect(p))).toEqual([
+      { x: 5, y: 495, w: 1810, h: 410 },
+      { x: 5, y: 82, w: 1810, h: 410 },
     ])
   })
 
-  it('帯の中は右端（x=905）から刃厚をあけて左へ詰める', () => {
+  it('2枚目・3枚目：帯は右から左へ刃厚3をあけて並ぶ。余りは左に残る', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
-    expect(placements(r, 0).map((p) => rect(p))).toEqual([
-      { x: 495, y: 0, w: 410, h: 1810 },
-      { x: 82, y: 0, w: 410, h: 1810 },
+    expect(r.sheets[1].strips.map((s) => rect(s.rect))).toEqual([
+      { x: 941, y: 0, w: 874, h: 905 },
+      { x: 65, y: 0, w: 873, h: 905 },
     ])
     expect(placements(r, 1).map((p) => [p.name, rect(p)])).toEqual([
-      ['天地板', { x: 495, y: 0, w: 410, h: 874 }],
-      ['天地板', { x: 82, y: 0, w: 410, h: 874 }],
-      ['棚板', { x: 515, y: 877, w: 390, h: 873 }],
-      ['棚板', { x: 122, y: 877, w: 390, h: 873 }],
+      ['天地板', { x: 941, y: 495, w: 874, h: 410 }],
+      ['天地板', { x: 941, y: 82, w: 874, h: 410 }],
+      ['棚板', { x: 65, y: 515, w: 873, h: 390 }],
+      ['棚板', { x: 65, y: 122, w: 873, h: 390 }],
     ])
+    expect(placements(r, 2).map((p) => rect(p))).toEqual([
+      { x: 942, y: 515, w: 873, h: 390 },
+      { x: 942, y: 122, w: 873, h: 390 },
+    ])
+  })
+
+  it('見本のベニヤ：背板（木目H＝長手方向）は右上 x 15〜1815・y 5〜905', () => {
+    const r = packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal')
+    expect(rect(placements(r, 0)[0])).toEqual({ x: 15, y: 5, w: 1800, h: 900 })
+  })
+
+  it('木目：板の木目（長手方向）に合わせた向きは回転なし（rotated=false）のまま', () => {
+    const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(placements(r, 0)[0]).toMatchObject({ name: '側板', rotated: false, sizeLabel: '1810×410' })
   })
 
   it('見本のすべての片が範囲内・重ならない・間が刃厚以上', () => {
-    expectValid(packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal'), SABUROKU_USABLE, KERF)
-    expectValid(packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal'), SABUROKU_USABLE, KERF)
+    expectValid(packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal'), LANDSCAPE_USABLE, KERF)
+    expectValid(packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal'), LANDSCAPE_USABLE, KERF)
   })
 
-  it('帯の中の長さ（905）：410 + 3 + 492 はぴったり、493 は入らない', () => {
-    const fit = packGuillotine([piece('a', 410, 500), piece('b', 492, 400)], SABUROKU_USABLE, 3, 'horizontal')
+  it('帯を並べる長さ（1815）：912 + 3 + 900 はぴったり入り（2本目が x=0 に届く）、913 だと次の板', () => {
+    const fit = packGuillotine([piece('a', 600, 900), piece('b', 600, 912)], LANDSCAPE_USABLE, 3, 'horizontal')
+    expect(fit.sheets).toHaveLength(1)
+    expect(placements(fit, 0).map((p) => p.x)).toEqual([903, 0])
+    const over = packGuillotine([piece('a', 600, 900), piece('b', 600, 913)], LANDSCAPE_USABLE, 3, 'horizontal')
+    expect(over.sheets).toHaveLength(2)
+  })
+
+  it('帯の中の長さ（905）：492 + 3 + 410 はぴったり（最後の片が y=0 に届く）、493 は入らない', () => {
+    const fit = packGuillotine([piece('a', 410, 800), piece('b', 492, 800)], LANDSCAPE_USABLE, 3, 'horizontal')
     expect(fit.sheets[0].strips).toHaveLength(1)
-    expect(placements(fit, 0).map((p) => p.x)).toEqual([495, 0])
-    const over = packGuillotine([piece('a', 410, 500), piece('b', 493, 400)], SABUROKU_USABLE, 3, 'horizontal')
+    expect(placements(fit, 0).map((p) => [p.y, p.y + p.h])).toEqual([
+      [413, 905],
+      [0, 410],
+    ])
+    const over = packGuillotine([piece('a', 410, 800), piece('b', 493, 800)], LANDSCAPE_USABLE, 3, 'horizontal')
     expect(over.sheets[0].strips).toHaveLength(2)
   })
 
-  it('帯より低い片は帯の手前（下）に寄せる', () => {
-    const r = packGuillotine([piece('tall', 400, 500), piece('low', 300, 200)], SABUROKU_USABLE, 3, 'horizontal')
-    expect(rect(placements(r, 0)[1])).toEqual({ x: 202, y: 0, w: 300, h: 200 })
+  it('刃厚ぶん入らない：905 に 452 + 452 は刃厚3があるので同じ帯に入らない（刃厚0なら入る）', () => {
+    expect(packGuillotine([piece('a', 452, 800), piece('b', 452, 800)], LANDSCAPE_USABLE, 3, 'horizontal').sheets[0].strips).toHaveLength(2)
+    expect(packGuillotine([piece('a', 452, 800), piece('b', 452, 800)], LANDSCAPE_USABLE, 0, 'horizontal').sheets[0].strips).toHaveLength(1)
   })
 
-  it('帯の高さの合計：1820 に 908.5 + 3 + 908.5 は1枚、909 + 3 + 909 は2枚', () => {
-    expect(packGuillotine([piece('a', 905, 908.5), piece('b', 905, 908.5)], SABUROKU_USABLE, 3, 'horizontal').sheets).toHaveLength(1)
-    expect(packGuillotine([piece('a', 905, 909), piece('b', 905, 909)], SABUROKU_USABLE, 3, 'horizontal').sheets).toHaveLength(2)
+  it('長手 1815 ぴったりの片は入り、1816 は入らない（右の妻手を端切りするため）', () => {
+    expect(packGuillotine([piece('a', 300, 1815)], LANDSCAPE_USABLE, 3, 'horizontal').sheets).toHaveLength(1)
+    const r = packGuillotine([piece('a', 300, 1816)], LANDSCAPE_USABLE, 3, 'horizontal')
+    expect(r.sheets).toEqual([])
+    expect(r.unplaced.map((p) => p.partId)).toEqual(['a'])
   })
 
-  it('150枚でも範囲内・重ならない・刃厚あき', () => {
+  it('帯より細い片は帯の右端に寄せ、前の片の下に刃厚をあけて置く', () => {
+    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], LANDSCAPE_USABLE, 3, 'horizontal')
+    expect(r.sheets[0].strips).toHaveLength(1)
+    expect(placements(r, 0).map((p) => rect(p))).toEqual([
+      { x: 815, y: 505, w: 1000, h: 400 },
+      { x: 1015, y: 202, w: 800, h: 300 },
+    ])
+  })
+
+  it('150枚でも範囲内・重ならない・刃厚あき、すぐ終わる', () => {
     const ps: Piece[] = []
     for (let i = 0; i < 150; i++) ps.push(piece(`p${i}`, 100 + ((i * 37) % 400), 150 + ((i * 53) % 900), i % 3 === 0))
-    const r = packGuillotine(ps, SABUROKU_USABLE, 3, 'horizontal')
+    const t = performance.now()
+    const r = packGuillotine(ps, LANDSCAPE_USABLE, 3, 'horizontal')
+    expect(performance.now() - t).toBeLessThan(200)
     expect(r.sheets.flatMap((_, i) => placements(r, i))).toHaveLength(150)
-    expectValid(r, SABUROKU_USABLE, 3)
+    expectValid(r, LANDSCAPE_USABLE, 3)
   })
 })

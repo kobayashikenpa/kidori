@@ -1,13 +1,14 @@
 // 木取り計算の入口：材料（板）ごとに、選んだ切り方で並べ、切る順番・端材・歩留まりをまとめる。
 // おまかせは縦切り優先・横切り優先の両方を計算し、
-// 必要な板が少ないほう → 同じなら一番大きい端材が大きいほう → それも同じなら縦切り優先 を採る
+// 入らない片が少ないほう → 必要な板が少ないほう → 同じなら一番大きい端材が大きいほう → それも同じなら縦切り優先 を採る
+// （横切り優先は長手も端切りするので、縦切り優先でしか入らない片がありうる）
 import { round1 } from '../round'
 import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout } from '../types'
 import { buildCuts } from './cutOrder'
 import { packGuillotine, type StripMode } from './guillotine'
 import { expandPieces, type Piece, type Unplaced } from './pieces'
 import { scrapsOf } from './scraps'
-import { usableRect } from './sheet'
+import { sheetOrientation, trimRects, usableRect } from './sheet'
 import { combineYield, sheetYield } from './yield'
 
 export { MIN_SCRAP } from './scraps'
@@ -19,7 +20,9 @@ interface Layout {
 }
 
 function layout(pieces: Piece[], board: Board, trim: number, kerf: number, mode: StripMode): Layout {
-  const usable = usableRect(board, trim)
+  const usable = usableRect(board, trim, mode)
+  const orientation = sheetOrientation(mode)
+  const trims = trimRects(board, trim, mode)
   const g = packGuillotine(pieces, usable, kerf, mode)
   const sheets = g.sheets.map((sh, i): SheetLayout => {
     const placements = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
@@ -28,6 +31,8 @@ function layout(pieces: Piece[], board: Board, trim: number, kerf: number, mode:
       index: i + 1,
       boardWidth: board.width,
       boardLength: board.length,
+      orientation,
+      trims,
       usable,
       placements,
       cuts: buildCuts(sh, g.frame, board, trim),
@@ -52,6 +57,7 @@ function largestScrap(l: Layout): number {
 
 /** おまかせの比べ方：a（縦切り優先）を採るなら true */
 function preferFirst(a: Layout, b: Layout): boolean {
+  if (a.unplaced.length !== b.unplaced.length) return a.unplaced.length < b.unplaced.length
   if (a.sheets.length !== b.sheets.length) return a.sheets.length < b.sheets.length
   return largestScrap(a) >= largestScrap(b)
 }

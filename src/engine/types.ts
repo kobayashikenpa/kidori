@@ -14,7 +14,10 @@ export type CutMode = 'vertical' | 'horizontal' | 'auto'
 export interface Settings {
   /** 刃厚（初期値 3） */
   kerf: number
-  /** 耳落とし（初期値 5）。縦長に置いた板の右側の長辺だけ */
+  /**
+   * 端切り（耳落とし。初期値 5）。この幅は刃厚を含む。
+   * 縦切り優先は右の長手だけ、横切り優先は上の長手と右の妻手を落とす
+   */
   trim: number
   /** 切り代（初期値 10）。部材ごとに上書きできる */
   allowance: number
@@ -150,7 +153,17 @@ export interface DimensionResult {
 
 // ---------- 木取りの結果 ----------
 
-/** 板の上の長方形。板を縦長に置き、左下を原点とする。x は短辺方向（右が +）、y は長辺方向（上が +） */
+/**
+ * 板の置き方（配置図の向き）。
+ * - portrait（縦長、縦切り優先）：x は短辺（妻手）方向 0〜width、y は長辺（長手）方向 0〜length
+ * - landscape（横長、横切り優先）：x は長辺（長手）方向 0〜length、y は短辺（妻手）方向 0〜width
+ */
+export type SheetOrientation = 'portrait' | 'landscape'
+
+/**
+ * 板の上の長方形。その板の置き方（SheetOrientation）の座標で、左下を原点とする（x は右が +、y は上が +）。
+ * 配置図の上＝奥、右＝端切りをした側
+ */
 export interface Rect {
   x: number
   y: number
@@ -163,13 +176,13 @@ export interface Placement extends Rect {
   pieceId: string
   partId: string
   name: string
-  /** 部材の face[0] を y 方向（長辺方向）に置いたとき false */
+  /** 部材の face[0] を板の長辺（長手）方向に置いたとき false（置き方によらない） */
   rotated: boolean
   /** 配置図に出す寸法（例："1810×410"） */
   sizeLabel: string
 }
 
-/** 縦に切る（長辺と平行）/ 横に切る（短辺と平行） */
+/** 配置図の上で 縦に切る（線が y 方向）/ 横に切る（線が x 方向）。縦長に置いたときは 縦＝長辺と平行 */
 export type CutDirection = 'vertical' | 'horizontal'
 
 export interface CutStep {
@@ -180,7 +193,7 @@ export interface CutStep {
   at: number
   /** 切る範囲（この長方形を2つに分ける） */
   within: Rect
-  /** 耳落とし / 帯を切る / 帯を切り分ける / 幅を切り揃える */
+  /** 端切り（耳落とし）/ 帯を切る / 帯を切り分ける / 幅を切り揃える */
   kind: 'trim' | 'strip' | 'crosscut' | 'rip'
   /** 画面用の日本語（例：「右端から 410mm で縦に切る」） */
   label: string
@@ -193,7 +206,14 @@ export interface SheetLayout {
   boardWidth: number
   /** 長辺 */
   boardLength: number
-  /** 耳落とし後に使える範囲 */
+  /**
+   * 配置図の向き。portrait なら図の大きさは boardWidth×boardLength、
+   * landscape なら boardLength（横）×boardWidth（縦）。ほかの Rect はすべてこの向きの座標
+   */
+  orientation: SheetOrientation
+  /** 端切りで落とす部分（切る順番と同じ並び）。端切り0 なら空 */
+  trims: Rect[]
+  /** 端切り後に使える範囲 */
   usable: Rect
   placements: Placement[]
   cuts: CutStep[]

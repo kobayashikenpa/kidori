@@ -1,14 +1,16 @@
 // 帯詰め（ギロチンカット）の配置。
 // 帯を並べる方向を p、帯の中で片を並べる方向を q とする「帯の座標」で計算し、最後に板の座標に直す。
-// - 縦切り優先：帯は長辺方向の縦長。p は右端から左へ、q は上端（奥、y=板の長さ）から下（手前）へ。
-//   片は右上から左下に向かって埋まり、余りは左と帯の下に残る
-// - 横切り優先：帯は短辺方向の横長。p は手前（y=0）から奥へ、q は右端から左へ
-// 帯は使える範囲の原点側から詰め、余りは反対側に残る。
+// 縦切り優先・横切り優先とも、その置き方（縦長／横長）の座標で同じ処理をする：
+// p は使える範囲の右端から左へ、q は上端（奥）から下（手前）へ。片は右上から左下に向かって埋まり、
+// 余りは左と帯の下（左下）に残る。
+// - 縦切り優先（縦長）：帯は長手方向の縦長。帯の幅＝片の短辺方向の大きさ
+// - 横切り優先（横長）：帯は妻手の幅いっぱいの縦長（図の上では縦）。帯の幅＝片の長辺方向の大きさ
 import { round1 } from '../round'
 import type { Placement, Rect } from '../types'
 import type { Orientation, Piece } from './pieces'
+import type { StripMode } from './sheet'
 
-export type StripMode = 'vertical' | 'horizontal'
+export type { StripMode } from './sheet'
 
 /** 帯の座標の長方形。p・pw：帯を並べる方向の位置と大きさ、q・qh：帯の中の方向の位置と大きさ */
 export interface LocalRect {
@@ -21,6 +23,7 @@ export interface LocalRect {
 /** 帯の座標と板の座標の対応 */
 export interface Frame {
   mode: StripMode
+  /** 使える範囲（その置き方の座標） */
   usable: Rect
   /** 帯を並べる方向の長さ */
   pCap: number
@@ -31,20 +34,9 @@ export interface Frame {
   sizes(o: Orientation): { pw: number; qh: number }
 }
 
+/** usable はその切り方の置き方の座標（sheet.ts の usableRect(board, trim, mode)） */
 export function frameOf(mode: StripMode, usable: Rect): Frame {
   const right = usable.x + usable.w
-  if (mode === 'horizontal') {
-    // 横切り優先：p は手前から奥へ（y）、q は右端から左へ（x）
-    return {
-      mode,
-      usable,
-      pCap: usable.h,
-      qCap: usable.w,
-      toBoard: (r) => ({ x: round1(right - r.q - r.qh), y: round1(usable.y + r.p), w: r.qh, h: r.pw }),
-      sizes: (o) => ({ pw: o.y, qh: o.x }),
-    }
-  }
-  // 縦切り優先：p は右端から左へ（x）、q は上端から下へ（y）
   const top = usable.y + usable.h
   return {
     mode,
@@ -52,7 +44,8 @@ export function frameOf(mode: StripMode, usable: Rect): Frame {
     pCap: usable.w,
     qCap: usable.h,
     toBoard: (r) => ({ x: round1(right - r.p - r.pw), y: round1(top - r.q - r.qh), w: r.pw, h: r.qh }),
-    sizes: (o) => ({ pw: o.x, qh: o.y }),
+    // 片の向きは板の辺に対する大きさ（x：短辺方向、y：長辺方向）。横長では長辺方向が図の横
+    sizes: mode === 'horizontal' ? (o) => ({ pw: o.y, qh: o.x }) : (o) => ({ pw: o.x, qh: o.y }),
   }
 }
 
@@ -66,12 +59,12 @@ export interface StripLayout {
   local: LocalRect
   /** 板の座標での帯 */
   rect: Rect
-  /** 帯の中の原点側（縦切り優先は上端、横切り優先は右端）から詰めた順 */
+  /** 帯の中の上端から詰めた順 */
   items: StripItem[]
 }
 
 export interface RawSheet {
-  /** 原点側（縦切り優先は右端、横切り優先は手前）から並べた順 */
+  /** 右端から並べた順 */
   strips: StripLayout[]
 }
 
@@ -172,7 +165,7 @@ export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: num
           local,
           rect: frame.toBoard(local),
           items: st.items.map(({ piece, c, q }) => {
-            // 帯より細い片は帯の原点側（縦切り優先は右端、横切り優先は手前）に寄せる
+            // 帯より細い片は帯の右端に寄せる
             const l: LocalRect = { p: st.p, q, pw: c.pw, qh: c.qh }
             const r = frame.toBoard(l)
             const placement: Placement = {

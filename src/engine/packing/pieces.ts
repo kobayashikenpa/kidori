@@ -1,13 +1,16 @@
 // 部材を1枚ずつの「片」に展開し、板ごとに分ける。板の木目に部材の木目を合わせて向き（x・y）を決める
 import { round1 } from '../round'
 import type { Board, DimensionResult, Job, PackingResult } from '../types'
-import { usableRect } from './sheet'
+import { usableSides } from './sheet'
 
-/** 板の上での片の向き。x：短辺方向の大きさ、y：長辺方向の大きさ */
+/**
+ * 板の辺に対する片の向き（置き方＝縦長／横長によらない）。x：短辺（妻手）方向の大きさ、y：長辺（長手）方向の大きさ。
+ * 横長に置く横切り優先では、配置図の横が y、縦が x になる（guillotine.ts の frameOf で直す）
+ */
 export interface Orientation {
   x: number
   y: number
-  /** 部材の face[0] を y 方向（長辺方向）に置いたとき false */
+  /** 部材の face[0] を長辺方向に置いたとき false */
   rotated: boolean
 }
 
@@ -19,7 +22,10 @@ export interface Piece {
   name: string
   /** 配置図に出す寸法（面の2軸の順。寸法表と同じ並び） */
   sizeLabel: string
-  /** 置いてよい向き（使える範囲に入るものだけ）。「どちらでもよい」なら2つになることがある */
+  /**
+   * 置いてよい向き（使える範囲に入るものだけ）。「どちらでもよい」なら2つになることがある。
+   * おまかせでは広いほう（縦切り優先）の範囲で判定するので、横切り優先で入らない向きが残ることがある（配置で除く）
+   */
   orientations: Orientation[]
 }
 
@@ -81,8 +87,10 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       // どちらでもよい（または面にない軸が残っている）→ 回転してよい
       candidates = round1(s0) === round1(s1) ? [upright] : [upright, turned]
     }
-    const usable = usableRect(board, job.settings.trim)
-    const orientations = candidates.filter((o) => round1(o.x) <= round1(usable.w) && round1(o.y) <= round1(usable.h))
+
+    // 横切り優先は長手も端切りする。おまかせは広いほう（縦切り優先）で判定する
+    const sides = usableSides(board, job.settings.trim, job.settings.cutMode === 'horizontal' ? 'horizontal' : 'vertical')
+    const orientations = candidates.filter((o) => round1(o.x) <= round1(sides.short) && round1(o.y) <= round1(sides.long))
 
     let g = byBoard.get(board.id)
     if (!g) {

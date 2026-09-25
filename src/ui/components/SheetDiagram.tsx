@@ -1,4 +1,5 @@
-// 配置図（SVG）：板を縦長に置き（長辺が縦）、右側に耳落とし、部材（名前・寸法）、端材（点線・寸法）、木目の線を描く。
+// 配置図（SVG）：板を engine の置き方（sheet.orientation）で置き、端切り（sheet.trims）、部材（名前・寸法）、端材（点線・寸法）、木目の線を描く。
+// 縦長（portrait）は長辺が縦、横長（landscape、横切り優先）は長辺が横。
 // 位置と大きさはすべて engine の結果（SheetLayout）をそのまま使い、viewBox を板の寸法（mm）にして画面幅に合わせる。
 // engine は左下が原点（y は上が +）なので、描くときに上下を反転する
 import { useId } from 'react'
@@ -75,29 +76,31 @@ function LabelText({ r, label, className }: { r: Rect; label: Label; className: 
 
 export function SheetDiagram({ sheet, grain, colorOf }: Props) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
-  const W = sheet.boardWidth
-  const L = sheet.boardLength
-  // 文字の大きさ（mm）。板の幅に対する割合で決める（画面では板の幅がほぼ一定なので、見た目の大きさもほぼ一定）
-  const maxFont = W * 0.042
-  const minFont = W * 0.026
-  const gap = W * 0.03 // 木目の線の間隔
-  const usableRight = sheet.usable.x + sheet.usable.w
-  const trim: Rect | null = usableRight < W ? { x: usableRight, y: 0, w: W - usableRight, h: L } : null
-  const grainPath = grain === 'long' ? `M ${gap / 2} 0 V ${L}` : `M 0 ${gap / 2} H ${W}`
+  const landscape = sheet.orientation === 'landscape'
+  // 図の横（W）と縦（L）。横長なら長辺が横
+  const W = landscape ? sheet.boardLength : sheet.boardWidth
+  const L = landscape ? sheet.boardWidth : sheet.boardLength
+  // 文字の大きさ（mm）。板の短辺に対する割合で決める（暫定。横長の見た目は ui-dev が調整する）
+  const maxFont = sheet.boardWidth * 0.042
+  const minFont = sheet.boardWidth * 0.026
+  const gap = sheet.boardWidth * 0.03 // 木目の線の間隔
+  // 木目の線が図の縦に通るか：縦長で長辺方向、または横長で短辺方向
+  const grainVertical = (grain === 'long') !== landscape
+  const grainPath = grainVertical ? `M ${gap / 2} 0 V ${L}` : `M 0 ${gap / 2} H ${W}`
 
   return (
     <svg
       className="diagram"
       viewBox={`0 0 ${W} ${L}`}
       role="img"
-      aria-label={`${sheet.index}枚目の配置図：板 ${fmt(W)}×${fmt(L)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
+      aria-label={`${sheet.index}枚目の配置図：板 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
     >
       <defs>
         <pattern
           id={`grain-${uid}`}
           patternUnits="userSpaceOnUse"
-          width={grain === 'long' ? gap : W}
-          height={grain === 'long' ? L : gap}
+          width={grainVertical ? gap : W}
+          height={grainVertical ? L : gap}
         >
           <path d={grainPath} className="dg-grain" />
         </pattern>
@@ -136,7 +139,10 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
       {/* 木目：板全体に、板の木目の方向の線 */}
       <rect x={0} y={0} width={W} height={L} fill={`url(#grain-${uid})`} pointerEvents="none" />
 
-      {trim && <rect className="dg-trim" x={trim.x} y={trim.y} width={trim.w} height={trim.h} />}
+      {sheet.trims.map((t, i) => {
+        const r = flipY(t, L)
+        return <rect key={i} className="dg-trim" x={r.x} y={r.y} width={r.w} height={r.h} />
+      })}
       <rect className="dg-outline" x={0} y={0} width={W} height={L} />
 
       {sheet.placements.map((p, i) => {

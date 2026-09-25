@@ -169,7 +169,7 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
       <p className="dg-legend">
         <span>
           <i className="dg-key trim" />
-          耳落とし {fmt(trim)}mm（右）
+          耳落とし {fmt(trim)}mm（{sheet.orientation === 'landscape' ? '上・右' : '右'}）
         </span>
         <span>
           <i className="dg-key scrap" />

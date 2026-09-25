@@ -142,6 +142,18 @@ describe('expandPieces（片の展開と木目による向き）', () => {
     expect(g.unplaced).toEqual([])
   })
 
+  it('横切り優先では長手も端切りするので、長手 1815 までが入る（1816 は入らない）。縦切り優先・おまかせは 1820 まで', () => {
+    const job = bookshelfJob()
+    addPart(job, { id: 'l1815', name: 'ぴったり', expr: { W: '290', H: '18', D: '1805' }, grain: 'D' })
+    addPart(job, { id: 'l1816', name: '1mm多い', expr: { W: '290', H: '18', D: '1806' }, grain: 'D' })
+    job.settings.cutMode = 'horizontal'
+    expect(group(job, LUMBER_18_ID).unplaced.map((u) => u.partId)).toEqual(['l1816'])
+    job.settings.cutMode = 'vertical'
+    expect(group(job, LUMBER_18_ID).unplaced).toEqual([])
+    job.settings.cutMode = 'auto'
+    expect(group(job, LUMBER_18_ID).unplaced).toEqual([])
+  })
+
   it('板が未設定・存在しない板・寸法エラーの部材は理由つきで除く（枚数0は理由なしで除く）', () => {
     const job = bookshelfJob()
     addPart(job, { id: 'nb', name: '板なし', boardId: null, expr: { W: '100', H: '18', D: '100' } })

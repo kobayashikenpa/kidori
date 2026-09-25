@@ -77,6 +77,8 @@ describe('packJob（木取り計算の入口）', () => {
     const s1 = run(bookshelfJob()).materials[0].sheets[0]
     expect([s1.boardWidth, s1.boardLength]).toEqual([910, 1820])
     expect(s1.usable).toEqual({ x: 0, y: 0, w: 905, h: 1820 })
+    expect(s1.orientation).toBe('portrait')
+    expect(s1.trims).toEqual([{ x: 905, y: 0, w: 5, h: 1820 }])
     expect(s1.cuts[0]).toMatchObject({ no: 1, kind: 'trim', direction: 'vertical', at: 905 })
     expect(s1.cuts[1]).toMatchObject({ no: 2, kind: 'strip', direction: 'vertical', label: '右端から 410mm で縦に切る' })
     expect(s1.scraps).toEqual([{ x: 0, y: 0, w: 79, h: 1820 }])
@@ -88,14 +90,74 @@ describe('packJob（木取り計算の入口）', () => {
       ['horizontal', 3],
       ['horizontal', 1],
     ])
+    expect(r.materials[0].sheets.map((s) => s.placements.map((p) => p.name))).toEqual([
+      ['側板', '側板'],
+      ['天地板', '天地板', '棚板', '棚板'],
+      ['棚板', '棚板'],
+    ])
   })
 
-  it('見本・おまかせ：枚数が同じ（3枚）なので、一番大きい端材が大きい縦切り優先（512×1820 > 905×944）を採る', () => {
+  it('見本・横切り優先の歩留まり：縦切り優先と同じ 89.6 / 84.4 / 41.1、ランバー 71.7、ベニヤ 97.8、全体 78.2（%）', () => {
+    const r = run(withMode('horizontal'))
+    const [lumber, veneer] = r.materials
+    expect(lumber.sheets.map((s) => pct(s.yieldRate))).toEqual([89.6, 84.4, 41.1])
+    expect(pct(lumber.yieldRate)).toBe(71.7)
+    expect(pct(veneer.yieldRate)).toBe(97.8)
+    expect(pct(r.totalYieldRate)).toBe(78.2)
+  })
+
+  it('見本・横切り優先の1枚目：横長（landscape）、使える範囲 1815×905、端切りは上の長手と右の妻手、側板は右上から', () => {
+    const s1 = run(withMode('horizontal')).materials[0].sheets[0]
+    expect(s1.orientation).toBe('landscape')
+    expect([s1.boardWidth, s1.boardLength]).toEqual([910, 1820])
+    expect(s1.usable).toEqual({ x: 0, y: 0, w: 1815, h: 905 })
+    expect(s1.trims).toEqual([
+      { x: 0, y: 905, w: 1820, h: 5 },
+      { x: 1815, y: 0, w: 5, h: 905 },
+    ])
+    expect(s1.placements.map((p) => [p.x, p.y, p.w, p.h])).toEqual([
+      [5, 495, 1810, 410],
+      [5, 82, 1810, 410],
+    ])
+    expect(s1.cuts.map((c) => c.label)).toEqual([
+      '端切り：上の長手を 5mm 落とす（横に切る）',
+      '端切り：右の妻手を 5mm 落とす（縦に切る）',
+      '右端から 1810mm で縦に切る',
+      '上端から 410mm で横に切る',
+      '上端から 410mm で横に切る',
+    ])
+    expect(s1.scraps).toEqual([{ x: 5, y: 0, w: 1810, h: 79 }])
+  })
+
+  it('横切り優先：長手 1816 以上の部材は、右の妻手を端切りするので入らない（1815 は入る）', () => {
+    const parts = [
+      { id: 'a', name: 'ぴったり', expr: { W: '290', H: '18', D: '1805' }, grain: 'D' as const },
+      { id: 'b', name: '1mm多い', expr: { W: '290', H: '18', D: '1806' }, grain: 'D' as const },
+    ]
+    const h = run(lumberOnly('horizontal', parts)).materials[0]
+    expect(h.unplaced).toEqual([{ partId: 'b', name: '1mm多い', reason: 'tooLarge' }])
+    expect(h.sheets.flatMap((s) => s.placements.map((p) => p.name))).toEqual(['ぴったり'])
+    // 縦切り優先なら長手は 1820 まで使えるので両方入る
+    expect(run(lumberOnly('vertical', parts)).materials[0].unplaced).toEqual([])
+  })
+
+  it('おまかせ：横切り優先で入らない部材があれば、全部入る縦切り優先を採る', () => {
+    const parts = [
+      { id: 'a', name: '長い板', expr: { W: '290', H: '18', D: '1810' }, grain: 'D' as const },
+      { id: 'b', name: '短い板', expr: { W: '290', H: '18', D: '300' }, quantity: 5, grain: 'D' as const },
+    ]
+    const auto = run(lumberOnly('auto', parts)).materials[0]
+    expect(auto.mode).toBe('vertical')
+    expect(auto.unplaced).toEqual([])
+  })
+
+  it('見本・おまかせ：枚数が同じ（3枚）なので、一番大きい端材が大きい縦切り優先（512×1820 > 939×905）を採る', () => {
     const r = run(withMode('auto'))
     expect(r.materials.map((m) => [m.mode, m.sheetCount])).toEqual([
       ['vertical', 3],
       ['vertical', 1],
     ])
+    expect(run(withMode('horizontal')).materials[0].sheets[2].scraps[0]).toMatchObject({ w: 939, h: 905 })
   })
 
   it('おまかせ：必要な板が少ないほうを採る（横切り優先なら1枚、縦切り優先なら2枚）', () => {
@@ -110,17 +172,19 @@ describe('packJob（木取り計算の入口）', () => {
     expect([auto.mode, auto.sheetCount]).toEqual(['horizontal', 1])
   })
 
-  it('おまかせ：枚数が同じなら、一番大きい端材が大きいほう（横切り優先 905×817 > 縦切り優先 402×1820）', () => {
+  it('おまかせ：枚数が同じなら、一番大きい端材が大きいほう（横切り優先 812×905 > 縦切り優先 402×1820）', () => {
     const parts = [{ id: 'a', name: '板', expr: { W: '490', H: '18', D: '990' }, grain: 'D' as const }]
     const v = run(lumberOnly('vertical', parts)).materials[0]
     const h = run(lumberOnly('horizontal', parts)).materials[0]
     expect(v.sheets[0].scraps[0]).toMatchObject({ w: 402, h: 1820 })
-    expect(h.sheets[0].scraps[0]).toMatchObject({ w: 905, h: 817 })
+    expect(h.sheets[0].scraps[0]).toMatchObject({ x: 0, y: 0, w: 812, h: 905 })
     expect(run(lumberOnly('auto', parts)).materials[0].mode).toBe('horizontal')
   })
 
-  it('おまかせ：枚数も一番大きい端材も同じなら縦切り優先', () => {
-    const parts = [{ id: 'a', name: '板', expr: { W: '490', H: '18', D: '1810' }, grain: 'D' as const }]
+  it('おまかせ：枚数も一番大きい端材も同じなら縦切り優先（使える範囲いっぱいの 905×1815 の片）', () => {
+    const parts = [{ id: 'a', name: '板', expr: { W: '895', H: '18', D: '1805' }, grain: 'D' as const }]
+    expect(run(lumberOnly('vertical', parts)).materials[0].sheets[0].scraps).toEqual([])
+    expect(run(lumberOnly('horizontal', parts)).materials[0].sheets[0].scraps).toEqual([])
     expect(run(lumberOnly('auto', parts)).materials[0].mode).toBe('vertical')
   })
 

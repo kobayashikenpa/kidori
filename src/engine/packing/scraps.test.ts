@@ -9,7 +9,7 @@ import { usableRect } from './sheet'
 
 function sheetsOf(job: Job, boardId: string, mode: StripMode) {
   const g = expandPieces(job, computeDimensions(job)).groups.find((x) => x.board.id === boardId)!
-  const r = packGuillotine(g.pieces, usableRect(g.board, job.settings.trim), job.settings.kerf, mode)
+  const r = packGuillotine(g.pieces, usableRect(g.board, job.settings.trim, mode), job.settings.kerf, mode)
   return r.sheets.map((sh) => ({
     scraps: scrapsOf(sh, r.frame, job.settings.kerf),
     placements: sh.strips.flatMap((s) => s.items.map((i) => i.placement)),
@@ -20,7 +20,7 @@ const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y 
 
 function expectClean(scraps: Rect[], placements: Rect[], usable: Rect, kerf: number) {
   for (const s of scraps) {
-    // 使える範囲の中（耳落としと重ならない）
+    // 使える範囲の中（端切りと重ならない）
     expect(s.x).toBeGreaterThanOrEqual(usable.x)
     expect(s.y).toBeGreaterThanOrEqual(usable.y)
     expect(s.x + s.w).toBeLessThanOrEqual(usable.x + usable.w + 1e-9)
@@ -41,6 +41,9 @@ function expectClean(scraps: Rect[], placements: Rect[], usable: Rect, kerf: num
 }
 
 const USABLE: Rect = { x: 0, y: 0, w: 905, h: 1820 }
+/** 横長に置いたとき（横切り優先）の使える範囲 */
+const LANDSCAPE_USABLE: Rect = { x: 0, y: 0, w: 1815, h: 905 }
+const usableOf = (mode: StripMode) => (mode === 'vertical' ? USABLE : LANDSCAPE_USABLE)
 
 function piece(id: string, x: number, y: number): Piece {
   return { pieceId: `${id}#1`, partId: id, name: id, sizeLabel: `${y}×${x}`, orientations: [{ x, y, rotated: false }] }
@@ -69,22 +72,36 @@ describe('scrapsOf（端材）', () => {
     ])
   })
 
-  it('見本・横切り優先の3枚目：奥の残り 905×944 と、帯の左の残り 119×873', () => {
+  it('見本・横切り優先（横長）の2枚目：各帯の下の残りと、左の残り（妻手の高さいっぱい）。大きい順', () => {
+    const [, s2] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(s2.scraps).toEqual([
+      { x: 65, y: 0, w: 873, h: 119 },
+      { x: 941, y: 0, w: 874, h: 79 },
+      { x: 0, y: 0, w: 62, h: 905 },
+    ])
+  })
+
+  it('見本・横切り優先（横長）の3枚目：左の残り 939×905（左下）と、帯の下の残り 873×119', () => {
     const s3 = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')[2]
     expect(s3.scraps).toEqual([
-      { x: 0, y: 876, w: 905, h: 944 },
-      { x: 0, y: 0, w: 119, h: 873 },
+      { x: 0, y: 0, w: 939, h: 905 },
+      { x: 942, y: 0, w: 873, h: 119 },
     ])
+  })
+
+  it('見本・横切り優先（横長）の1枚目：帯の下の残り 1810×79 だけ（左の残り 2mm は出さない）', () => {
+    const [s1] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(s1.scraps).toEqual([{ x: 5, y: 0, w: 1810, h: 79 }])
   })
 
   it('見本のベニヤは端材なし（残りは 2mm と 17mm）', () => {
     expect(sheetsOf(bookshelfJob(), VENEER_4_ID, 'vertical')[0].scraps).toEqual([])
   })
 
-  it('見本のすべての端材が、片・耳落とし・ほかの端材と重ならない', () => {
+  it('見本のすべての端材が、片・端切り・ほかの端材と重ならない', () => {
     for (const mode of ['vertical', 'horizontal'] as const) {
       for (const id of [LUMBER_18_ID, VENEER_4_ID]) {
-        for (const s of sheetsOf(bookshelfJob(), id, mode)) expectClean(s.scraps, s.placements, USABLE, 3)
+        for (const s of sheetsOf(bookshelfJob(), id, mode)) expectClean(s.scraps, s.placements, usableOf(mode), 3)
       }
     }
   })
@@ -107,9 +124,9 @@ describe('scrapsOf（端材）', () => {
     const ps: Piece[] = []
     for (let i = 0; i < 150; i++) ps.push(piece(`p${i}`, 100 + ((i * 37) % 400), 150 + ((i * 53) % 900)))
     for (const mode of ['vertical', 'horizontal'] as const) {
-      const r = packGuillotine(ps, USABLE, 3, mode)
+      const r = packGuillotine(ps, usableOf(mode), 3, mode)
       for (const sh of r.sheets) {
-        expectClean(scrapsOf(sh, r.frame, 3), sh.strips.flatMap((s) => s.items.map((i) => i.placement)), USABLE, 3)
+        expectClean(scrapsOf(sh, r.frame, 3), sh.strips.flatMap((s) => s.items.map((i) => i.placement)), usableOf(mode), 3)
       }
     }
   })
