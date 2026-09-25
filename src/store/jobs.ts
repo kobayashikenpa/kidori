@@ -131,8 +131,8 @@ export function boardLabel(board: Pick<Board, 'material' | 'thickness'>): string
 /** 板のサイズの表示（例：サブロク 910×1820） */
 export function boardSizeLabel(board: Pick<Board, 'sizeKind' | 'width' | 'length'>): string {
   const size = `${board.width}×${board.length}`
-  if (board.sizeKind === 'saburoku') return `サブロク ${size}`
-  if (board.sizeKind === 'shihachi') return `シハチ ${size}`
+  if (board.sizeKind === 'saburoku') return `3×6 ${size}`
+  if (board.sizeKind === 'shihachi') return `4×8 ${size}`
   return `自由入力 ${size}`
 }
 
@@ -170,15 +170,15 @@ function sameMaterial(a: string, b: string): boolean {
 }
 
 function validateBoard(job: Job, board: Board): string | null {
-  if (!board.material) return '材料名を入れてください'
+  if (!board.material) return '材料を入れてください'
   if (!(Number.isFinite(board.thickness) && board.thickness > 0)) return '厚みは 0 より大きい数を入れてください'
   if (!(Number.isFinite(board.width) && board.width > 0 && Number.isFinite(board.length) && board.length > 0)) {
-    return '板の大きさは 0 より大きい数を入れてください'
+    return '材料の大きさは 0 より大きい数を入れてください'
   }
   const dup = job.boards.find(
     (b) => b.id !== board.id && sameMaterial(b.material, board.material) && eq1(b.thickness, board.thickness),
   )
-  if (dup) return `「${boardLabel(dup)}」の板はすでにあります（材料名＋厚みが同じ板は2つ作れません）`
+  if (dup) return `「${boardLabel(dup)}」はすでにあります（材料と厚みが同じものは2つ作れません）`
   return null
 }
 
@@ -193,7 +193,7 @@ export function addBoard(job: Job, board: Board): OpResult {
 /** 板を変える。材料名＋厚みがほかの板と同じなら断る */
 export function updateBoard(job: Job, boardId: string, patch: Partial<Omit<Board, 'id'>>): OpResult {
   const cur = job.boards.find((b) => b.id === boardId)
-  if (!cur) return fail('板が見つかりません')
+  if (!cur) return fail('材料が見つかりません')
   const b = normalizeBoard({ ...cur, ...patch, id: boardId })
   const err = validateBoard(job, b)
   if (err) return fail(err)
@@ -207,7 +207,7 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
 
 /** 板を消す。使っていた部材の板は未設定（null）になる。確認は画面側で partsUsingBoard を使って行う */
 export function removeBoard(job: Job, boardId: string): OpResult {
-  if (!job.boards.some((b) => b.id === boardId)) return fail('板が見つかりません')
+  if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
   return ok({
     ...job,
     boards: job.boards.filter((b) => b.id !== boardId),

@@ -8,9 +8,9 @@ export const CUT_MODES: { value: CutMode; label: string }[] = [
 ]
 
 export const CUT_MODE_HINT: Record<CutMode, string> = {
-  vertical: '先に長辺方向に帯状に切り、その帯を横に切り分けます。縦長の端材が残りやすい切り方です。',
-  horizontal: '先に短辺方向に切り、そのあと縦に切り分けます。',
-  auto: '縦切り優先・横切り優先の両方を計算し、必要な板が少ないほうを使います。同じなら、一番大きい端材が大きいほうを使います。',
+  vertical: '材料を縦長に置き、先に長手方向の帯を切り出して、その帯を横に切り分けます。縦長の端材が残りやすい切り方です。',
+  horizontal: '材料を横長に置き、先に妻手方向の帯（妻手の幅いっぱい）を切り出して、その帯を縦に切り分けます。妻手の幅のままの余りが左に残ります。',
+  auto: '縦切り優先・横切り優先の両方を計算し、必要な材料が少ないほうを使います。同じなら、一番大きい端材が大きいほうを使います。',
 }
 
 export function cutModeLabel(mode: CutMode): string {

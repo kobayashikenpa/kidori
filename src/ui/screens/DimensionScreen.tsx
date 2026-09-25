@@ -46,7 +46,7 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
       </header>
       {cutting && (
         <div className="tags">
-          {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">板が未設定</span>}
+          {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">材料が未設定</span>}
           {d.thicknessMismatch && <span className="chip warn">厚みを確認</span>}
         </div>
       )}
@@ -96,7 +96,7 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
                 </>
               ) : (
                 <p className="band-note">
-                  {board ? '厚みの寸法が決まらないため出せません（部材の画面で選んでください）' : '板を選ぶと出ます'}
+                  {board ? '厚みが決まらないため出せません（部材の画面で選んでください）' : '材料を選ぶと出ます'}
                 </p>
               )}
             </section>

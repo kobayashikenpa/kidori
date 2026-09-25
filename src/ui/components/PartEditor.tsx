@@ -88,7 +88,7 @@ export function PartEditor({ part, onClose }: Props) {
       {cutting && (
         <div className="field">
           <label className="label" htmlFor="part-board">
-            板
+            材料
           </label>
           <select
             id="part-board"
@@ -96,14 +96,14 @@ export function PartEditor({ part, onClose }: Props) {
             value={draft.boardId ?? ''}
             onChange={(e) => patch({ boardId: e.target.value || null })}
           >
-            <option value="">（板が未設定）</option>
+            <option value="">（材料が未設定）</option>
             {job.boards.map((b) => (
               <option key={b.id} value={b.id}>
                 {boardLabel(b)}
               </option>
             ))}
           </select>
-          {!board && <p className="msg warn">板が未設定です。木取りの計算には板が必要です</p>}
+          {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
         </div>
       )}
 
@@ -147,16 +147,16 @@ export function PartEditor({ part, onClose }: Props) {
         </div>
         <span className="hint">
           仕上がり寸法から引きます
-          {dims.thicknessAxis ? '' : '。厚みの寸法が決まるまでは W・H・D の3つとも引きます'}
+          {dims.thicknessAxis ? '' : '。厚みが決まるまでは W・H・D の3つとも引きます'}
         </span>
       </div>
 
       {cutting && (
         <>
           <div className="field">
-            <span className="label">厚みの寸法</span>
+            <span className="label">厚み</span>
             <Segmented<Axis | 'auto'>
-              ariaLabel="厚みの寸法"
+              ariaLabel="厚み"
               value={draft.thicknessAxis ?? 'auto'}
               options={[
                 { value: 'auto', label: dims.thicknessAuto && dims.thicknessAxis ? `自動（${dims.thicknessAxis}）` : '自動' },
@@ -164,12 +164,12 @@ export function PartEditor({ part, onClose }: Props) {
               ]}
               onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
             />
-            <span className="hint">W・H・D のうち、板の厚みにあたる寸法です</span>
+            <span className="hint">W・H・D のうち、材料の厚みにあたる寸法です</span>
             {dims.thicknessMismatch && board && (
               <p className="msg warn">
                 {dims.thicknessAxis
-                  ? `厚みの寸法 ${dims.thicknessAxis} の値（${fmt(dims.input?.[dims.thicknessAxis] ?? 0)}mm）が、板の厚み ${fmt(board.thickness)}mm と違います。確かめてください`
-                  : `板の厚み ${fmt(board.thickness)}mm と同じ寸法がありません。厚みの寸法を選んでください`}
+                  ? `厚み ${dims.thicknessAxis} の値（${fmt(dims.input?.[dims.thicknessAxis] ?? 0)}mm）が、材料の厚み ${fmt(board.thickness)}mm と違います。確かめてください`
+                  : `材料の厚み ${fmt(board.thickness)}mm と同じ寸法がありません。厚みを選んでください`}
               </p>
             )}
           </div>
@@ -187,7 +187,7 @@ export function PartEditor({ part, onClose }: Props) {
                 onChange={(v) => patch({ grain: v })}
               />
             ) : (
-              <span className="hint">厚みの寸法が決まると選べます</span>
+              <span className="hint">厚みが決まると選べます</span>
             )}
           </div>
 

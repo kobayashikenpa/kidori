@@ -154,7 +154,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
                 {isOpen && <span className="chip ok">開いている</span>}
               </div>
               <div className="lead" style={{ margin: 0 }}>
-                部材 {job.parts.length}種類（計 {pieces}枚）・板 {job.boards.length}
+                部材 {job.parts.length}種類（計 {pieces}枚）・材料 {job.boards.length}
               </div>
               <div className="lead" style={{ margin: 0 }}>
                 更新 {formatDate(job.updatedAt)}
@@ -191,7 +191,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
               ) : deleting ? (
                 <div className="stack confirm-box" role="alert">
                   <p style={{ margin: 0 }}>
-                    「{job.name}」を消しますか？{isOpen && 'いま開いている仕事です。'}部材と板の入力もすべて消えます。
+                    「{job.name}」を消しますか？{isOpen && 'いま開いている仕事です。'}部材と材料の入力もすべて消えます。
                     <strong>元に戻せません。</strong>
                   </p>
                   <div className="sheet-foot">

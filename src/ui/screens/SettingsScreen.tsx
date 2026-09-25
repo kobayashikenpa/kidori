@@ -41,10 +41,10 @@ export function SettingsScreen() {
 
         <div className="field">
           <label className="label" htmlFor="set-trim">
-            耳落とし
+            端切り
           </label>
           <NumberField id="set-trim" value={s.trim} onChange={(v) => v !== null && set({ trim: v })} />
-          <span className="hint">板を縦長に置いたときの、右側の長辺だけを落とします</span>
+          <span className="hint">刃厚を含む幅です。縦切り優先は右側の長手を、横切り優先は上側の長手と右側の妻手を落とします</span>
         </div>
 
         <div className="field">
@@ -73,16 +73,16 @@ export function SettingsScreen() {
         </div>
       </div>
 
-      <h3>板</h3>
+      <h3>材料</h3>
       <div className="stack">
-        {job.boards.length === 0 && <p className="lead">板がまだありません。</p>}
+        {job.boards.length === 0 && <p className="lead">材料がまだありません。</p>}
         {job.boards.map((b) => {
           const users = partsUsingBoard(job, b.id)
           return (
             <button key={b.id} type="button" className="card board-item" onClick={() => setEditing(b)}>
               <span className="board-name">{boardLabel(b)}</span>
               <span className="lead num" style={{ margin: 0 }}>
-                {boardSizeLabel(b)}・木目 {b.grain === 'long' ? '長辺方向' : '短辺方向'}
+                {boardSizeLabel(b)}・木目 {b.grain === 'long' ? '長手方向' : '妻手方向'}
               </span>
               <span className="lead" style={{ margin: 0 }}>
                 {users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}
@@ -91,7 +91,7 @@ export function SettingsScreen() {
           )
         })}
         <button type="button" className="btn ghost" onClick={() => setEditing('new')}>
-          ＋ 板を追加
+          ＋ 材料を追加
         </button>
       </div>
       {editing && (

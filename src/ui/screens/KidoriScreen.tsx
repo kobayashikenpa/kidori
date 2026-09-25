@@ -1,4 +1,4 @@
-// 木取りの画面：材料（材料名＋厚み）ごとの必要な板の枚数・歩留まり・切り方、全体の歩留まり、
+// 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
 // 入らない部材・計算できない部材の一覧、板ごとの結果。計算はすべて engine（computeDimensions → packJob）
 import { useMemo } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
@@ -13,9 +13,9 @@ import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
-  noBoard: '板が未設定',
+  noBoard: '材料が未設定',
   dimensionError: '寸法を計算できない',
-  noThickness: '厚みの寸法が決まらない（部材の画面で厚みの寸法を選んでください）',
+  noThickness: '厚みが決まらない（部材の画面で厚みを選んでください）',
 }
 
 export function KidoriScreen() {
@@ -31,7 +31,7 @@ export function KidoriScreen() {
     <section>
       <h2>木取り</h2>
       <p className="lead num">
-        刃厚 {fmt(s.kerf)}mm・耳落とし {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm（設定の画面で変えられます）
+        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm（設定の画面で変えられます）
       </p>
 
       <div className="field">
@@ -48,7 +48,7 @@ export function KidoriScreen() {
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
-          <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と板を入れてください。</p>
+          <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と材料を入れてください。</p>
         </div>
       ) : (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
@@ -66,8 +66,8 @@ export function KidoriScreen() {
 
       {unplaced.length > 0 && (
         <div className="card kd-issues err" role="alert">
-          <h4>板に入らない部材</h4>
-          <p className="band-note">どう回しても板の使える範囲（耳落としの後）に入りません。寸法か板を見直してください。</p>
+          <h4>材料に収まらない部材</h4>
+          <p className="band-note">どう回しても材料の使える範囲（端切りの後）に収まりません。寸法か材料を見直してください。</p>
           <ul>
             {unplaced.map((u) => (
               <li key={u.partId}>
@@ -126,7 +126,7 @@ function MaterialRow({ m, auto }: { m: MaterialResult; auto: boolean }) {
       <div className="kd-mat-name">{boardLabel(m)}</div>
       <div className="kd-mat-nums">
         <span>
-          <span className="kd-k">必要な板</span>
+          <span className="kd-k">必要な材料</span>
           <span className="kd-v num">{m.sheetCount}枚</span>
         </span>
         <span>
@@ -162,14 +162,14 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
       </header>
       <p className="band-note num">
-        板 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
+        材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
         {sheet.scraps.length}枚
       </p>
       <SheetDiagram sheet={sheet} grain={grain} colorOf={colorOf} />
       <p className="dg-legend">
         <span>
           <i className="dg-key trim" />
-          耳落とし {fmt(trim)}mm（{sheet.orientation === 'landscape' ? '上・右' : '右'}）
+          端切り {fmt(trim)}mm（{sheet.orientation === 'landscape' ? '上・右' : '右'}）
         </span>
         <span>
           <i className="dg-key scrap" />
@@ -177,7 +177,7 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
         </span>
         <span>
           <i className={`dg-key grain ${grain}`} />
-          木目：{grain === 'long' ? '長辺方向' : '短辺方向'}
+          木目：{grain === 'long' ? '長手方向' : '妻手方向'}
         </span>
         <span>下が手前・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>

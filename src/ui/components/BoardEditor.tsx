@@ -8,8 +8,8 @@ import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
 
 const SIZE_KINDS: { value: BoardSizeKind; label: string }[] = [
-  { value: 'saburoku', label: 'サブロク' },
-  { value: 'shihachi', label: 'シハチ' },
+  { value: 'saburoku', label: '3×6' },
+  { value: 'shihachi', label: '4×8' },
   { value: 'custom', label: '自由入力' },
 ]
 
@@ -47,10 +47,10 @@ export function BoardEditor({ board, onClose }: Props) {
   }
 
   return (
-    <Sheet title={board ? `板の編集：${boardLabel(board)}` : '板を追加'} onClose={onClose}>
+    <Sheet title={board ? `材料の編集：${boardLabel(board)}` : '材料を追加'} onClose={onClose}>
       <div className="field">
         <label className="label" htmlFor="board-material">
-          材料名
+          材料
         </label>
         <input
           id="board-material"
@@ -65,27 +65,27 @@ export function BoardEditor({ board, onClose }: Props) {
           厚み
         </label>
         <NumberField id="board-thickness" value={draft.thickness} onChange={(v) => v !== null && patch({ thickness: v })} />
-        <span className="hint">材料名＋厚みで板を区別します（同じ組み合わせの板は2つ作れません）</span>
+        <span className="hint">材料と厚みの組み合わせで区別します（同じ組み合わせは2つ作れません）</span>
       </div>
       <div className="field">
         <span className="label">サイズ</span>
-        <Segmented ariaLabel="板のサイズ" value={draft.sizeKind} options={SIZE_KINDS} onChange={setKind} />
+        <Segmented ariaLabel="材料のサイズ" value={draft.sizeKind} options={SIZE_KINDS} onChange={setKind} />
         {draft.sizeKind !== 'custom' ? (
           <span className="hint num">
-            {draft.width} × {draft.length} mm（木目は長辺方向）
+            {draft.width} × {draft.length} mm（木目は長手方向）
           </span>
         ) : (
           <>
             <div className="row" style={{ flexWrap: 'nowrap' }}>
               <div className="field" style={{ flex: 1 }}>
                 <label className="label" htmlFor="board-w">
-                  短辺
+                  妻手
                 </label>
                 <NumberField id="board-w" value={draft.width} onChange={(v) => v !== null && patch({ width: v })} />
               </div>
               <div className="field" style={{ flex: 1 }}>
                 <label className="label" htmlFor="board-l">
-                  長辺
+                  長手
                 </label>
                 <NumberField id="board-l" value={draft.length} onChange={(v) => v !== null && patch({ length: v })} />
               </div>
@@ -97,8 +97,8 @@ export function BoardEditor({ board, onClose }: Props) {
               ariaLabel="木目の方向"
               value={draft.grain}
               options={[
-                { value: 'long', label: '長辺方向' },
-                { value: 'short', label: '短辺方向' },
+                { value: 'long', label: '長手方向' },
+                { value: 'short', label: '妻手方向' },
               ]}
               onChange={(v) => patch({ grain: v })}
             />
@@ -116,13 +116,13 @@ export function BoardEditor({ board, onClose }: Props) {
 
       {board &&
         (confirming ? (
-          <div className="card stack" role="alertdialog" aria-label="板の削除の確認">
+          <div className="card stack" role="alertdialog" aria-label="材料の削除の確認">
             {users.length > 0 ? (
               <p className="msg warn" style={{ margin: 0 }}>
-                この板は <b>{users.join('・')}</b> で使っています。削除すると、これらの部材は「板が未設定」になります。
+                この材料は <b>{users.join('・')}</b> で使っています。削除すると、これらの部材は「材料が未設定」になります。
               </p>
             ) : (
-              <p style={{ margin: 0 }}>この板を使っている部材はありません。</p>
+              <p style={{ margin: 0 }}>この材料を使っている部材はありません。</p>
             )}
             <p style={{ margin: 0 }}>「{boardLabel(board)}」を削除しますか？</p>
             <div className="sheet-foot">
@@ -136,7 +136,7 @@ export function BoardEditor({ board, onClose }: Props) {
           </div>
         ) : (
           <button type="button" className="btn danger wide" onClick={() => setConfirming(true)}>
-            この板を削除
+            この材料を削除
           </button>
         ))}
     </Sheet>

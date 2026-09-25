@@ -93,7 +93,7 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
       className="diagram"
       viewBox={`0 0 ${W} ${L}`}
       role="img"
-      aria-label={`${sheet.index}枚目の配置図：板 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
+      aria-label={`${sheet.index}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
     >
       <defs>
         <pattern
