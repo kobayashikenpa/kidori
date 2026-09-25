@@ -184,6 +184,19 @@ describe('中身の検査と修復', () => {
     expect(job.parts).toHaveLength(bookshelfJob().parts.length)
   })
 
+  it('短辺と長辺が逆の板は入れ替えて直す', () => {
+    const r = loadSaved(
+      storedWith((j) => {
+        j.boards[0].width = 1820
+        j.boards[0].length = 910
+      }),
+      T1,
+    )
+    expect(r.status).toBe('repaired')
+    const b = r.data.jobs[0]!.boards[0]!
+    expect([b.width, b.length]).toEqual([910, 1820])
+  })
+
   it('材料名＋厚みが同じ板が2つあれば、後の板を外す', () => {
     const r = loadSaved(
       storedWith((j) => {
@@ -288,5 +301,20 @@ describe('読めなかったデータの退避', () => {
     const r = loadSaved(s, T1)
     expect(r.status === 'error' && r.canSave).toBe(true)
     expect(backups(s)).toHaveLength(1)
+  })
+
+  it('退避キーがいつまでも空かなければ、あきらめて保存しない', () => {
+    let calls = 0
+    const s: KeyValueStorage = {
+      getItem: (k) => {
+        calls++
+        return k === JOBS_KEY ? 'broken' : k === BROKEN_BACKUP_INDEX_KEY ? null : 'ほかのデータ'
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    }
+    const r = loadSaved(s, T1)
+    expect(r.status === 'error' && !r.canSave).toBe(true)
+    expect(calls).toBeLessThan(200)
   })
 })

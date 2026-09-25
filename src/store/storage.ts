@@ -24,6 +24,8 @@ export const BROKEN_BACKUP_KEY = 'kidori.jobs.v1.broken'
 /** 退避したキーの一覧（古い順） */
 export const BROKEN_BACKUP_INDEX_KEY = 'kidori.jobs.v1.broken.index'
 export const MAX_BACKUPS = 3
+/** 退避キーがぶつかったときに、別のキーを試す回数の上限 */
+const MAX_KEY_TRIES = 100
 
 /** localStorage のうち使う部分。テストでは差し替える */
 export interface KeyValueStorage {
@@ -116,8 +118,9 @@ function sanitizeBoard(v: unknown, fx: Fixes): Board | null {
     material,
     thickness: v.thickness,
     sizeKind: pick(v.sizeKind, (x): x is BoardSizeKind => SIZE_KINDS.includes(x as BoardSizeKind), 'custom', fx),
-    width: v.width,
-    length: v.length,
+    // 短辺 ≦ 長辺にそろえる（木取り計算は長辺を縦に置く前提）。逆なら入れ替えて直した数に数える
+    width: v.width > v.length ? (fx.count++, v.length) : v.width,
+    length: Math.max(v.width, v.length),
     grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
   }
 }
@@ -261,8 +264,16 @@ export function backupBroken(storage: KeyValueStorage, raw: string, now: Date = 
     // 同じ中身をもう退避してあれば、新しく作らない（開き直すたびに古い退避が押し出されないように）
     if (index.some((k) => storage.getItem(k) === raw)) return true
     const base = `${BROKEN_BACKUP_KEY}.${now.toISOString()}`
-    let key = base
-    for (let i = 2; index.includes(key) || storage.getItem(key) !== null; i++) key = `${base}-${i}`
+    let key: string | null = null
+    for (let i = 1; i <= MAX_KEY_TRIES; i++) {
+      const k = i === 1 ? base : `${base}-${i}`
+      if (!index.includes(k) && storage.getItem(k) === null) {
+        key = k
+        break
+      }
+    }
+    // 空いているキーが見つからなければ、退避できなかったとして扱う
+    if (key === null) return false
     storage.setItem(key, raw)
     const next = [...index, key]
     const old = next.slice(0, Math.max(0, next.length - MAX_BACKUPS))
