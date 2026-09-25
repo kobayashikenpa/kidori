@@ -67,7 +67,7 @@ function piece(id: string, x: number, y: number, any = false): Piece {
 
 const SABUROKU_USABLE: Rect = { x: 0, y: 0, w: 905, h: 1820 }
 
-describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
+describe('packGuillotine 縦切り優先（右から帯詰め、帯の中は上から）', () => {
   it('見本：シナランバー18 は3枚（1枚目 側板×2、2枚目 天地板×2＋棚板×2、3枚目 棚板×2）', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'vertical')
     expect(r.sheets).toHaveLength(3)
@@ -78,34 +78,34 @@ describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
     ])
   })
 
-  it('見本：シナベニヤ4 は1枚。背板は右端（x=5〜905）に置く', () => {
+  it('見本：シナベニヤ4 は1枚。背板は右上（x=5〜905、y=20〜1820）に置く', () => {
     const r = packBoard(bookshelfJob(), VENEER_4_ID, 'vertical')
     expect(r.sheets).toHaveLength(1)
-    expect(rect(placements(r, 0)[0])).toEqual({ x: 5, y: 0, w: 900, h: 1800 })
+    expect(rect(placements(r, 0)[0])).toEqual({ x: 5, y: 20, w: 900, h: 1800 })
   })
 
-  it('1枚目：最初の側板の右端が x=905、次の帯はその左に刃厚3をあける', () => {
+  it('1枚目：最初の側板は右上（右端 x=905、上端 y=1820）、次の帯はその左に刃厚3をあける', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'vertical')
     const ps = placements(r, 0)
-    expect(rect(ps[0])).toEqual({ x: 495, y: 0, w: 410, h: 1810 })
-    expect(rect(ps[1])).toEqual({ x: 82, y: 0, w: 410, h: 1810 })
+    expect(rect(ps[0])).toEqual({ x: 495, y: 10, w: 410, h: 1810 })
+    expect(rect(ps[1])).toEqual({ x: 82, y: 10, w: 410, h: 1810 })
     expect(r.sheets[0].strips.map((s) => rect(s.rect))).toEqual([
       { x: 495, y: 0, w: 410, h: 1820 },
       { x: 82, y: 0, w: 410, h: 1820 },
     ])
   })
 
-  it('2枚目：帯の中は手前（y=0）から刃厚をあけて詰める。細い棚板は次の帯', () => {
+  it('2枚目：帯の中は上（奥、y=1820）から刃厚をあけて下へ詰める。細い棚板は次の帯', () => {
     const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'vertical')
     expect(placements(r, 1).map((p) => [p.name, rect(p)])).toEqual([
-      ['天地板', { x: 495, y: 0, w: 410, h: 874 }],
-      ['天地板', { x: 495, y: 877, w: 410, h: 874 }],
-      ['棚板', { x: 102, y: 0, w: 390, h: 873 }],
-      ['棚板', { x: 102, y: 876, w: 390, h: 873 }],
+      ['天地板', { x: 495, y: 946, w: 410, h: 874 }],
+      ['天地板', { x: 495, y: 69, w: 410, h: 874 }],
+      ['棚板', { x: 102, y: 947, w: 390, h: 873 }],
+      ['棚板', { x: 102, y: 71, w: 390, h: 873 }],
     ])
     expect(placements(r, 2).map((p) => rect(p))).toEqual([
-      { x: 515, y: 0, w: 390, h: 873 },
-      { x: 515, y: 876, w: 390, h: 873 },
+      { x: 515, y: 947, w: 390, h: 873 },
+      { x: 515, y: 71, w: 390, h: 873 },
     ])
   })
 
@@ -127,6 +127,14 @@ describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
     expect(placements(r, 0).map((p) => p.x)).toEqual([495, 82, 0])
   })
 
+  it('帯の中の片は上端 y=1820 から詰め、最後の片が下端 y=0 にぴったり届く（908.5 + 3 + 908.5）', () => {
+    const r = packGuillotine([piece('a', 300, 908.5), piece('b', 300, 908.5)], SABUROKU_USABLE, 3, 'vertical')
+    expect(placements(r, 0).map((p) => [p.y, p.y + p.h])).toEqual([
+      [911.5, 1820],
+      [0, 908.5],
+    ])
+  })
+
   it('帯の幅が1mm 足りないと次の板に回る（80 は入らない）', () => {
     const r = packGuillotine([piece('a', 410, 1820), piece('b', 410, 1820), piece('c', 80, 1820)], SABUROKU_USABLE, 3, 'vertical')
     expect(r.sheets).toHaveLength(2)
@@ -146,10 +154,10 @@ describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
     expect(r0.sheets[0].strips).toHaveLength(1)
   })
 
-  it('帯より細い片は帯の右端に寄せる', () => {
+  it('帯より細い片は帯の右端に寄せ、前の片の下に刃厚をあけて置く', () => {
     const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
     expect(r.sheets[0].strips).toHaveLength(1)
-    expect(rect(placements(r, 0)[1])).toEqual({ x: 605, y: 1003, w: 300, h: 800 })
+    expect(rect(placements(r, 0)[1])).toEqual({ x: 605, y: 17, w: 300, h: 800 })
   })
 
   it('前の板の帯に空きがあれば、そこに戻して入れる（First Fit）', () => {
@@ -169,7 +177,7 @@ describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
     const r = packGuillotine([piece('a', 900, 1500), piece('any', 300, 850, true)], SABUROKU_USABLE, 3, 'vertical')
     expect(r.sheets).toHaveLength(1)
     const p = placements(r, 0)[1]
-    expect(rect(p)).toEqual({ x: 55, y: 1503, w: 850, h: 300 })
+    expect(rect(p)).toEqual({ x: 55, y: 17, w: 850, h: 300 })
     expect(p.rotated).toBe(true)
   })
 

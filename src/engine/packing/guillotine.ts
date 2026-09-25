@@ -1,8 +1,9 @@
 // 帯詰め（ギロチンカット）の配置。
 // 帯を並べる方向を p、帯の中で片を並べる方向を q とする「帯の座標」で計算し、最後に板の座標に直す。
-// - 縦切り優先：帯は長辺方向の縦長。p は右端から左へ、q は手前（y=0）から奥へ
+// - 縦切り優先：帯は長辺方向の縦長。p は右端から左へ、q は上端（奥、y=板の長さ）から下（手前）へ。
+//   片は右上から左下に向かって埋まり、余りは左と帯の下に残る
 // - 横切り優先：帯は短辺方向の横長。p は手前（y=0）から奥へ、q は右端から左へ
-// 帯は使える範囲の原点側（右端・手前）から詰め、余りは反対側（左・奥）に残る。
+// 帯は使える範囲の原点側から詰め、余りは反対側に残る。
 import { round1 } from '../round'
 import type { Placement, Rect } from '../types'
 import type { Orientation, Piece } from './pieces'
@@ -43,13 +44,14 @@ export function frameOf(mode: StripMode, usable: Rect): Frame {
       sizes: (o) => ({ pw: o.y, qh: o.x }),
     }
   }
-  // 縦切り優先：p は右端から左へ（x）、q は手前から奥へ（y）
+  // 縦切り優先：p は右端から左へ（x）、q は上端から下へ（y）
+  const top = usable.y + usable.h
   return {
     mode,
     usable,
     pCap: usable.w,
     qCap: usable.h,
-    toBoard: (r) => ({ x: round1(right - r.p - r.pw), y: round1(usable.y + r.q), w: r.pw, h: r.qh }),
+    toBoard: (r) => ({ x: round1(right - r.p - r.pw), y: round1(top - r.q - r.qh), w: r.pw, h: r.qh }),
     sizes: (o) => ({ pw: o.x, qh: o.y }),
   }
 }
@@ -64,12 +66,12 @@ export interface StripLayout {
   local: LocalRect
   /** 板の座標での帯 */
   rect: Rect
-  /** 手前（原点側）から詰めた順 */
+  /** 帯の中の原点側（縦切り優先は上端、横切り優先は右端）から詰めた順 */
   items: StripItem[]
 }
 
 export interface RawSheet {
-  /** 原点側（右端・手前）から並べた順 */
+  /** 原点側（縦切り優先は右端、横切り優先は手前）から並べた順 */
   strips: StripLayout[]
 }
 
@@ -170,7 +172,7 @@ export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: num
           local,
           rect: frame.toBoard(local),
           items: st.items.map(({ piece, c, q }) => {
-            // 帯より細い片は帯の原点側（右端・手前）に寄せる
+            // 帯より細い片は帯の原点側（縦切り優先は右端、横切り優先は手前）に寄せる
             const l: LocalRect = { p: st.p, q, pw: c.pw, qh: c.qh }
             const r = frame.toBoard(l)
             const placement: Placement = {

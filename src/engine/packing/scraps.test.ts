@@ -51,21 +51,21 @@ describe('scrapsOf（端材）', () => {
     expect(MIN_SCRAP).toBe(30)
   })
 
-  it('見本・縦切り優先の1枚目：左側 x 0〜79（79×1820）。帯の上の残り 410×7（刃厚3を除いた大きさ）は30mm未満なので出さない', () => {
+  it('見本・縦切り優先の1枚目：左側 x 0〜79（79×1820）。帯の下の残り 410×7（刃厚3を除いた大きさ）は30mm未満なので出さない', () => {
     const [s1] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'vertical')
     expect(s1.scraps).toEqual([{ x: 0, y: 0, w: 79, h: 1820 }])
   })
 
-  it('見本・縦切り優先の2枚目・3枚目：左側の残りと、各帯の上の残り（刃厚を除く）。大きい順', () => {
+  it('見本・縦切り優先の2枚目・3枚目：左側の残りと、各帯の下の残り（刃厚を除く）。端材は左下に残る。大きい順', () => {
     const [, s2, s3] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'vertical')
     expect(s2.scraps).toEqual([
       { x: 0, y: 0, w: 99, h: 1820 },
-      { x: 495, y: 1754, w: 410, h: 66 },
-      { x: 102, y: 1752, w: 390, h: 68 },
+      { x: 495, y: 0, w: 410, h: 66 },
+      { x: 102, y: 0, w: 390, h: 68 },
     ])
     expect(s3.scraps).toEqual([
       { x: 0, y: 0, w: 512, h: 1820 },
-      { x: 515, y: 1752, w: 390, h: 68 },
+      { x: 515, y: 0, w: 390, h: 68 },
     ])
   })
 
@@ -92,7 +92,7 @@ describe('scrapsOf（端材）', () => {
   it('帯より細い片の横の残り（刃厚を除く）も端材にする', () => {
     const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], USABLE, 3, 'vertical')
     const scraps = scrapsOf(r.sheets[0], r.frame, 3)
-    expect(scraps).toContainEqual({ x: 505, y: 1003, w: 97, h: 800 })
+    expect(scraps).toContainEqual({ x: 505, y: 17, w: 97, h: 800 })
   })
 
   it('30mm ちょうどは出し、29.9mm は出さない', () => {
