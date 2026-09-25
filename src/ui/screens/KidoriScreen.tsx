@@ -3,10 +3,11 @@
 import { useMemo } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
-import type { MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
+import type { BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
 import { boardLabel, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { Segmented } from '../components/Segmented'
+import { SheetDiagram } from '../components/SheetDiagram'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 
@@ -21,6 +22,8 @@ export function KidoriScreen() {
   const s = job.settings
   const unplaced = result.materials.flatMap((m) => m.unplaced.map((u) => ({ ...u, board: boardLabel(m) })))
   const empty = result.materials.length === 0
+  const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
+  const grainOf = (boardId: string): BoardGrain => job.boards.find((b) => b.id === boardId)?.grain ?? 'long'
 
   return (
     <section>
@@ -99,7 +102,14 @@ export function KidoriScreen() {
             </h3>
             <div className="stack">
               {m.sheets.map((sh) => (
-                <SheetCard key={sh.index} sheet={sh} count={m.sheetCount} />
+                <SheetCard
+                  key={sh.index}
+                  sheet={sh}
+                  count={m.sheetCount}
+                  grain={grainOf(m.boardId)}
+                  trim={s.trim}
+                  colorOf={colorOf}
+                />
               ))}
             </div>
           </section>
@@ -132,7 +142,15 @@ function MaterialRow({ m, auto }: { m: MaterialResult; auto: boolean }) {
   )
 }
 
-function SheetCard({ sheet, count }: { sheet: SheetLayout; count: number }) {
+interface SheetCardProps {
+  sheet: SheetLayout
+  count: number
+  grain: BoardGrain
+  trim: number
+  colorOf: (partId: string) => number
+}
+
+function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
   return (
     <article className="card kd-sheet">
       <header className="kd-sheet-head">
@@ -144,6 +162,22 @@ function SheetCard({ sheet, count }: { sheet: SheetLayout; count: number }) {
       <p className="band-note num">
         板 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
         {sheet.scraps.length}枚
+      </p>
+      <SheetDiagram sheet={sheet} grain={grain} colorOf={colorOf} />
+      <p className="dg-legend">
+        <span>
+          <i className="dg-key trim" />
+          耳落とし {fmt(trim)}mm（右）
+        </span>
+        <span>
+          <i className="dg-key scrap" />
+          端材
+        </span>
+        <span>
+          <i className={`dg-key grain ${grain}`} />
+          木目：{grain === 'long' ? '長辺方向' : '短辺方向'}
+        </span>
+        <span>下が手前・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>
     </article>
   )

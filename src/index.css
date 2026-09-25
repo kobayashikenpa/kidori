@@ -873,3 +873,150 @@ select.input {
   font-weight: 700;
   color: var(--accent);
 }
+
+/* ---------- 配置図 ---------- */
+:root {
+  --dg-board: #efe6d6;
+  --dg-grain: rgba(120, 85, 40, 0.28);
+  --dg-line: #3d3a33;
+  --dg-text: #1b211e;
+  --dg-scrap: #6b6456;
+  --dg-scrap-fill: #faf6ee;
+  --dg-trim: #d4331f;
+  --pc0: #bcd9ee;
+  --pc1: #f6cfa8;
+  --pc2: #c6e3c0;
+  --pc3: #e3c8ea;
+  --pc4: #f3e1a0;
+  --pc5: #c9d3f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --dg-board: #211e18;
+    --dg-grain: rgba(230, 200, 150, 0.2);
+    --dg-line: #cfc8b8;
+    --dg-text: #f1f4f2;
+    --dg-scrap: #bdb4a2;
+    --dg-scrap-fill: #3d382d;
+    --dg-trim: #ff7a66;
+    --pc0: #24506e;
+    --pc1: #6e4424;
+    --pc2: #2f5a36;
+    --pc3: #573a63;
+    --pc4: #5e5220;
+    --pc5: #34406b;
+  }
+}
+:root[data-theme='dark'] {
+  --dg-board: #211e18;
+  --dg-grain: rgba(230, 200, 150, 0.2);
+  --dg-line: #cfc8b8;
+  --dg-text: #f1f4f2;
+  --dg-scrap: #bdb4a2;
+  --dg-scrap-fill: #3d382d;
+  --dg-trim: #ff7a66;
+  --pc0: #24506e;
+  --pc1: #6e4424;
+  --pc2: #2f5a36;
+  --pc3: #573a63;
+  --pc4: #5e5220;
+  --pc5: #34406b;
+}
+.diagram {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  margin: 0 auto;
+  font-family: var(--sans);
+}
+.dg-board {
+  fill: var(--dg-board);
+}
+.dg-grain {
+  stroke: var(--dg-grain);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+.dg-piece {
+  stroke: var(--dg-line);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.dg-piece.pc0 { fill: var(--pc0); }
+.dg-piece.pc1 { fill: var(--pc1); }
+.dg-piece.pc2 { fill: var(--pc2); }
+.dg-piece.pc3 { fill: var(--pc3); }
+.dg-piece.pc4 { fill: var(--pc4); }
+.dg-piece.pc5 { fill: var(--pc5); }
+.dg-scrap {
+  fill: var(--dg-scrap-fill);
+  stroke: var(--dg-scrap);
+  stroke-width: 1.5px;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+.dg-trim {
+  fill: var(--dg-trim);
+  stroke: var(--dg-trim);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+.dg-outline {
+  fill: none;
+  stroke: var(--dg-line);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.dg-text {
+  fill: var(--dg-text);
+}
+.dg-text .l1 {
+  font-weight: 700;
+}
+.dg-text .l2 {
+  font-family: var(--mono);
+}
+.dg-text.scrap {
+  fill: var(--dg-scrap);
+}
+.dg-text.scrap .l1 {
+  font-weight: 400;
+}
+.dg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dg-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.dg-key {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+.dg-key.trim {
+  width: 5px;
+  background: var(--dg-trim);
+}
+.dg-key.scrap {
+  border: 1.5px dashed var(--dg-scrap);
+}
+.dg-key.grain {
+  background: var(--dg-board);
+  border: 1px solid var(--line);
+}
+.dg-key.grain.long {
+  background-image: repeating-linear-gradient(90deg, var(--dg-grain) 0 1px, transparent 1px 4px);
+}
+.dg-key.grain.short {
+  background-image: repeating-linear-gradient(0deg, var(--dg-grain) 0 1px, transparent 1px 4px);
+}
