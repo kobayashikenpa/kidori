@@ -23,7 +23,7 @@ export function sheetYield(placements: readonly Rect[], board: { width: number; 
 }
 
 /** 何枚かの板をまとめた歩留まり（材料ごと・全体）：面積の合計 ÷ 板の面積の合計 */
-export function combineYield(items: readonly YieldPart[]): YieldPart {
+export function combineYield(items: readonly Pick<YieldPart, 'usedArea' | 'boardArea'>[]): YieldPart {
   let usedArea = 0
   let boardArea = 0
   for (const y of items) {
