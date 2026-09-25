@@ -1020,3 +1020,97 @@ select.input {
 .dg-key.grain.short {
   background-image: repeating-linear-gradient(0deg, var(--dg-grain) 0 1px, transparent 1px 4px);
 }
+
+/* ---------- 切る順番・端材 ---------- */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fold {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.fold > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  touch-action: manipulation;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::after {
+  content: '▼';
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.fold[open] > summary::after {
+  transform: rotate(180deg);
+}
+.fold-count {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+}
+.fold > :not(summary) {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+.fold > :last-child:not(summary) {
+  margin-bottom: 10px;
+}
+.cut-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cut-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.cut-no {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cut-item.trim .cut-no {
+  background: var(--dg-trim);
+  color: #fff;
+}
+.cut-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.cut-label {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.scrap-list {
+  margin-top: 4px;
+  padding-left: 1.4em;
+  font-size: 16px;
+}

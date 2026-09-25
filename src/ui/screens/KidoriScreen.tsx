@@ -6,6 +6,7 @@ import { packJob } from '../../engine/packing'
 import type { BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
 import { boardLabel, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
+import { CutSteps } from '../components/CutSteps'
 import { Segmented } from '../components/Segmented'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
@@ -179,6 +180,7 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
         </span>
         <span>下が手前・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>
+      <CutSteps sheet={sheet} />
     </article>
   )
 }
