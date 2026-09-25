@@ -31,7 +31,7 @@ export function initialState(load: LoadResult, now: Date = new Date()): StoreSta
     const sample = { ...bookshelfJob(), createdAt: t, updatedAt: t }
     return { jobs: [sample], currentJobId: sample.id, loadError: null, canSave: true }
   }
-  if (load.status === 'error') {
+  if (load.status === 'error' || load.status === 'repaired') {
     return { ...load.data, loadError: load.message, canSave: load.canSave }
   }
   return { ...load.data, loadError: null, canSave: true }
