@@ -10,7 +10,11 @@ export interface JobStoreValue {
   job: Job | null
   /** 開いている仕事に操作を当てる。失敗したら理由を返す（画面に出す） */
   run: (op: JobOp) => OpResult
+  /** 指定した仕事に操作を当てる（一覧から名前を変えるときなど）。失敗したら理由を返す */
+  runOn: (jobId: string, op: JobOp) => OpResult
   addJob: (job: Job, open: boolean) => void
+  /** 仕事を消す。開いていた仕事なら、何も開いていない状態にする */
+  removeJob: (id: string) => void
   openJob: (id: string | null) => void
   /** 保存に失敗したときの知らせ */
   saveError: string | null

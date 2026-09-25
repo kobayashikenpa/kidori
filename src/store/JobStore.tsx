@@ -24,19 +24,27 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
     dispatch(action)
   }, [])
 
-  const run = useCallback(
-    (op: JobOp): OpResult => {
-      const s = latest.current
-      const job = currentJob(s)
-      if (!job) return { ok: false, message: '仕事が開かれていません' }
+  const runOn = useCallback(
+    (jobId: string, op: JobOp): OpResult => {
+      const job = latest.current.jobs.find((j) => j.id === jobId)
+      if (!job) return { ok: false, message: '仕事が見つかりません' }
       const r = op(job)
       if (r.ok) send({ type: 'applyOp', jobId: job.id, op, now: new Date().toISOString() })
       return r
     },
     [send],
   )
+  const run = useCallback(
+    (op: JobOp): OpResult => {
+      const job = currentJob(latest.current)
+      if (!job) return { ok: false, message: '仕事が開かれていません' }
+      return runOn(job.id, op)
+    },
+    [runOn],
+  )
   const addJob = useCallback((job: Job, open: boolean) => send({ type: 'addJob', job, open }), [send])
   const openJob = useCallback((id: string | null) => send({ type: 'openJob', id }), [send])
+  const removeJob = useCallback((id: string) => send({ type: 'removeJob', id }), [send])
 
   // 自動保存：状態が変わったら少し待ってから書く。画面を閉じるときはすぐ書く
   const { jobs, currentJobId, canSave } = state
@@ -59,8 +67,8 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
   }, [jobs, currentJobId, canSave])
 
   const value = useMemo<JobStoreValue>(
-    () => ({ state, job: currentJob(state), run, addJob, openJob, saveError }),
-    [state, run, addJob, openJob, saveError],
+    () => ({ state, job: currentJob(state), run, runOn, addJob, removeJob, openJob, saveError }),
+    [state, run, runOn, addJob, removeJob, openJob, saveError],
   )
   return <JobStoreContext.Provider value={value}>{children}</JobStoreContext.Provider>
 }

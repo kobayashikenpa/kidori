@@ -1,7 +1,7 @@
 // 仕事データの状態と、その変え方（reducer）。React に依存しないのでテストしやすい
 import { bookshelfJob } from '../engine/fixtures/bookshelf'
 import type { Job } from '../engine/types'
-import type { JobOp } from './jobs'
+import { deleteJob, type JobOp } from './jobs'
 import type { LoadResult } from './storage'
 
 export interface StoreState {
@@ -19,6 +19,8 @@ export type StoreAction =
   | { type: 'addJob'; job: Job; open: boolean }
   /** 仕事を開く（null で閉じる） */
   | { type: 'openJob'; id: string | null }
+  /** 仕事を消す。開いていた仕事なら、何も開いていない状態にする */
+  | { type: 'removeJob'; id: string }
   /** 仕事に操作を当てる。失敗した操作は何も変えない。now は更新日時（ISO 文字列） */
   | { type: 'applyOp'; jobId: string; op: JobOp; now: string }
 
@@ -46,6 +48,8 @@ export function storeReducer(state: StoreState, action: StoreAction): StoreState
     case 'openJob':
       if (action.id !== null && !state.jobs.some((j) => j.id === action.id)) return state
       return { ...state, currentJobId: action.id }
+    case 'removeJob':
+      return { ...state, ...deleteJob(state.jobs, state.currentJobId, action.id) }
     case 'applyOp': {
       const job = state.jobs.find((j) => j.id === action.jobId)
       if (!job) return state

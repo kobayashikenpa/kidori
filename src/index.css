@@ -458,6 +458,49 @@ select.input {
   color: var(--fin);
 }
 
+/* ---------- 仕事の一覧 ---------- */
+.job-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.job-item.open {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+.job-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.job-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.job-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+.job-actions .btn {
+  padding: 8px 4px;
+  font-size: 14px;
+}
+.confirm-box {
+  background: var(--err-soft);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 10px;
+}
+.msg.ok,
+.chip.ok {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 /* ---------- 部材カード ---------- */
 .part-card {
   display: flex;

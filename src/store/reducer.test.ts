@@ -80,3 +80,23 @@ describe('storeReducer', () => {
     expect(storeReducer(s0, { type: 'openJob', id: 'nothing' })).toBe(s0)
   })
 })
+
+describe('removeJob', () => {
+  it('開いていた仕事を消すと、何も開いていない状態になる', () => {
+    const s0 = stateWithSample()
+    const other = createJob('食器棚', NOW, 'job-other')
+    const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
+    const s2 = storeReducer(s1, { type: 'removeJob', id: s0.currentJobId! })
+    expect(s2.jobs.map((j) => j.id)).toEqual(['job-other'])
+    expect(s2.currentJobId).toBeNull()
+  })
+
+  it('開いていない仕事を消しても、開いている仕事はそのまま', () => {
+    const s0 = stateWithSample()
+    const other = createJob('食器棚', NOW, 'job-other')
+    const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
+    const s2 = storeReducer(s1, { type: 'removeJob', id: 'job-other' })
+    expect(s2.currentJobId).toBe(s0.currentJobId)
+    expect(s2.jobs).toHaveLength(1)
+  })
+})
