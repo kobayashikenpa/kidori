@@ -1,6 +1,7 @@
 // 帯詰め（ギロチンカット）の配置。
 // 帯を並べる方向を p、帯の中で片を並べる方向を q とする「帯の座標」で計算し、最後に板の座標に直す。
 // - 縦切り優先：帯は長辺方向の縦長。p は右端から左へ、q は手前（y=0）から奥へ
+// - 横切り優先：帯は短辺方向の横長。p は手前（y=0）から奥へ、q は右端から左へ
 // 帯は使える範囲の原点側（右端・手前）から詰め、余りは反対側（左・奥）に残る。
 import { round1 } from '../round'
 import type { Placement, Rect } from '../types'
@@ -31,6 +32,17 @@ export interface Frame {
 
 export function frameOf(mode: StripMode, usable: Rect): Frame {
   const right = usable.x + usable.w
+  if (mode === 'horizontal') {
+    // 横切り優先：p は手前から奥へ（y）、q は右端から左へ（x）
+    return {
+      mode,
+      usable,
+      pCap: usable.h,
+      qCap: usable.w,
+      toBoard: (r) => ({ x: round1(right - r.q - r.qh), y: round1(usable.y + r.p), w: r.qh, h: r.pw }),
+      sizes: (o) => ({ pw: o.y, qh: o.x }),
+    }
+  }
   // 縦切り優先：p は右端から左へ（x）、q は手前から奥へ（y）
   return {
     mode,

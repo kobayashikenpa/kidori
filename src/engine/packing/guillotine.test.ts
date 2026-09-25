@@ -193,3 +193,68 @@ describe('packGuillotine 縦切り優先（右から帯詰め）', () => {
     expectValid(r, SABUROKU_USABLE, 3)
   })
 })
+
+describe('packGuillotine 横切り優先（手前から横長の帯、帯の中は右から）', () => {
+  it('見本：シナランバー18 は3枚、シナベニヤ4 は1枚', () => {
+    const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(names(r)).toEqual([
+      ['側板', '側板'],
+      ['天地板', '天地板', '棚板', '棚板'],
+      ['棚板', '棚板'],
+    ])
+    expect(packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal').sheets).toHaveLength(1)
+  })
+
+  it('帯は横長（幅＝使える範囲の幅 905）で y=0 から積み、刃厚をあけて次の帯', () => {
+    const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(r.sheets[1].strips.map((s) => rect(s.rect))).toEqual([
+      { x: 0, y: 0, w: 905, h: 874 },
+      { x: 0, y: 877, w: 905, h: 873 },
+    ])
+  })
+
+  it('帯の中は右端（x=905）から刃厚をあけて左へ詰める', () => {
+    const r = packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal')
+    expect(placements(r, 0).map((p) => rect(p))).toEqual([
+      { x: 495, y: 0, w: 410, h: 1810 },
+      { x: 82, y: 0, w: 410, h: 1810 },
+    ])
+    expect(placements(r, 1).map((p) => [p.name, rect(p)])).toEqual([
+      ['天地板', { x: 495, y: 0, w: 410, h: 874 }],
+      ['天地板', { x: 82, y: 0, w: 410, h: 874 }],
+      ['棚板', { x: 515, y: 877, w: 390, h: 873 }],
+      ['棚板', { x: 122, y: 877, w: 390, h: 873 }],
+    ])
+  })
+
+  it('見本のすべての片が範囲内・重ならない・間が刃厚以上', () => {
+    expectValid(packBoard(bookshelfJob(), LUMBER_18_ID, 'horizontal'), SABUROKU_USABLE, KERF)
+    expectValid(packBoard(bookshelfJob(), VENEER_4_ID, 'horizontal'), SABUROKU_USABLE, KERF)
+  })
+
+  it('帯の中の長さ（905）：410 + 3 + 492 はぴったり、493 は入らない', () => {
+    const fit = packGuillotine([piece('a', 410, 500), piece('b', 492, 400)], SABUROKU_USABLE, 3, 'horizontal')
+    expect(fit.sheets[0].strips).toHaveLength(1)
+    expect(placements(fit, 0).map((p) => p.x)).toEqual([495, 0])
+    const over = packGuillotine([piece('a', 410, 500), piece('b', 493, 400)], SABUROKU_USABLE, 3, 'horizontal')
+    expect(over.sheets[0].strips).toHaveLength(2)
+  })
+
+  it('帯より低い片は帯の手前（下）に寄せる', () => {
+    const r = packGuillotine([piece('tall', 400, 500), piece('low', 300, 200)], SABUROKU_USABLE, 3, 'horizontal')
+    expect(rect(placements(r, 0)[1])).toEqual({ x: 202, y: 0, w: 300, h: 200 })
+  })
+
+  it('帯の高さの合計：1820 に 908.5 + 3 + 908.5 は1枚、909 + 3 + 909 は2枚', () => {
+    expect(packGuillotine([piece('a', 905, 908.5), piece('b', 905, 908.5)], SABUROKU_USABLE, 3, 'horizontal').sheets).toHaveLength(1)
+    expect(packGuillotine([piece('a', 905, 909), piece('b', 905, 909)], SABUROKU_USABLE, 3, 'horizontal').sheets).toHaveLength(2)
+  })
+
+  it('150枚でも範囲内・重ならない・刃厚あき', () => {
+    const ps: Piece[] = []
+    for (let i = 0; i < 150; i++) ps.push(piece(`p${i}`, 100 + ((i * 37) % 400), 150 + ((i * 53) % 900), i % 3 === 0))
+    const r = packGuillotine(ps, SABUROKU_USABLE, 3, 'horizontal')
+    expect(r.sheets.flatMap((_, i) => placements(r, i))).toHaveLength(150)
+    expectValid(r, SABUROKU_USABLE, 3)
+  })
+})
