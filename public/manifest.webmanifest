@@ -1,0 +1,17 @@
+{
+  "name": "kidori 木取り",
+  "short_name": "kidori",
+  "description": "板材から部材を歩留まり良く切り出すための木取り計算",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#f1f3f0",
+  "background_color": "#f1f3f0",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
