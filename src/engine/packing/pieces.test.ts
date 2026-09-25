@@ -155,10 +155,16 @@ describe('expandPieces（片の展開と木目による向き）', () => {
     ])
   })
 
-  it('厚みの寸法が決まらない（面が決まらない）部材は寸法エラーとして除く', () => {
+  it('厚みの寸法が決まらない（面が決まらない）部材は、寸法エラーとは別の理由（noThickness）で除く', () => {
     const job = bookshelfJob()
     addPart(job, { id: 'nothick', name: '厚み不明', expr: { W: '100', H: '20', D: '100' } })
-    expect(expand(job).skipped).toEqual([{ partId: 'nothick', name: '厚み不明', reason: 'dimensionError' }])
+    expect(expand(job).skipped).toEqual([{ partId: 'nothick', name: '厚み不明', reason: 'noThickness' }])
+  })
+
+  it('式のエラーがあれば、厚みが決まらなくても寸法エラーとして除く', () => {
+    const job = bookshelfJob()
+    addPart(job, { id: 'both', name: '両方', expr: { W: '天板.W', H: '20', D: '100' } })
+    expect(expand(job).skipped).toEqual([{ partId: 'both', name: '両方', reason: 'dimensionError' }])
   })
 
   it('片のない板は結果に出さない', () => {

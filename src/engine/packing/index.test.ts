@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { CutMode, Job, Part } from '../types'
-import { packJob } from './index'
+import { MIN_SCRAP, packJob } from './index'
 
 const pct = (r: number) => Math.round(r * 1000) / 10
 
@@ -35,6 +35,12 @@ function lumberOnly(mode: CutMode, parts: (Partial<Part> & Pick<Part, 'id' | 'na
   for (const p of parts) addPart(job, p)
   return job
 }
+
+describe('入口から出すもの', () => {
+  it('端材として出す最小の大きさ（MIN_SCRAP）を入口から使える', () => {
+    expect(MIN_SCRAP).toBe(30)
+  })
+})
 
 describe('packJob（木取り計算の入口）', () => {
   it('見本・縦切り優先：材料が2つ（板の登録順）、必要枚数 3 と 1', () => {

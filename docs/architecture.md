@@ -201,7 +201,9 @@ export interface MaterialResult {
 export interface PackingResult {
   materials: MaterialResult[]      // 板の登録順
   totalYieldRate: number           // 全体の歩留まり
-  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noBoard' }[]
+  // 計算から除いた部材（枚数0の行は含めない）。dimensionError：式・寸法のエラー、
+  // noThickness：式は正しいが厚みの寸法（板の面）が決まらない、noBoard：板が未設定・存在しない
+  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noThickness' | 'noBoard' }[]
 }
 ```
 

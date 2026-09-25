@@ -56,8 +56,13 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       skipped.push({ partId: d.partId, name: d.name, reason: 'noBoard' })
       continue
     }
-    if (d.errors.length > 0 || !d.cutSize || !d.faceAxes) {
+    if (d.errors.length > 0 || !d.finished) {
       skipped.push({ partId: d.partId, name: d.name, reason: 'dimensionError' })
+      continue
+    }
+    if (!d.cutSize || !d.faceAxes) {
+      // 式は正しいが、どの寸法が板の厚みか決まらない（面が決まらない）
+      skipped.push({ partId: d.partId, name: d.name, reason: 'noThickness' })
       continue
     }
     const [a0, a1] = d.faceAxes

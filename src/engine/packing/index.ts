@@ -10,6 +10,8 @@ import { scrapsOf } from './scraps'
 import { usableRect } from './sheet'
 import { combineYield, sheetYield } from './yield'
 
+export { MIN_SCRAP } from './scraps'
+
 interface Layout {
   mode: StripMode
   sheets: SheetLayout[]

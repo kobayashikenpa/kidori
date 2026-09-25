@@ -225,5 +225,5 @@ export interface PackingResult {
   materials: MaterialResult[]
   /** 全体の歩留まり */
   totalYieldRate: number
-  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noBoard' }[]
+  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noThickness' | 'noBoard' }[]
 }
