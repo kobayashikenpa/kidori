@@ -1,27 +1,16 @@
 // 設定の画面：刃厚・耳落とし・切り代・切り方、板の一覧、配色
 import { useState } from 'react'
-import type { Board, CutMode, Settings } from '../../engine/types'
+import type { Board, Settings } from '../../engine/types'
 import { boardLabel, boardSizeLabel, partsUsingBoard, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { BoardEditor } from '../components/BoardEditor'
 import { NumberField } from '../components/NumberField'
 import { Segmented } from '../components/Segmented'
+import { CUT_MODE_HINT, CUT_MODES } from '../cutModes'
 import { loadTheme, saveTheme, type ThemeChoice } from '../theme'
 
 /** 切り代のよく使う値（暫定：未決事項 12） */
 const ALLOWANCE_PRESETS = [0, 5, 10]
-
-const CUT_MODES: { value: CutMode; label: string }[] = [
-  { value: 'vertical', label: '縦切り優先' },
-  { value: 'horizontal', label: '横切り優先' },
-  { value: 'auto', label: 'おまかせ' },
-]
-
-const CUT_MODE_HINT: Record<CutMode, string> = {
-  vertical: '先に長辺方向に帯状に切り、その帯を横に切り分けます。縦長の端材が残りやすい切り方です。',
-  horizontal: '先に短辺方向に切り、そのあと縦に切り分けます。',
-  auto: '縦切り優先・横切り優先の両方を計算し、歩留まりの良いほうを使います。',
-}
 
 export function SettingsScreen() {
   const { job, run } = useCurrentJob()

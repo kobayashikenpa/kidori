@@ -11,3 +11,8 @@ export function parseNum(text: string): number | null {
   if (t === '') return null
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : Number.NaN
 }
+
+/** 歩留まり（0〜1）を「78.2%」の形にする */
+export function pct(rate: number): string {
+  return `${fmt(rate * 100)}%`
+}
