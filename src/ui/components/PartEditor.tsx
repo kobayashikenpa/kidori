@@ -2,6 +2,8 @@
 import { useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
+import { computeFinished } from '../../engine/dimensions/finished'
+import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
 import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
@@ -41,6 +43,11 @@ export function PartEditor({ part, onClose }: Props) {
   const faces = dims.faceAxes
   const board = job.boards.find((b) => b.id === draft.boardId) ?? null
   const cutting = draft.quantity > 0
+  // 厚みの寸法：ふだんは「厚み：W（自動）」と表示だけ。決めきれない・手で選んでいる・同じ寸法が無いときだけ選ぶ欄（仕様書 5.3）
+  const choice = useMemo(
+    () => thicknessChoice(draft, board, computeFinished(draftJob).get(draft.id)?.finished ?? {}),
+    [draft, board, draftJob],
+  )
   // 厚みの寸法が変わって、木目が面でない軸のままなら「どちらでもよい」とみなす（暫定：未決事項 15）
   const grain: PartGrain = draft.grain !== 'any' && faces && !faces.includes(draft.grain) ? 'any' : draft.grain
 
@@ -139,16 +146,26 @@ export function PartEditor({ part, onClose }: Props) {
         <>
           <div className="field">
             <span className="label">厚み</span>
-            <Segmented<Axis | 'auto'>
-              ariaLabel="厚み"
-              value={draft.thicknessAxis ?? 'auto'}
-              options={[
-                { value: 'auto', label: dims.thicknessAuto && dims.thicknessAxis ? `自動（${dims.thicknessAxis}）` : '自動' },
-                ...AXES.map((a) => ({ value: a, label: a })),
-              ]}
-              onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
-            />
-            <span className="hint">W・H・D のうち、材料の厚みにあたる寸法です</span>
+            {!choice.showSelector ? (
+              <p className="thick-auto" style={{ margin: 0 }}>
+                {board ? `厚み：${choice.autoAxis ?? '—'}（自動）` : '厚み：材料を選ぶと自動で決まります'}
+              </p>
+            ) : (
+              <Segmented<Axis | 'auto'>
+                ariaLabel="厚み"
+                value={draft.thicknessAxis ?? 'auto'}
+                options={[
+                  { value: 'auto', label: dims.thicknessAuto && dims.thicknessAxis ? `自動（${dims.thicknessAxis}）` : '自動' },
+                  ...AXES.map((a) => ({ value: a, label: a })),
+                ]}
+                onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
+              />
+            )}
+            <span className="hint">
+              {choice.showSelector && choice.ambiguous
+                ? `材料の厚みと同じ寸法が ${choice.candidates.join('・')} にあります。どれが厚みか選んでください`
+                : 'W・H・D のうち、材料の厚みにあたる寸法です'}
+            </span>
             {blockers.length > 0 && (
               <div className="part-errors" role="alert">
                 {blockers.map((m) => (

@@ -1498,3 +1498,11 @@ select.input {
   flex-direction: column;
   gap: 8px;
 }
+
+/* 部材の編集：厚みの寸法の自動表示 */
+.thick-auto {
+  font-weight: 700;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
