@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { evaluate, evaluateExpr, refLookup, refsOf, type Lookup } from './evaluate'
+import { evaluate, evaluateExpr, refsOf, type Lookup, type RefLookup } from './evaluate'
 import { parse } from './parse'
+
+/** 部材の参照だけを返す lookup（材料の厚み・逃げはどれも見つからない） */
+function refLookup(ref: RefLookup): Lookup {
+  return { ref, thickness: () => null, nige: () => null }
+}
 
 /** 参照のない式を計算する */
 function calc(expr: string) {

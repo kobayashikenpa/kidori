@@ -23,7 +23,6 @@ import {
   removePart,
   renameJob,
   setPartChecks,
-  setPartMemo,
   updateBoard,
   updateNige,
   updatePart,
@@ -339,10 +338,10 @@ describe('メモと加工のチェック', () => {
     expect(computeDimensions(next).parts).toEqual(computeDimensions(job).parts)
   })
 
-  it('メモを変える', () => {
+  it('メモを変える（部材の変更 updatePart で）', () => {
     const job = bookshelfJob()
     const side = job.parts.find((p) => p.name === '側板')!
-    const next = unwrap(setPartMemo(job, side.id, '切り出したあとに穴あけ'))
+    const next = unwrap(updatePart(job, side.id, { memo: '切り出したあとに穴あけ' }))
     expect(next.parts.find((p) => p.id === side.id)!.memo).toBe('切り出したあとに穴あけ')
     expect(side.memo).toBe('')
   })

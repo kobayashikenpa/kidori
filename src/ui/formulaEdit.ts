@@ -66,11 +66,6 @@ export function insertAt(text: string, cursor: number, piece: string): Edit {
   return { text: next, cursor: after }
 }
 
-/** 数字・演算子などのボタン */
-export function insertKey(text: string, cursor: number, key: PadKey): Edit {
-  return insertAt(text, cursor, key)
-}
-
 /**
  * カーソルの前の単位を1つ消す（部材の参照・厚み・逃げは塊ごと）。その前の空白もいっしょに消す。
  * 消したあとで前後の単位がくっついて別の意味にならないよう、必要なら空白を1つ残す

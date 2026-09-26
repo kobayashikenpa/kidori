@@ -43,7 +43,6 @@ describe('computeFinished（仕上がり寸法）', () => {
 
   it('見本：棚板 W=863（天地板.W 864 − 逃げ1mm）・D=380。仕上がり寸法 = 式の計算結果', () => {
     const f = finishedOf(bookshelfJob(), '棚板')
-    expect(f.input).toEqual({ W: 863, H: 18, D: 380 })
     expect(f.finished).toEqual({ W: 863, H: 18, D: 380 })
     expect(f.errors).toEqual([])
   })
@@ -60,7 +59,8 @@ describe('computeFinished（仕上がり寸法）', () => {
   it('全体.W - 1000 は nonPositive', () => {
     const job = withParts(mkPart('X', { W: '全体.W - 1000' }))
     const f = finishedOf(job, 'X')
-    expect(f.finished).toBeNull()
+    // 計算できない軸は入らない
+    expect(f.finished).toEqual({ H: 18, D: 100 })
     expect(f.errors).toHaveLength(1)
     expect(f.errors[0]).toMatchObject({ partId: 'id-X', axis: 'W', kind: 'nonPositive' })
     expect(f.errors[0].message).toContain('-100')
@@ -90,14 +90,14 @@ describe('computeFinished（仕上がり寸法）', () => {
   it('エラーのある寸法を参照している寸法も計算しない（元のエラーを示す）', () => {
     const job = withParts(mkPart('X', { W: '全体.W - 1000' }), mkPart('Y', { W: 'X.W + 10' }), mkPart('Z', { D: 'Y.W' }))
     const y = finishedOf(job, 'Y')
-    expect(y.finished).toBeNull()
+    expect(y.finished).not.toHaveProperty('W')
     expect(y.errors[0]).toMatchObject({ partId: 'id-Y', axis: 'W', kind: 'nonPositive', from: { partId: 'id-X', axis: 'W' } })
     expect(y.errors[0].message).toContain('X.W')
     // 2段先でも、元のエラーの寸法を指す
     const z = finishedOf(job, 'Z')
     expect(z.errors[0]).toMatchObject({ partId: 'id-Z', axis: 'D', from: { partId: 'id-X', axis: 'W' } })
     // ほかの軸は計算できている
-    expect(z.input).toMatchObject({ W: 100, H: 18 })
+    expect(z.finished).toMatchObject({ W: 100, H: 18 })
   })
 
   it('存在しない部材・循環参照のエラーもそのまま返す', () => {
@@ -167,6 +167,6 @@ describe('自分の寸法を参照する部材', () => {
     )
     const p = finishedOf(job, 'P')
     expect(p.errors.map((e) => [e.axis, e.kind])).toEqual([['W', 'cycle']])
-    expect(p.input).toEqual({ H: 18, D: 600 })
+    expect(p.finished).toEqual({ H: 18, D: 600 })
   })
 })

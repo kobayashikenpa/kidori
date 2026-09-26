@@ -9,11 +9,7 @@ type Value = { ok: true; value: number } | { ok: false; error: DimensionError }
 
 export interface FinishedDims {
   /** 軸ごとの仕上がり寸法（式の計算結果）。計算できない軸は入らない */
-  input: Partial<Record<Axis, number>>
-  /** 3軸とも計算できたときの仕上がり寸法（input と同じ値） */
-  inputAll: Record<Axis, number> | null
-  /** 3軸とも計算できたときの仕上がり寸法 */
-  finished: Record<Axis, number> | null
+  finished: Partial<Record<Axis, number>>
   /** W・H・D の順 */
   errors: DimensionError[]
 }
@@ -115,12 +111,7 @@ export function computeFinished(job: Pick<Job, 'parts' | 'boards' | 'settings'>)
       if (f.ok) values[axis] = f.value
       else errors.push(...(ownErrors.get(dimKey(p.id, axis)) ?? [f.error]))
     }
-    const all = isComplete(values) ? values : null
-    out.set(p.id, { input: values, inputAll: all, finished: all, errors })
+    out.set(p.id, { finished: values, errors })
   }
   return out
-}
-
-function isComplete(r: Partial<Record<Axis, number>>): r is Record<Axis, number> {
-  return AXES.every((a) => r[a] !== undefined)
 }

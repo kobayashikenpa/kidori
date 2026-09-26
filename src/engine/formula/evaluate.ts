@@ -23,11 +23,6 @@ export interface Lookup {
   nige(nigeId: string): number | null
 }
 
-/** 部材の参照だけを返す lookup（材料の厚み・逃げはどれも見つからない） */
-export function refLookup(ref: RefLookup): Lookup {
-  return { ref, thickness: () => null, nige: () => null }
-}
-
 /** 構文木に出てくる参照の一覧（同じものは1回、出てきた順） */
 export function refsOf(ast: Expr): Ref[] {
   const out: Ref[] = []

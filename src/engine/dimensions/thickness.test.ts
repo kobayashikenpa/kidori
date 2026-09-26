@@ -23,7 +23,7 @@ describe('detectThickness（厚みの寸法の判定）', () => {
         .filter((p) => p.quantity > 0)
         .map((p) => {
           const board = job.boards.find((b) => b.id === p.boardId) ?? null
-          const t = detectThickness(p, board, fin.get(p.id)!.input)
+          const t = detectThickness(p, board, fin.get(p.id)!.finished)
           return [p.name, [t.thicknessAxis, t.thicknessAuto, t.thicknessMismatch]]
         }),
     )

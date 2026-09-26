@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formulaUnits } from '../engine/formula/units'
-import { clearAll, deleteBefore, insertAt, insertKey, moveLeft, moveRight, unitCount, type Edit, type PadKey } from './formulaEdit'
+import { clearAll, deleteBefore, insertAt, moveLeft, moveRight, unitCount, type Edit, type PadKey } from './formulaEdit'
 
 type Press = PadKey | { ref: string } | 'BS' | '◀' | '▶'
 
@@ -16,7 +16,7 @@ function pressOn(e: Edit, k: Press): Edit {
   if (k === '◀') return { ...e, cursor: moveLeft(e.text, e.cursor) }
   if (k === '▶') return { ...e, cursor: moveRight(e.text, e.cursor) }
   if (typeof k === 'object') return insertAt(e.text, e.cursor, k.ref)
-  return insertKey(e.text, e.cursor, k)
+  return insertAt(e.text, e.cursor, k)
 }
 
 describe('ボタンだけで式を作る', () => {

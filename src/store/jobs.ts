@@ -350,12 +350,6 @@ export function partsReferencing(job: Job, partId: string): string[] {
     .map((p) => p.name)
 }
 
-/** 部材のメモを変える */
-export function setPartMemo(job: Job, partId: string, memo: string): OpResult {
-  if (!job.parts.some((p) => p.id === partId)) return fail('部材が見つかりません')
-  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, memo } : p)) })
-}
-
 /** 部材の加工のチェック（仕上がり 済・木取り 済）を変える。寸法は変えない */
 export function setPartChecks(job: Job, partId: string, patch: Partial<PartChecks>): OpResult {
   if (!job.parts.some((p) => p.id === partId)) return fail('部材が見つかりません')
