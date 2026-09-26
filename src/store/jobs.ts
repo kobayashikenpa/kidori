@@ -234,6 +234,10 @@ function validateBoard(job: Job, board: Board): string | null {
     (b) => b.id !== board.id && sameMaterial(b.material, board.material) && eq1(b.thickness, board.thickness),
   )
   if (dup) return `「${boardLabel(dup)}」はすでにあります（材料と厚みが同じものは2つ作れません）`
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  const key = boardTokenLabel(board).normalize('NFKC')
+  const flush = job.flushes.find((f) => f.name.trim().normalize('NFKC') === key)
+  if (flush) return `「${boardTokenLabel(board)}」はフラッシュと同じ名前です。材料名か厚みを変えてください`
   return null
 }
 

@@ -7,7 +7,10 @@ import { sampleFromTemplate } from './sample'
 import { JOBS_KEY, loadSaved, loadTemplate, saveSaved, saveTemplate, type KeyValueStorage } from './storage'
 import { defaultTemplate, sameTemplate, templateOf } from './template'
 import {
+  addBoard,
   addFlush,
+  newBoard,
+  updateBoard,
   copyJob,
   createJob,
   addPart,
@@ -80,6 +83,15 @@ describe('フラッシュの追加・変更', () => {
     const d = computeDimensions(job).parts[0]
     expect(d.thicknessMismatch).toBe(true) // 14＋1＋8＝23 と 25 は合わない
     expect(updateFlush(flushJob(), 'なし', draft()).ok).toBe(false)
+  })
+})
+
+describe('材料の名前とフラッシュの名前', () => {
+  it('厚みつきの名前がフラッシュの名前と同じ材料は、追加も変更も断る', () => {
+    const job = unwrap(addFlush(flushJob(), draft({ name: 'シナ18' })))
+    expect(addBoard(job, newBoard({ material: 'シナ', thickness: 18 })).ok).toBe(false)
+    expect(updateBoard(job, LAUAN_4_ID, { material: 'シナ', thickness: 18 }).ok).toBe(false)
+    expect(addBoard(job, newBoard({ material: 'シナ', thickness: 21 })).ok).toBe(true)
   })
 })
 
