@@ -1,5 +1,6 @@
 // 設定の画面：刃厚・耳落とし・切り代・切り方、逃げの一覧、板の一覧、配色
 import { useState } from 'react'
+import { orderedBoards } from '../../engine/boards'
 import type { Board, Settings } from '../../engine/types'
 import { boardLabel, boardSizeLabel, partsUsingBoard, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -80,7 +81,8 @@ export function SettingsScreen() {
       <h3>材料</h3>
       <div className="stack">
         {job.boards.length === 0 && <p className="lead">材料がまだありません。</p>}
-        {job.boards.map((b) => {
+        {/* 並びは あとから足した材料（足した順）→ 最初から入っている材料（仕様書 5.1） */}
+        {orderedBoards(job).map((b) => {
           const users = partsUsingBoard(job, b.id)
           return (
             <button key={b.id} type="button" className="card board-item" onClick={() => setEditing(b)}>

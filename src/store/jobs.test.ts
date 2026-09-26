@@ -269,7 +269,7 @@ describe('逃げ', () => {
     const job = createJob('a')
     const dup = addNige(job, 1)
     expect(dup.ok).toBe(false)
-    if (!dup.ok) expect(dup.message).toBe('逃げ1mm はすでにあります')
+    if (!dup.ok) expect(dup.message).toBe('逃げ1 はすでにあります')
     const next = unwrap(addNige(job, 2, 'nige-x'))
     expect(next.settings.nige).toEqual([...job.settings.nige, { id: 'nige-x', value: 2 }])
     expect(job.settings.nige).toHaveLength(2)

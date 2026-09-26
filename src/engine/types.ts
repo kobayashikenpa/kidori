@@ -10,7 +10,7 @@ export const AXES: readonly Axis[] = ['W', 'H', 'D']
 /** 切り方：縦切り優先 / 横切り優先 / おまかせ */
 export type CutMode = 'vertical' | 'horizontal' | 'auto'
 
-/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}mm」を作る（nigeName） */
+/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}」を作る（nigeName） */
 export interface Nige {
   /** 仕事の中で重複しない。式からはこの id で参照する（{n:id}） */
   id: string
@@ -72,6 +72,11 @@ export interface Board {
   length: number
   /** 木目の方向。初期値 'long'。サブロク・シハチは 'long' 固定 */
   grain: BoardGrain
+  /**
+   * 新しい仕事に最初から入っている材料の印（defaultBoards が付ける）。あとから足した材料には付けない。
+   * 画面の並び順（boards.ts の orderedBoards）に使う。第1.1版までのデータには無い
+   */
+  builtIn?: true
 }
 
 /** 部材の木目：板の面になる2つの軸のどちらか、または「どちらでもよい」 */
@@ -130,6 +135,7 @@ export type DimensionErrorKind =
   | 'divideByZero' // 0 で割った
   | 'missingBoard' // 式が使っている材料の厚みの材料が削除されている
   | 'missingNige' // 式が使っている逃げが削除されている
+  | 'thicknessMismatch' // 厚みの寸法の値が材料の厚みと合わない（自動で見つからないときを含む。枚数1以上・材料ありの部材だけ）
 
 export interface DimensionError {
   partId: string
@@ -159,7 +165,7 @@ export interface PartDimensions {
   thicknessAxis: Axis | null
   /** 自動判定で決めたか */
   thicknessAuto: boolean
-  /** 厚みの寸法の値 ≠ 板の厚み（確認を促す） */
+  /** 厚みの寸法の値 ≠ 板の厚み。true なら errors にも thicknessMismatch のエラーが入る（第1.2版からエラー） */
   thicknessMismatch: boolean
   /** 板の面になる2軸（W→H→D の順） */
   faceAxes: [Axis, Axis] | null
@@ -271,5 +277,9 @@ export interface PackingResult {
   materials: MaterialResult[]
   /** 全体の歩留まり */
   totalYieldRate: number
-  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noThickness' | 'noBoard' }[]
+  /**
+   * 計算から除いた部材。thicknessMismatch：厚みの寸法が材料の厚みと合わない（第1.2版）。
+   * noThickness は第1.2版からは出ない（厚みが決まらない部材は thicknessMismatch になる）。型は以前のまま残す
+   */
+  skipped: { partId: string; name: string; reason: 'dimensionError' | 'thicknessMismatch' | 'noThickness' | 'noBoard' }[]
 }

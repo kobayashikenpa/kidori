@@ -172,6 +172,8 @@ function sanitizeBoard(v: unknown, fx: Fixes): Board | null {
     width: v.width > v.length ? (fx.count++, v.length) : v.width,
     length: Math.max(v.width, v.length),
     grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
+    // 最初から入っている材料の印（第1.2版）。無ければ付けない（並び順は engine の orderedBoards が以前のデータも判定する）
+    ...(v.builtIn === true ? { builtIn: true as const } : {}),
   }
 }
 

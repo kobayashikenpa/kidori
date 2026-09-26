@@ -98,21 +98,67 @@ describe('computeDimensions（寸法表のまとめ）', () => {
     expect(r.errors).toEqual(p.errors)
   })
 
-  it('厚みの不一致は印が付き、木取り寸法は面が決まらないので null', () => {
+  it('自動で厚みが見つからないときはエラー（材料の厚みに一番近い軸に付ける）。木取り寸法は面が決まらないので null', () => {
     const job = bookshelfJob()
     job.parts[1].expr.W = '20'
-    const d = byName(job)
-    expect(d['側板'].thicknessMismatch).toBe(true)
-    expect(d['側板'].thicknessAxis).toBeNull()
-    expect(d['側板'].cutSize).toBeNull()
+    const r = computeDimensions(job)
+    const d = r.parts.find((p) => p.name === '側板')!
+    expect(d.thicknessMismatch).toBe(true)
+    expect(d.thicknessAxis).toBeNull()
+    expect(d.cutSize).toBeNull()
+    expect(d.finished).toEqual({ W: 20, H: 1800, D: 400 })
+    expect(d.errors).toEqual([
+      {
+        partId: 'part-gawaita',
+        axis: 'W',
+        kind: 'thicknessMismatch',
+        message: '材料の厚み 18 と同じ寸法がありません（W=20・H=1800・D=400）。寸法を直すか、厚みの寸法を選んでください',
+      },
+    ])
+    expect(r.errors).toEqual(d.errors)
   })
 
-  it('手で選んだ厚みの寸法が合わないときは、印を付けたうえで木取り寸法は出す', () => {
+  it('手で選んだ厚みの寸法が合わないときはエラー（選んだ軸に付ける）。木取り寸法は出す', () => {
     const job = bookshelfJob()
     job.parts[1].thicknessAxis = 'D'
     const d = byName(job)
     expect(d['側板']).toMatchObject({ thicknessAxis: 'D', thicknessAuto: false, thicknessMismatch: true })
     expect(d['側板'].cutSize).toEqual({ W: 28, H: 1810, D: 400 })
+    expect(d['側板'].errors.map((e) => [e.axis, e.kind, e.message])).toEqual([
+      ['D', 'thicknessMismatch', '厚みの寸法（D=400）が材料の厚み 18 と合いません'],
+    ])
+  })
+
+  it('1mm 違い（W19・材料 18）で手で W を選んだ：「厚みの寸法（W=19）が材料の厚み 18 と合いません」', () => {
+    const job = bookshelfJob()
+    job.parts[1].expr.W = '19'
+    job.parts[1].thicknessAxis = 'W'
+    expect(byName(job)['側板'].errors.map((e) => e.message)).toEqual(['厚みの寸法（W=19）が材料の厚み 18 と合いません'])
+  })
+
+  it('小数第1位で比べる：18.04 は 18 とみなしてエラーにしない。18.1 はエラー', () => {
+    const job = bookshelfJob()
+    job.parts[1].expr.W = '18.04'
+    job.parts[1].thicknessAxis = 'W'
+    expect(byName(job)['側板'].errors).toEqual([])
+    job.parts[1].expr.W = '18.1'
+    expect(byName(job)['側板'].errors.map((e) => e.message)).toEqual(['厚みの寸法（W=18.1）が材料の厚み 18 と合いません'])
+  })
+
+  it('厚みの不一致は、その部材を参照するほかの部材のエラーにしない（仕上がり寸法は計算できている）', () => {
+    const job = bookshelfJob()
+    job.parts[1].expr.W = '20' // 側板
+    const d = byName(job)
+    // 棚板は 天地板.W を、天地板は 全体.W − 側板.W×2 を参照している
+    expect(d['天地板'].errors).toEqual([])
+    expect(d['天地板'].finished!.W).toBe(860)
+  })
+
+  it('枚数0の行は、手で選んだ厚みの寸法が合わなくてもエラーにしない', () => {
+    const job = bookshelfJob()
+    job.parts[1].quantity = 0
+    job.parts[1].thicknessAxis = 'D'
+    expect(byName(job)['側板'].errors).toEqual([])
   })
 
   it('存在しない板を指す部材は、板なしとして扱う（厚みは判定しない）', () => {
@@ -124,8 +170,8 @@ describe('computeDimensions（寸法表のまとめ）', () => {
   })
 })
 
-describe('厚みの判定は仕上がり寸法で行う（W = A.H、H = 18 − 逃げ1mm）', () => {
-  it('どの軸も板の厚み 18 と合わないので、厚みは決まらず不一致の印が付く', () => {
+describe('厚みの判定は仕上がり寸法で行う（W = A.H、H = 18 − 逃げ1）', () => {
+  it('どの軸も板の厚み 18 と合わないので、厚みは決まらず不一致のエラーになる', () => {
     const job = bookshelfJob()
     job.parts.push({
       ...job.parts[1],
@@ -135,7 +181,8 @@ describe('厚みの判定は仕上がり寸法で行う（W = A.H、H = 18 − �
     })
     const r = computeDimensions(job)
     const a = r.parts.find((p) => p.partId === 'a')!
-    expect(r.errors).toEqual([])
+    // 17 と 17 が同じだけ近いので W→H→D の順で W に付ける
+    expect(r.errors.map((e) => [e.partId, e.axis, e.kind])).toEqual([['a', 'W', 'thicknessMismatch']])
     expect(a).toMatchObject({
       finished: { W: 17, H: 17, D: 600 },
       thicknessAxis: null,

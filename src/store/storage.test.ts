@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSettings } from '../engine/defaults'
+import { defaultBoards, defaultSettings } from '../engine/defaults'
 import { bookshelfJob, VENEER_4_ID } from '../engine/fixtures/bookshelf'
 import { computeDimensions } from '../engine/dimensions'
 import {
@@ -55,6 +55,14 @@ describe('保存と読み込み', () => {
     const r = loadSaved(s)
     expect(r.status).toBe('ok')
     expect(r.data).toEqual({ jobs: [bookshelfJob()], currentJobId: job.id })
+  })
+
+  it('最初から入っている材料の印（builtIn）は保存して読み込んでも残り、足した材料には付かない', () => {
+    const s = memoryStorage()
+    const job = bookshelfJob()
+    job.boards = [...defaultBoards((p) => `${p}-${Math.random()}`), ...job.boards]
+    saveSaved(s, { jobs: [job], currentJobId: job.id })
+    expect(loadSaved(s).data.jobs[0].boards.map((b) => b.builtIn)).toEqual([true, true, true, true, undefined, undefined])
   })
 
   it('何も保存されていなければ empty', () => {

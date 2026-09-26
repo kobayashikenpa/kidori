@@ -23,7 +23,7 @@ describe('ボタンだけで式を作る', () => {
   it('天地板 W＝全体.W - 側板.W * 2', () => {
     expect(press({ ref: '全体.W' }, '-', { ref: '側板.W' }, '*', '2')).toEqual({ text: '全体.W - 側板.W * 2', cursor: 5 })
   })
-  it('棚板 W＝天地板.W - 逃げ1mm（{n:…} は1つの単位）', () => {
+  it('棚板 W＝天地板.W - 逃げ1（{n:…} は1つの単位）', () => {
     const e = press({ ref: '天地板.W' }, '-', { ref: '{n:nige-1}' })
     expect(e).toEqual({ text: '天地板.W - {n:nige-1}', cursor: 3 })
   })

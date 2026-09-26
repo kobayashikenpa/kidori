@@ -1,5 +1,5 @@
 // 寸法表の画面：部材ごとのカードで、①仕上がり寸法（青）と ②木取り寸法（橙）を別の段に分けて出す
-// 段ごとに加工のチェックがあり、チェックした段はグレーにして「済」を出す。メモもカードに出す
+// 段ごとに「完了」のチェックがあり、チェックした段はグレーにする。メモもカードに出す
 import { useMemo } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
@@ -46,6 +46,9 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
   const cutting = part.quantity > 0
   const finDone = cutting && part.checks.finished
   const cutDone = cutting && part.checks.cut
+  // 式のエラーがあると仕上がり寸法も出せない。厚みが合わないだけなら仕上がり寸法は出せるので、② 木取り寸法だけ出さない
+  const exprErrors = d.errors.filter((e) => e.kind !== 'thicknessMismatch')
+  const mismatchErrors = d.errors.filter((e) => e.kind === 'thicknessMismatch')
 
   return (
     <article className="card dim-card">
@@ -56,7 +59,7 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
       {cutting && (
         <div className="tags">
           {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">材料が未設定</span>}
-          {d.thicknessMismatch && <span className="chip warn">厚みを確認</span>}
+          {d.errors.some((e) => e.kind === 'thicknessMismatch') && <span className="chip err">厚みが合わない</span>}
         </div>
       )}
       {part.memo.trim() !== '' && (
@@ -66,8 +69,11 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
         </p>
       )}
 
-      {d.errors.length > 0 ? (
-        <div className="part-errors">
+      {exprErrors.length > 0 ? (
+        <div className="part-errors" role="group" aria-label="寸法のエラー">
+          <p className="band-note" style={{ margin: 0 }}>
+            {cutting ? '寸法にエラーがあるため、木取りから除いています。部材の画面で直してください' : '寸法にエラーがあります。部材の画面で直してください'}
+          </p>
           {d.errors.map((e, i) => (
             <p key={`${e.axis}-${i}`} className="msg err" style={{ margin: 0 }}>
               {e.axis}：{e.message}
@@ -79,10 +85,10 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
           <section className={`band fin${finDone ? ' done' : ''}`} aria-label="仕上がり寸法">
             <div className="band-head">
               <h4>
-                ① 仕上がり寸法{finDone && <span className="done-mark">済</span>}
+                ① 仕上がり寸法
               </h4>
               {cutting && (
-                <CheckButton label="仕上がり 加工済み" checked={finDone} onToggle={() => onCheck({ finished: !finDone })} />
+                <CheckButton ariaLabel="仕上がり寸法の加工 完了" checked={finDone} onToggle={() => onCheck({ finished: !finDone })} />
               )}
             </div>
             <div className="band-dims">
@@ -98,13 +104,26 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
             </div>
           </section>
 
-          {cutting && (
+          {mismatchErrors.length > 0 && (
+            <div className="part-errors" role="group" aria-label="厚みのエラー">
+              {mismatchErrors.map((e, i) => (
+                <p key={`${e.axis}-${i}`} className="msg err" style={{ margin: 0 }}>
+                  {e.axis}：{e.message}
+                </p>
+              ))}
+              <p className="band-note" style={{ margin: 0 }}>
+                {cutting ? '木取りから除いています。部材の画面で直してください' : '部材の画面で直してください'}
+              </p>
+            </div>
+          )}
+
+          {cutting && mismatchErrors.length === 0 && (
             <section className={`band cut${cutDone ? ' done' : ''}`} aria-label="木取り寸法">
               <div className="band-head">
                 <h4>
-                  ② 木取り寸法{cutDone && <span className="done-mark">済</span>}
+                  ② 木取り寸法
                 </h4>
-                <CheckButton label="木取り 切り出し済み" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+                <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
               </div>
               {d.cutSize && d.faceAxes ? (
                 <>
@@ -131,14 +150,14 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
   )
 }
 
-/** 加工のチェック（押しやすい大きさのボタン。押すたびに付ける・外すを切り替える） */
-function CheckButton({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+/** 加工の「完了」のチェック（押しやすい大きさのボタン。押すたびに付ける・外すを切り替える） */
+function CheckButton({ ariaLabel, checked, onToggle }: { ariaLabel: string; checked: boolean; onToggle: () => void }) {
   return (
-    <button type="button" role="checkbox" aria-checked={checked} className="check-btn" onClick={onToggle}>
+    <button type="button" role="checkbox" aria-checked={checked} aria-label={ariaLabel} className="check-btn" onClick={onToggle}>
       <span className="check-box" aria-hidden="true">
         {checked ? '✓' : ''}
       </span>
-      {label}
+      完了
     </button>
   )
 }

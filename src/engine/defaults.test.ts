@@ -3,10 +3,10 @@ import { boardTokenLabel, defaultBoards, defaultNige, defaultSettings, nigeName 
 import { DEFAULT_SETTINGS } from './types'
 
 describe('defaultNige（新しい仕事の逃げ）', () => {
-  it('逃げ0.5mm と 逃げ1mm の2つ', () => {
+  it('逃げ0.5 と 逃げ1 の2つ（名前に mm は付けない）', () => {
     const n = defaultNige()
     expect(n.map((x) => x.value)).toEqual([0.5, 1])
-    expect(n.map((x) => nigeName(x.value))).toEqual(['逃げ0.5mm', '逃げ1mm'])
+    expect(n.map((x) => nigeName(x.value))).toEqual(['逃げ0.5', '逃げ1'])
   })
   it('id は nige-0.5 と nige-1（式から id で参照する）', () => {
     expect(defaultNige().map((x) => x.id)).toEqual(['nige-0.5', 'nige-1'])
@@ -23,12 +23,12 @@ describe('defaultNige（新しい仕事の逃げ）', () => {
 
 describe('nigeName（逃げの名前）', () => {
   it('寸法を丸めずに出す（浮動小数の誤差だけ消す）。末尾の .0 は付けない', () => {
-    expect(nigeName(0.5)).toBe('逃げ0.5mm')
-    expect(nigeName(1)).toBe('逃げ1mm')
-    expect(nigeName(2.0)).toBe('逃げ2mm')
-    expect(nigeName(1.25)).toBe('逃げ1.25mm')
-    expect(nigeName(0.25)).toBe('逃げ0.25mm')
-    expect(nigeName(0.1 + 0.2)).toBe('逃げ0.3mm')
+    expect(nigeName(0.5)).toBe('逃げ0.5')
+    expect(nigeName(1)).toBe('逃げ1')
+    expect(nigeName(2.0)).toBe('逃げ2')
+    expect(nigeName(1.25)).toBe('逃げ1.25')
+    expect(nigeName(0.25)).toBe('逃げ0.25')
+    expect(nigeName(0.1 + 0.2)).toBe('逃げ0.3')
   })
 })
 
@@ -62,10 +62,10 @@ describe('defaultBoards（新しい仕事の材料）', () => {
 })
 
 describe('boardTokenLabel（式の中の材料の厚みの表示）', () => {
-  it('材料名＋厚み＋mm、間に空白なし', () => {
+  it('材料名＋厚み。mm は付けず、間に空白なし', () => {
     const [, , lauan4] = defaultBoards((p) => `${p}-x${Math.random()}`)
-    expect(boardTokenLabel(lauan4)).toBe('ラワン4mm')
-    expect(boardTokenLabel({ material: 'ラワン', thickness: 2.5 })).toBe('ラワン2.5mm')
+    expect(boardTokenLabel(lauan4)).toBe('ラワン4')
+    expect(boardTokenLabel({ material: 'ラワン', thickness: 2.5 })).toBe('ラワン2.5')
   })
 })
 

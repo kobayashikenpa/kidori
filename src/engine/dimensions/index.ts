@@ -1,8 +1,8 @@
-// 寸法表のデータ：部材ごとの仕上がり寸法・厚みの寸法・木取り寸法・エラー
+// 寸法表のデータ：部材ごとの仕上がり寸法・厚みの寸法・木取り寸法・エラー（式のエラーと厚みの不一致）
 import { AXES, type Axis, type DimensionResult, type Job, type PartDimensions } from '../types'
 import { cutSizeOf } from './cutSize'
 import { computeFinished } from './finished'
-import { detectThickness } from './thickness'
+import { detectThickness, thicknessMismatchError } from './thickness'
 
 export function computeDimensions(job: Job): DimensionResult {
   const fin = computeFinished(job)
@@ -13,6 +13,8 @@ export function computeDimensions(job: Job): DimensionResult {
     const t = detectThickness(p, board, f.finished)
     const finished = isComplete(f.finished) ? f.finished : null
     const allowance = p.allowance ?? job.settings.allowance
+    // 厚みの不一致は、その部材だけのエラー（仕上がり寸法は計算できているので、参照しているほかの部材には広げない）
+    const mismatch = thicknessMismatchError(p.id, t, board, f.finished)
     return {
       partId: p.id,
       name: p.name,
@@ -23,7 +25,7 @@ export function computeDimensions(job: Job): DimensionResult {
       ...t,
       allowance,
       cutSize: cutSizeOf(finished, t.faceAxes, allowance),
-      errors: f.errors,
+      errors: mismatch ? [...f.errors, mismatch] : f.errors,
     }
   })
   return { parts, errors: parts.flatMap((p) => p.errors) }

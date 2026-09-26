@@ -62,8 +62,13 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       skipped.push({ partId: d.partId, name: d.name, reason: 'noBoard' })
       continue
     }
-    if (d.errors.length > 0 || !d.finished) {
+    if (d.errors.some((e) => e.kind !== 'thicknessMismatch') || !d.finished) {
       skipped.push({ partId: d.partId, name: d.name, reason: 'dimensionError' })
+      continue
+    }
+    if (d.thicknessMismatch) {
+      // 厚みの寸法が材料の厚みと合わない（仕様書 5.3。エラー）
+      skipped.push({ partId: d.partId, name: d.name, reason: 'thicknessMismatch' })
       continue
     }
     if (!d.cutSize || !d.faceAxes) {

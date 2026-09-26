@@ -56,7 +56,7 @@ export function NigeEditor() {
   return (
     <div className="stack">
       <p className="lead" style={{ margin: 0 }}>
-        式の中で引いて使います（例：天地板.W − 逃げ1mm）。寸法を変えると、使っている式の値もついてきます。
+        式の中で引いて使います（例：天地板.W − 逃げ1）。寸法を変えると、使っている式の値もついてきます。
       </p>
       {list.length === 0 && <p className="lead" style={{ margin: 0 }}>逃げがまだありません。</p>}
       {list.map((n) => {

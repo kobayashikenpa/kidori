@@ -1,6 +1,8 @@
 // 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
 import { useMemo, useState } from 'react'
+import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
+import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
 import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -18,10 +20,13 @@ interface Props {
 
 export function PartEditor({ part, onClose }: Props) {
   const { job, run } = useCurrentJob()
-  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: job.boards[0]?.id ?? null }))
+  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: orderedBoards(job)[0]?.id ?? null }))
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
-  const patch = (p: Partial<Part>) => setDraft((d) => ({ ...d, ...p }))
+  const patch = (p: Partial<Part>) => {
+    setDraft((d) => ({ ...d, ...p }))
+    setError(null)
+  }
 
   // 入力中の内容で寸法を計算し直す（計算は engine に任せる）
   const draftJob = useMemo(
@@ -39,7 +44,14 @@ export function PartEditor({ part, onClose }: Props) {
   // 厚みの寸法が変わって、木目が面でない軸のままなら「どちらでもよい」とみなす（暫定：未決事項 15）
   const grain: PartGrain = draft.grain !== 'any' && faces && !faces.includes(draft.grain) ? 'any' : draft.grain
 
+  // 保存できない理由（厚みの寸法が材料の厚みと合わない。仕様書 5.3）。判定は engine に任せる
+  const blockers = useMemo(() => validatePartForSave(job, { ...draft, grain }), [job, draft, grain])
+
   const save = () => {
+    if (blockers.length > 0) {
+      setError(`厚みの寸法が材料の厚みと合わないので${part ? '保存' : '追加'}できません。寸法か厚みを直してください`)
+      return
+    }
     const next = { ...draft, grain }
     const r = run((j) => (part ? updatePart(j, part.id, next) : addPart(j, next)))
     if (r.ok) onClose()
@@ -95,7 +107,7 @@ export function PartEditor({ part, onClose }: Props) {
             onChange={(e) => patch({ boardId: e.target.value || null })}
           >
             <option value="">（材料が未設定）</option>
-            {job.boards.map((b) => (
+            {orderedBoards(job).map((b) => (
               <option key={b.id} value={b.id}>
                 {boardLabel(b)}
               </option>
@@ -115,7 +127,8 @@ export function PartEditor({ part, onClose }: Props) {
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}
           finishedOf={finishedOf}
-          errors={dims.errors.filter((e) => e.axis === axis)}
+          // 厚みが合わないエラーは「厚み」の欄の下に出すので、式の下（2行の枠）には式のエラーだけを出す
+          errors={dims.errors.filter((e) => e.axis === axis && e.kind !== 'thicknessMismatch')}
           open={padAxis === axis}
           onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
         />
@@ -135,12 +148,14 @@ export function PartEditor({ part, onClose }: Props) {
               onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
             />
             <span className="hint">W・H・D のうち、材料の厚みにあたる寸法です</span>
-            {dims.thicknessMismatch && board && (
-              <p className="msg warn">
-                {dims.thicknessAxis
-                  ? `厚み ${dims.thicknessAxis} の値（${fmt(dims.input?.[dims.thicknessAxis] ?? 0)}mm）が、材料の厚み ${fmt(board.thickness)}mm と違います。確かめてください`
-                  : `材料の厚み ${fmt(board.thickness)}mm と同じ寸法がありません。厚みを選んでください`}
-              </p>
+            {blockers.length > 0 && (
+              <div className="part-errors" role="alert">
+                {blockers.map((m) => (
+                  <p key={m} className="msg err" style={{ margin: 0 }}>
+                    {m}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
 
@@ -192,8 +207,9 @@ export function PartEditor({ part, onClose }: Props) {
       </div>
 
       {error && <p className="msg err">{error}</p>}
+      {!error && blockers.length > 0 && <p className="msg err">厚みの寸法が材料の厚みと合わないうちは{part ? '保存' : '追加'}できません</p>}
       <div className="sheet-foot">
-        <button type="button" className="btn primary" onClick={save}>
+        <button type="button" className="btn primary" aria-disabled={blockers.length > 0} onClick={save}>
           {part ? '保存する' : '追加する'}
         </button>
       </div>
