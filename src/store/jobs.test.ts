@@ -323,6 +323,22 @@ describe('逃げ', () => {
     expect(addNige(job, '逃げ1', 6).ok).toBe(true)
   })
 
+  it('寸法は丸めずに持つ：逃げ0.25 を足しても 0.25、名前だけ変えても 0.25 のままで式の結果も変わらない', () => {
+    const job = unwrap(updateNige(bookshelfJob(), 'nige-1', '逃げ', 0.25))
+    expect(job.settings.nige[1]).toEqual({ id: 'nige-1', name: '逃げ', value: 0.25 })
+    const before = computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W
+    const renamed = unwrap(updateNige(job, 'nige-1', 'すき間', 0.25))
+    expect(renamed.settings.nige[1]).toEqual({ id: 'nige-1', name: 'すき間', value: 0.25 })
+    expect(computeDimensions(renamed).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(before)
+    expect(unwrap(addNige(createJob('a'), 'ほぞ', 0.25, 'n-h')).settings.nige.at(-1)!.value).toBe(0.25)
+    // 表示名が違えば別のもの（逃げ0.25 と 逃げ0.3）
+    expect(addNige(job, '逃げ', 0.3).ok).toBe(true)
+    // 浮動小数の誤差だけの違いは同じものとみなす
+    expect(addNige(job, '逃げ', 0.1 + 0.15).ok).toBe(false)
+    // 0 より大きければ小さい値も持てる
+    expect(addNige(job, '逃げ', 0.04).ok).toBe(true)
+  })
+
   it('寸法を変えると式の値がついてくる。ほかの逃げと同じ寸法には変えられない', () => {
     const job = bookshelfJob()
     expect(updateNige(job, 'nige-1', '逃げ', 0.5).ok).toBe(false)

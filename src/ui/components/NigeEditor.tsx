@@ -2,10 +2,11 @@
 // 材料の一覧と同じ見た目・操作（SettingsList）
 import { useState } from 'react'
 import { nigeName } from '../../engine/defaults'
+import { exactText } from '../../engine/round'
 import type { Nige } from '../../engine/types'
 import { addNige, nigesUsages, nigeUsages, removeNiges, updateNige } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
-import { fmt, parseNum } from '../format'
+import { parseNum } from '../format'
 import { closeKeyboard } from '../keyboard'
 import { SettingsList } from './SettingsList'
 
@@ -56,7 +57,7 @@ export function NigeEditor() {
 function NigeForm({ nige, done }: { nige: Nige | null; done: () => void }) {
   const { run } = useCurrentJob()
   const [name, setName] = useState(nige?.name ?? '')
-  const [text, setText] = useState(nige ? fmt(nige.value) : '')
+  const [text, setText] = useState(nige ? exactText(nige.value) : '')
   const [error, setError] = useState<string | null>(null)
   const pre = nige ? `nige-edit-${nige.id}` : 'nige-add'
 

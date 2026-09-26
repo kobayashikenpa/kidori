@@ -1,5 +1,5 @@
 // 新しい仕事の初期値（逃げ・材料・設定）と、逃げ・材料の厚みの表示名
-import { round1 } from './round'
+import { exactText, round1 } from './round'
 import { BOARD_SIZES, DEFAULT_SETTINGS, type Board, type Nige, type Settings } from './types'
 
 /** 調整寸法の初期の名前。以前の版の逃げ（名前が無い）もこの名前にする */
@@ -57,7 +57,7 @@ function mm(v: number): string {
  * 寸法そのものを式で使うので、寸法は丸めない（0.25 を 0.3 と見せない）。浮動小数の誤差（0.1 + 0.2 など）だけ消す
  */
 export function nigeName(nige: Pick<Nige, 'name' | 'value'>): string {
-  return `${nige.name}${Number(nige.value.toFixed(6))}`
+  return `${nige.name}${exactText(nige.value)}`
 }
 
 /** 調整寸法の名前をそろえる（前後の空白を外し、全角・半角をそろえる）。同じものの判定に使う */

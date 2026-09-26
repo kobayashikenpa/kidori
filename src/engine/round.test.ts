@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eq1, round1 } from './round'
+import { eq1, exactText, round1 } from './round'
 
 describe('round1・eq1（小数第1位に丸めて比べる）', () => {
   it('小数第1位に丸める', () => {
@@ -11,5 +11,13 @@ describe('round1・eq1（小数第1位に丸めて比べる）', () => {
     expect(eq1(0.1 + 0.2, 0.3)).toBe(true)
     expect(eq1(18, 18.04)).toBe(true)
     expect(eq1(18, 18.1)).toBe(false)
+  })
+})
+
+describe('exactText（丸めずに文字にする。浮動小数の誤差だけ消す）', () => {
+  it('0.25 は 0.25 のまま、0.1 + 0.2 は 0.3、整数は .0 を付けない', () => {
+    expect(exactText(0.25)).toBe('0.25')
+    expect(exactText(0.1 + 0.2)).toBe('0.3')
+    expect(exactText(15)).toBe('15')
   })
 })
