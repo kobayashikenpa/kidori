@@ -373,7 +373,7 @@ describe('材料の厚みを式で使うとき', () => {
   it('削除の確認用に、その板から切る部材と、式で厚みを使っている部材を返す', () => {
     const job = jobWithThickness()
     const rawan4 = job.boards.find((b) => b.thickness === 4)!
-    expect(boardsUsages(job, [rawan4.id])).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
+    expect(boardsUsages(job, [rawan4.id])).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'], flushes: [] })
   })
 
   it('コピー先の式は新しい板の id を指し、同じ寸法になる', () => {
