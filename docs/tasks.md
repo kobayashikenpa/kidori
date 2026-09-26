@@ -203,7 +203,7 @@
 - やること：architecture.md 6.2。`Nige` 型、`Settings.nige`、`Part.memo`・`Part.checks`、`DimensionErrorKind` に `missingBoard`・`missingNige` を足す。`src/engine/defaults.ts` に `defaultNige()`・`defaultBoards(newId)`・`nigeName(value)`・`boardTokenLabel(board)` を作る。見本に `nige: defaultNige()`・`memo: ''`・`checks` を入れる（`clearance` はこの作業では残す）
 - 完了の条件：`defaultNige()` が 0.5 と 1 の2つで、名前が「逃げ0.5mm」「逃げ1mm」になる。呼ぶたびに別の配列になる。`defaultBoards` が メラミン 1・ラワン 2.5・ラワン 4・ラワン 5.5 の4つ（すべて 910×1820・木目 長手方向・id が別々）。`boardTokenLabel` が「ラワン4mm」を返すテストが通る
 
-### [ ] E-19 式の字句：材料の厚み・逃げ
+### [x] E-19 式の字句：材料の厚み・逃げ
 - 担当：engine-dev ／ 依存：E-18 ／ 仕様書：5.4, 6
 - やること：architecture.md 6.3「字句」。`{t:板のid}`・`{n:逃げのid}` を1つの字句として読む。部材名に `{` `}`（全角も）を使えなくする。部材名のつけ替えで `{…}` を書き換えない
 - 完了の条件：`天地板.W - {n:nige-1}` が［参照(天地板,W), -, 逃げ(nige-1)］、`600 - {t:b-4} * 2` が［数値600, -, 厚み(b-4), *, 数値2］になる。`{x:1}` と `{n:nige-1`（閉じていない）が字句のエラー。部材名「棚{1}」が使えない。部材名を変えても式の中の `{n:nige-1}` が変わらないテストが通る

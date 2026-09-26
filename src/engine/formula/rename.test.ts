@@ -22,6 +22,15 @@ describe('renameRefsInExpr（式の中の参照のつけ替え）', () => {
   })
 })
 
+describe('renameRefsInExpr：材料の厚み・逃げはつけ替えない', () => {
+  it('部材名を変えても {n:nige-1} は変わらない', () => {
+    expect(renameRefsInExpr('天地板.W - {n:nige-1}', '天地板', '天板')).toBe('天板.W - {n:nige-1}')
+  })
+  it('id が部材名と同じ形でも {…} の中は書き換えない', () => {
+    expect(renameRefsInExpr('{t:側板.W} + 側板.W', '側板', 'X')).toBe('{t:側板.W} + X.W')
+  })
+})
+
 describe('renamePart（部材名の変更と参照のつけ替え）', () => {
   it('見本で「全体」を「外形」に変えると、参照している式がすべて書き換わる', () => {
     const job = bookshelfJob()

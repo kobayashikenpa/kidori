@@ -1,4 +1,4 @@
-// 式の字句の切り出し：数値・参照（部材名.W/H/D）・記号（+ - * / ( )）
+// 式の字句の切り出し：数値・参照（部材名.W/H/D）・材料の厚み {t:板のid}・逃げ {n:逃げのid}・記号（+ - * / ( )）
 import { AXES, type Axis } from '../types'
 
 export type Operator = '+' | '-' | '*' | '/'
@@ -13,6 +13,8 @@ interface TokenBase {
 export type Token =
   | (TokenBase & { type: 'number'; value: number })
   | (TokenBase & { type: 'ref'; part: string; axis: Axis })
+  | (TokenBase & { type: 'thickness'; boardId: string })
+  | (TokenBase & { type: 'nige'; nigeId: string })
   | (TokenBase & { type: Operator | '(' | ')' })
 
 export type TokenizeResult =
@@ -24,6 +26,16 @@ const SYMBOLS = ['+', '-', '*', '/', '(', ')'] as const
 const SYMBOL_SET: ReadonlySet<string> = new Set(SYMBOLS)
 
 const NUMBER_RE = /^\d+(?:\.\d+)?$/
+
+/** 1文字をそろえたうえで { か（全角の ｛ も） */
+function isOpenBrace(ch: string): boolean {
+  return normalizeFormulaText(ch) === '{'
+}
+
+/** 1文字をそろえたうえで } か（全角の ｝ も） */
+function isCloseBrace(ch: string): boolean {
+  return normalizeFormulaText(ch) === '}'
+}
 
 function isSpace(ch: string): boolean {
   return /\s/.test(ch)
@@ -53,6 +65,7 @@ export interface Chunk {
 /**
  * 式を、記号・空白・ひとかたまりの文字列に分ける。失敗しない。
  * 全角の記号（＋ など）も記号として扱う。位置とかたまりの文字列は入力したまま。
+ * { から次の } までは、中に記号や空白があっても1つのかたまりにする（} が無ければ式の終わりまで）。
  * 字句の切り出しと、部材名のつけ替え（rename）の両方で使う
  */
 export function splitChunks(expr: string): (Token | Chunk)[] {
@@ -71,7 +84,14 @@ export function splitChunks(expr: string): (Token | Chunk)[] {
       continue
     }
     const start = i
-    while (i < expr.length && !isSpace(expr[i]) && !symbolOf(expr[i])) i++
+    if (isOpenBrace(ch)) {
+      i++
+      while (i < expr.length && !isCloseBrace(expr[i])) i++
+      if (i < expr.length) i++
+      order.push({ text: expr.slice(start, i), start, end: i })
+      continue
+    }
+    while (i < expr.length && !isSpace(expr[i]) && !symbolOf(expr[i]) && !isOpenBrace(expr[i])) i++
     order.push({ text: expr.slice(start, i), start, end: i })
   }
   return order
@@ -92,6 +112,23 @@ export function parseRefText(raw: string): { part: string; axis: Axis } | null {
   return { part, axis: axis as Axis }
 }
 
+/** 材料の厚み・逃げのかたまりか（{ で始まるか。全角の ｛ も） */
+export function isBraceText(raw: string): boolean {
+  return raw.length > 0 && isOpenBrace(raw[0])
+}
+
+const BRACE_RE = /^\{([tn]):([^{}\s]+)\}$/
+
+/**
+ * かたまりの文字列を、材料の厚み {t:板のid}・逃げ {n:逃げのid} として読む。読めなければ null。
+ * 全角の ｛ ｝ はそろえてから読む
+ */
+export function parseBraceText(raw: string): { kind: 'thickness' | 'nige'; id: string } | null {
+  const m = BRACE_RE.exec(normalizeFormulaText(raw))
+  if (!m) return null
+  return { kind: m[1] === 't' ? 'thickness' : 'nige', id: m[2] }
+}
+
 /** 式を字句に分ける。例外は投げず、読めない部分があればその位置とメッセージを返す */
 export function tokenize(expr: string): TokenizeResult {
   const tokens: Token[] = []
@@ -101,6 +138,20 @@ export function tokenize(expr: string): TokenizeResult {
       continue
     }
     const { text, start, end } = item
+    if (isBraceText(text)) {
+      const b = parseBraceText(text)
+      if (!b) {
+        const closed = isCloseBrace(text[text.length - 1]) && text.length > 1
+        return {
+          ok: false,
+          message: closed ? `読めない参照があります（「${text}」）` : `「${text}」が読めません（「}」が足りません）`,
+          start,
+          end,
+        }
+      }
+      tokens.push(b.kind === 'thickness' ? { type: 'thickness', boardId: b.id, start, end } : { type: 'nige', nigeId: b.id, start, end })
+      continue
+    }
     const normalized = normalizeFormulaText(text)
     if (NUMBER_RE.test(normalized)) {
       tokens.push({ type: 'number', value: Number(normalized), start, end })
@@ -123,7 +174,7 @@ export function normalizePartName(name: string): string {
 
 /**
  * 部材名に使えるかを調べる。使えれば null、使えなければ理由（日本語）を返す。
- * 式の区切りになる記号（+ - * / ( ) .）と空白は使えない（全角の ＋ や × ÷ − なども、式では記号になるので使えない）。
+ * 式の区切りになる記号（+ - * / ( ) . { }）と空白は使えない（全角の ＋ や × ÷ − なども、式では記号になるので使えない）。
  * otherNames と同じ名前（全角・半角の違いだけのものも含む）も使えない
  */
 export function validatePartName(name: string, otherNames: readonly string[] = []): string | null {
@@ -131,6 +182,8 @@ export function validatePartName(name: string, otherNames: readonly string[] = [
   if ([...name].some((ch) => isSpace(ch) || isSpace(normalizeFormulaText(ch)))) return '部材名に空白は使えません'
   const bad = [...name].find((ch) => [...normalizeFormulaText(ch)].some((n) => SYMBOL_SET.has(n) || n === '.'))
   if (bad !== undefined) return `部材名に「${bad}」は使えません（+ - * / ( ) . × ÷ は式で使う記号のため）`
+  const brace = [...name].find((ch) => isOpenBrace(ch) || isCloseBrace(ch))
+  if (brace !== undefined) return `部材名に「${brace}」は使えません（{ } は式で材料の厚み・逃げを表すため）`
   const key = normalizePartName(name)
   const same = otherNames.find((n) => normalizePartName(n) === key)
   if (same !== undefined) return `「${same}」という部材はすでにあります`
