@@ -22,15 +22,23 @@ describe('unitLabel（単位の表示名）', () => {
     expect(formulaLabels('(600 + {t:b-4}) / 2', job)).toEqual(['(', '6', '0', '0', '+', 'ラワン4', ')', '÷', '2'])
   })
 
-  it('消した逃げは（削除した逃げ）、消した材料は（削除した材料）', () => {
+  it('消した逃げは（削除した調整寸法）、消した材料は（削除した材料）', () => {
     const job = bookshelfJob()
-    expect(formulaLabels('{n:gone} + {t:gone}', job)).toEqual(['（削除した逃げ）', '+', '（削除した材料）'])
+    expect(formulaLabels('{n:gone} + {t:gone}', job)).toEqual(['（削除した調整寸法）', '+', '（削除した材料）'])
   })
 
   it('逃げの寸法を変えると表示名もついてくる', () => {
     const job = bookshelfJob()
     job.settings.nige[1].value = 2
     expect(formulaLabels('天地板.W - {n:nige-1}', job)).toEqual(['天地板.W', '−', '逃げ2'])
+  })
+
+  it('調整寸法は名前＋寸法（ほぞ15）。名前を変えると表示もついてくる', () => {
+    const job = bookshelfJob()
+    job.settings.nige.push({ id: 'n-hozo', name: 'ほぞ', value: 15 })
+    expect(formulaLabels('棚板.D + {n:n-hozo}', job)).toEqual(['棚板.D', '+', 'ほぞ15'])
+    job.settings.nige[2].name = 'ホゾ'
+    expect(formulaLabels('{n:n-hozo}', job)).toEqual(['ホゾ15'])
   })
 
   it('全角で書いた部材の参照・数字は半角にそろえて見せる', () => {

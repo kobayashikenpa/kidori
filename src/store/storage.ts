@@ -1,5 +1,5 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
-import { defaultNige, defaultSettings } from '../engine/defaults'
+import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
 import { eq1 } from '../engine/round'
@@ -128,9 +128,10 @@ function sanitizeSettings(v: unknown, fx: Fixes): LegacyJob['settings'] {
 }
 
 /**
- * 逃げ。配列でなければ初期値（第1版で無いときは undefined にして、移し替えで初期値を入れる）。
- * id が空・前の逃げと同じ、値が 0 以下・数でない・前の逃げと同じ寸法のものは外す。
- * 寸法は丸めずに比べる（以前の版から移した 0.25 と 0.3 は別の逃げとして残す）
+ * 逃げ（調整寸法）。配列でなければ初期値（第1版で無いときは undefined にして、移し替えで初期値を入れる）。
+ * id が空・前の逃げと同じ、値が 0 以下・数でない、前の逃げと名前も寸法も同じものは外す。
+ * 寸法は丸めずに比べる（以前の版から移した 0.25 と 0.3 は別の逃げとして残す）。
+ * 名前が無い（第1.3版までのデータ）ものは「逃げ」にする（直した数には数えない）。名前が文字でない・空なら「逃げ」に直す
  */
 function sanitizeNige(v: unknown, fx: Fixes): Nige[] | undefined {
   if (v === undefined && fx.version === 1) return undefined
@@ -140,13 +141,20 @@ function sanitizeNige(v: unknown, fx: Fixes): Nige[] | undefined {
   }
   const out: Nige[] = []
   for (const x of v) {
-    const good =
-      isRecord(x) &&
-      isId(x.id) &&
-      isPositive(x.value) &&
-      !out.some((n) => n.id === x.id || Math.abs(n.value - (x.value as number)) < 1e-9)
-    if (good) out.push({ id: x.id as string, value: x.value as number })
-    else fx.count++
+    if (!isRecord(x) || !isId(x.id) || !isPositive(x.value)) {
+      fx.count++
+      continue
+    }
+    let name = NIGE_DEFAULT_NAME
+    if (typeof x.name === 'string' && x.name.trim()) name = x.name.trim()
+    else if (x.name !== undefined) fx.count++
+    const value = x.value
+    const key = nigeNameKey(name)
+    if (out.some((n) => n.id === x.id || (nigeNameKey(n.name) === key && Math.abs(n.value - value) < 1e-9))) {
+      fx.count++
+      continue
+    }
+    out.push({ id: x.id, name, value })
   }
   return out
 }

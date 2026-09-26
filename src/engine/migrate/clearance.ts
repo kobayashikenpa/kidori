@@ -1,5 +1,5 @@
 // 以前の版（第1版）のデータの移し替え：部材ごとの逃げ（clearance）を、設定の逃げ＋式で引く形に書き換える
-import { defaultNige } from '../defaults'
+import { defaultNige, NIGE_DEFAULT_NAME } from '../defaults'
 import { computeDimensions } from '../dimensions'
 import { tokenize } from '../formula/tokenize'
 import { computeV1Dimensions } from './v1Dimensions'
@@ -21,6 +21,9 @@ export type LegacyJob = Omit<Job, 'settings' | 'parts'> & {
 
 /** 逃げの値が同じか。移し替えでは丸めずに比べる（浮動小数の誤差だけ見のがす） */
 const sameValue = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9
+
+/** 以前の部材ごとの逃げ v に当たる調整寸法（名前「逃げ」で、値が同じ） */
+const isOldNige = (n: Nige, v: number): boolean => n.name === NIGE_DEFAULT_NAME && sameValue(n.value, v)
 
 /** 部材の逃げのうち、0 より大きい数の軸だけ */
 function positiveClearance(p: LegacyPart): Partial<Record<Axis, number>> {
@@ -75,7 +78,7 @@ export function migrateClearanceChecked(
   const wanted = job.parts.flatMap((p) => Object.values(positiveClearance(p)))
   wanted.sort((a, b) => a - b)
   for (const v of wanted) {
-    if (!nige.some((n) => sameValue(n.value, v))) nige.push({ id: makeId(), value: v })
+    if (!nige.some((n) => isOldNige(n, v))) nige.push({ id: makeId(), name: NIGE_DEFAULT_NAME, value: v })
   }
 
   const parts: Part[] = job.parts.map((p) => {
@@ -103,7 +106,7 @@ export function migrateClearanceChecked(
       for (const a of AXES) {
         const v = clr[a]
         if (v === undefined || a === thickness) continue
-        expr[a] = subtractNige(expr[a], nige.find((n) => sameValue(n.value, v))!.id)
+        expr[a] = subtractNige(expr[a], nige.find((n) => isOldNige(n, v))!.id)
       }
       return { ...p, expr }
     }),

@@ -224,7 +224,7 @@ describe('式の中の 材料の厚み・逃げ（E-20）', () => {
     const d = byName(job)
     expect(d['全体'].finished).toBeNull()
     expect(d['全体'].errors).toEqual([
-      expect.objectContaining({ axis: 'W', kind: 'missingNige', message: '削除した逃げを使っています' }),
+      expect.objectContaining({ axis: 'W', kind: 'missingNige', message: '削除した調整寸法を使っています' }),
     ])
     // 天地板.W = 全体.W - 側板.W * 2 → 参照先のエラー
     expect(d['天地板'].errors[0]).toMatchObject({
@@ -232,7 +232,7 @@ describe('式の中の 材料の厚み・逃げ（E-20）', () => {
       kind: 'missingNige',
       from: { partId: 'part-zentai', axis: 'W' },
     })
-    expect(d['天地板'].errors[0].message).toContain('削除した逃げを使っています')
+    expect(d['天地板'].errors[0].message).toContain('削除した調整寸法を使っています')
     expect(d['棚板'].finished).toBeNull()
     // 参照していない部材は計算できる
     expect(d['側板'].finished).toEqual({ W: 18, H: 1800, D: 400 })

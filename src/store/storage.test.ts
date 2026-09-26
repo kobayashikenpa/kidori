@@ -400,7 +400,7 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     const job = bookshelfJob()
     job.parts[1]!.memo = '穴あけ'
     job.parts[1]!.checks = { finished: true, cut: false }
-    job.settings.nige.push({ id: 'nige-x', value: 2 })
+    job.settings.nige.push({ id: 'nige-x', name: 'ほぞ', value: 2 })
     saveSaved(s, { jobs: [job], currentJobId: job.id })
     const r = loadSaved(s, T1)
     expect(r.status).toBe('ok')
@@ -411,19 +411,60 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     const r = loadSaved(
       storedWith((j) => {
         j.settings.nige = [
-          { id: 'nige-0.5', value: 0.5 },
-          { id: 'a', value: 0 },
-          { id: 'b', value: -1 },
-          { id: 'c', value: 0.5 },
-          { id: 'nige-0.5', value: 3 },
-          { id: '', value: 4 },
-          { id: 'nige-1', value: 1 },
+          { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+          { id: 'a', name: '逃げ', value: 0 },
+          { id: 'b', name: '逃げ', value: -1 },
+          { id: 'c', name: '逃げ', value: 0.5 },
+          { id: 'nige-0.5', name: '逃げ', value: 3 },
+          { id: '', name: '逃げ', value: 4 },
+          { id: 'nige-1', name: '逃げ', value: 1 },
         ]
       }),
       T1,
     )
     expect(r.status).toBe('repaired')
     expect(r.data.jobs[0]!.settings.nige).toEqual(defaultSettings().nige)
+  })
+
+  it('名前の無い第1.3版の形の逃げは、id・寸法はそのままで名前「逃げ」にして ok で読む（データは減らない）', () => {
+    const r = loadSaved(
+      storedWith((j) => {
+        j.settings.nige = [
+          { id: 'nige-0.5', value: 0.5 },
+          { id: 'nige-1', value: 1 },
+          { id: 'nige-x', value: 0.25 },
+        ]
+      }),
+      T1,
+    )
+    expect(r.status).toBe('ok')
+    const job = r.data.jobs[0]!
+    expect(job.settings.nige).toEqual([
+      { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+      { id: 'nige-1', name: '逃げ', value: 1 },
+      { id: 'nige-x', name: '逃げ', value: 0.25 },
+    ])
+    expect(computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(863)
+  })
+
+  it('名前と寸法の両方が同じものだけ重なりとみなす（逃げ1 と ほぞ1 は両方残る）。名前が文字でなければ「逃げ」に直す', () => {
+    const r = loadSaved(
+      storedWith((j) => {
+        j.settings.nige = [
+          { id: 'nige-1', name: '逃げ', value: 1 },
+          { id: 'h1', name: ' ほぞ ', value: 1 },
+          { id: 'h2', name: 'ほぞ', value: 1 },
+          { id: 'z', name: 5, value: 2 },
+        ]
+      }),
+      T1,
+    )
+    expect(r.status).toBe('repaired')
+    expect(r.data.jobs[0]!.settings.nige).toEqual([
+      { id: 'nige-1', name: '逃げ', value: 1 },
+      { id: 'h1', name: 'ほぞ', value: 1 },
+      { id: 'z', name: '逃げ', value: 2 },
+    ])
   })
 
   it('第2版で逃げ・メモ・チェックが無ければ初期値にして repaired で読む', () => {
@@ -500,7 +541,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     let job = createJob('A', undefined, new Date('2026-09-26T00:00:00Z'), 'job-a')
     const steps = [
       (j: typeof job) => updateSettings(j, { kerf: 2, allowance: 5, cutMode: 'auto' }),
-      (j: typeof job) => addNige(j, 2, 'nige-2'),
+      (j: typeof job) => addNige(j, '逃げ', 2, 'nige-2'),
       (j: typeof job) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })),
     ]
     for (const step of steps) {
@@ -566,7 +607,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     })
     const t = loadTemplate(memoryStorage({ [TEMPLATE_KEY]: raw }), [])
     expect(t.settings.kerf).toBe(3)
-    expect(t.settings.nige).toEqual([{ id: 'nige-1', value: 1 }])
+    expect(t.settings.nige).toEqual([{ id: 'nige-1', name: '逃げ', value: 1 }])
     expect(t.materials).toEqual([
       { material: 'シナ', thickness: 18 },
       { material: 'ラワン', thickness: 4, builtIn: true },

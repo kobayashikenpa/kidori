@@ -1,5 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultSheet, nigeName, type BoardSheet } from '../engine/defaults'
+import { defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -10,7 +10,7 @@ import {
   remapBoardIds,
 } from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
-import { eq1, round1 } from '../engine/round'
+import { eq1 } from '../engine/round'
 import {
   AXES,
   BOARD_SIZES,
@@ -260,28 +260,35 @@ export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpRes
 
 // ---------- 逃げ ----------
 
-/** 逃げの寸法の検査。0 より大きく、ほかの逃げと同じ寸法（小数第1位で比較）でないこと */
-function validateNige(job: Job, value: number, selfId: string | null): string | null {
-  if (!(Number.isFinite(value) && round1(value) > 0)) return '逃げの寸法は 0 より大きい数を入れてください'
-  const dup = job.settings.nige.find((n) => n.id !== selfId && eq1(n.value, value))
-  if (dup) return `${nigeName(dup.value)} はすでにあります`
+/**
+ * 調整寸法（逃げ）の検査。名前が空でなく、寸法が 0 より大きく、
+ * ほかの調整寸法と表示名（名前＋寸法）が重ならないこと。
+ * 寸法は丸めずに比べる（逃げ0.25 と 逃げ0.3 は別）。浮動小数の誤差だけは同じとみなす（nigeName が誤差を消す）
+ */
+function validateNige(job: Job, name: string, value: number, selfId: string | null): string | null {
+  if (!name.trim()) return '名前を入れてください'
+  if (!(Number.isFinite(value) && Number(value.toFixed(6)) > 0)) return '寸法は 0 より大きい数を入れてください'
+  // 名前と寸法が同じもの、表示名（名前＋寸法）が重なるもの（例：「逃げ1」5 と「逃げ」15 はどちらも 逃げ15）も断る。仕様書 4
+  const label = nigeNameKey(nigeName({ name: name.trim(), value }))
+  const same = job.settings.nige.find((n) => n.id !== selfId && nigeNameKey(nigeName(n)) === label)
+  if (same) return `${nigeName(same)} はすでにあります`
   return null
 }
 
-/** 逃げを足す。入れるのは寸法だけ（名前は「逃げ＋寸法」）。同じ寸法の逃げがあれば断る */
-export function addNige(job: Job, value: number, id: string = newId('nige')): OpResult {
-  const err = validateNige(job, value, null)
+/** 調整寸法（逃げ）を足す。名前（前後の空白は外す）と寸法（丸めずに持つ）。表示名（名前＋寸法）がほかと同じになるなら断る */
+export function addNige(job: Job, name: string, value: number, id: string = newId('nige')): OpResult {
+  const err = validateNige(job, name, value, null)
   if (err) return fail(err)
-  const nige: Nige = { id, value: round1(value) }
+  const nige: Nige = { id, name: name.trim(), value }
   return ok({ ...job, settings: { ...job.settings, nige: [...job.settings.nige, nige] } })
 }
 
-/** 逃げの寸法を変える。式は id で参照しているので、値がついてくる。同じ寸法のほかの逃げがあれば断る */
-export function updateNige(job: Job, nigeId: string, value: number): OpResult {
-  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
-  const err = validateNige(job, value, nigeId)
+/** 調整寸法（逃げ）の名前と寸法を変える。式は id で参照しているので、表示と値がついてくる。寸法は丸めずに持つ。表示名（名前＋寸法）がほかと同じになるなら断る */
+export function updateNige(job: Job, nigeId: string, name: string, value: number): OpResult {
+  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('調整寸法が見つかりません')
+  const err = validateNige(job, name, value, nigeId)
   if (err) return fail(err)
-  const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, value: round1(value) } : n))
+  const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, name: name.trim(), value } : n))
   return ok({ ...job, settings: { ...job.settings, nige } })
 }
 
@@ -293,7 +300,7 @@ export function nigeUsages(job: Job, nigeId: string): string[] {
 /** 逃げをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る */
 export function removeNiges(job: Job, nigeIds: readonly string[]): OpResult {
   const ids = new Set(nigeIds)
-  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('逃げが見つかりません')
+  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('調整寸法が見つかりません')
   return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => !ids.has(n.id)) } })
 }
 

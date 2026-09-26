@@ -56,7 +56,7 @@ describe('sampleFromTemplate（見本をひな形から作る）', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
     a = must(removeNiges(a, ['nige-0.5']))
     a = must(removeNiges(a, ['nige-1']))
-    a = must(addNige(a, 2, 'nige-2'))
+    a = must(addNige(a, '逃げ', 2, 'nige-2'))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings.nige.map((n) => n.value)).toEqual([2, 1])
     expect(finishedOf(job, '棚板')!.W).toBe(863)
@@ -65,10 +65,24 @@ describe('sampleFromTemplate（見本をひな形から作る）', () => {
   it('寸法 1 の逃げが別の id でも、その逃げを使う', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
     a = must(removeNiges(a, ['nige-1']))
-    a = must(addNige(a, 1, 'nige-mine'))
+    a = must(addNige(a, '逃げ', 1, 'nige-mine'))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings.nige.map((n) => n.id)).toEqual(['nige-0.5', 'nige-mine'])
     expect(job.parts.find((p) => p.name === '棚板')!.expr.W).toBe('天地板.W - {n:nige-mine}')
+  })
+
+  it('寸法 1 でも名前が違う調整寸法（ほぞ1）は使わず、逃げ1 を足す', () => {
+    let a = createJob('A', undefined, NOW, 'job-a')
+    a = must(removeNiges(a, ['nige-1']))
+    a = must(addNige(a, 'ほぞ', 1, 'hozo-1'))
+    const job = sampleFromTemplate(templateOf(a), NOW)
+    expect(job.settings.nige.map((n) => [n.name, n.value])).toEqual([
+      ['逃げ', 0.5],
+      ['ほぞ', 1],
+      ['逃げ', 1],
+    ])
+    expect(job.parts.find((p) => p.name === '棚板')!.expr.W).not.toContain('hozo-1')
+    expect(finishedOf(job, '棚板')!.W).toBe(863)
   })
 
   it('ひな形を変えない', () => {

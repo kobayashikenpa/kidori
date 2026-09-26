@@ -6,7 +6,8 @@ describe('defaultNige（新しい仕事の逃げ）', () => {
   it('逃げ0.5 と 逃げ1 の2つ（名前に mm は付けない）', () => {
     const n = defaultNige()
     expect(n.map((x) => x.value)).toEqual([0.5, 1])
-    expect(n.map((x) => nigeName(x.value))).toEqual(['逃げ0.5', '逃げ1'])
+    expect(n.map((x) => x.name)).toEqual(['逃げ', '逃げ'])
+    expect(n.map((x) => nigeName(x))).toEqual(['逃げ0.5', '逃げ1'])
   })
   it('id は nige-0.5 と nige-1（式から id で参照する）', () => {
     expect(defaultNige().map((x) => x.id)).toEqual(['nige-0.5', 'nige-1'])
@@ -21,14 +22,18 @@ describe('defaultNige（新しい仕事の逃げ）', () => {
   })
 })
 
-describe('nigeName（逃げの名前）', () => {
+describe('nigeName（調整寸法の表示名＝名前＋寸法）', () => {
+  const g = (value: number) => nigeName({ name: '逃げ', value })
   it('寸法を丸めずに出す（浮動小数の誤差だけ消す）。末尾の .0 は付けない', () => {
-    expect(nigeName(0.5)).toBe('逃げ0.5')
-    expect(nigeName(1)).toBe('逃げ1')
-    expect(nigeName(2.0)).toBe('逃げ2')
-    expect(nigeName(1.25)).toBe('逃げ1.25')
-    expect(nigeName(0.25)).toBe('逃げ0.25')
-    expect(nigeName(0.1 + 0.2)).toBe('逃げ0.3')
+    expect(g(0.5)).toBe('逃げ0.5')
+    expect(g(1)).toBe('逃げ1')
+    expect(g(2.0)).toBe('逃げ2')
+    expect(g(1.25)).toBe('逃げ1.25')
+    expect(g(0.25)).toBe('逃げ0.25')
+    expect(g(0.1 + 0.2)).toBe('逃げ0.3')
+  })
+  it('名前は登録した名前（ほぞ15。mm は付けない）', () => {
+    expect(nigeName({ name: 'ほぞ', value: 15 })).toBe('ほぞ15')
   })
 })
 

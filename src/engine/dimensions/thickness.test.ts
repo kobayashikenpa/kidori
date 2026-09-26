@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { bookshelfJob } from '../fixtures/bookshelf'
 import type { Axis, Part } from '../types'
 import { computeFinished } from './finished'
-import { detectThickness } from './thickness'
+import { detectThickness, thicknessChoice } from './thickness'
 
 const board18 = { thickness: 18 }
 
@@ -109,5 +109,53 @@ describe('detectThickness（厚みの寸法の判定）', () => {
       thicknessMismatch: false,
       faceAxes: ['W', 'D'],
     })
+  })
+})
+
+describe('thicknessChoice（部材の編集：厚みの寸法を表示だけにするか、選ぶ欄を出すか）', () => {
+  it('側板 W18・H1800・D400：W（自動）で決まり、選ぶ欄は出さない', () => {
+    expect(thicknessChoice(part(), board18, input(18, 1800, 400))).toEqual({
+      autoAxis: 'W',
+      candidates: ['W'],
+      ambiguous: false,
+      showSelector: false,
+    })
+  })
+
+  it('18×18×600 の桟：W と H が厚みと同じで決めきれない。自動は W、選ぶ欄を出す', () => {
+    expect(thicknessChoice(part(), board18, input(18, 18, 600))).toEqual({
+      autoAxis: 'W',
+      candidates: ['W', 'H'],
+      ambiguous: true,
+      showSelector: true,
+    })
+  })
+
+  it('小数第1位で比べる（18.04 は 18 と同じ、17.9 は違う）', () => {
+    expect(thicknessChoice(part(), board18, input(600, 18.04, 17.9)).candidates).toEqual(['H'])
+  })
+
+  it('手で選んだ軸がある部材は、決まっていても選ぶ欄を出す（自動の軸は手の選択によらない）', () => {
+    const r = thicknessChoice(part({ thicknessAxis: 'D' }), board18, input(18, 1800, 400))
+    expect(r).toEqual({ autoAxis: 'W', candidates: ['W'], ambiguous: false, showSelector: true })
+  })
+
+  it('厚みと同じ寸法が無い（不一致のエラー）ときは、選び直せるように選ぶ欄を出す', () => {
+    expect(thicknessChoice(part(), board18, input(19, 1800, 400))).toEqual({
+      autoAxis: null,
+      candidates: [],
+      ambiguous: false,
+      showSelector: true,
+    })
+  })
+
+  it('枚数0の行・材料が未設定の部材は判定しない（選ぶ欄も出さない）', () => {
+    const none = { autoAxis: null, candidates: [], ambiguous: false, showSelector: false }
+    expect(thicknessChoice(part({ quantity: 0 }), board18, input(18, 18, 600))).toEqual(none)
+    expect(thicknessChoice(part(), null, input(18, 18, 600))).toEqual(none)
+  })
+
+  it('計算できない軸は候補にしない', () => {
+    expect(thicknessChoice(part(), board18, { H: 18 })).toMatchObject({ autoAxis: 'H', candidates: ['H'], ambiguous: false })
   })
 })

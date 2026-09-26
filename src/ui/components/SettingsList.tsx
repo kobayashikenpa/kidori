@@ -1,11 +1,11 @@
-// 設定の画面の一覧（逃げ・材料で共通の見た目と操作）。
+// 設定の画面の一覧（調整寸法・材料で共通の見た目と操作）。
 // 上に追加の入力、その下に1行ずつ 名前・使っている部材・「編集」「削除」。
-// 編集・削除の確認は、その行がその場で形を変える。逃げ・材料の操作は呼ぶ側から受け取る
+// 編集・削除の確認は、その行がその場で形を変える。調整寸法・材料の操作は呼ぶ側から受け取る
 import { useEffect, useState, type ReactNode } from 'react'
 import type { OpResult } from '../../store/jobs'
 
 interface Props<T extends { id: string }> {
-  /** 一覧の名前（逃げ・材料）。確認の文に使う */
+  /** 一覧の名前（調整寸法・材料）。確認の文に使う */
   kind: string
   /** 画面の中で重ならない id の頭 */
   idPrefix: string

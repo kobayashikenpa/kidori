@@ -21,8 +21,8 @@ describe('見本（本棚 W900）', () => {
 
   it('逃げは 逃げ0.5mm・逃げ1mm（初期の材料4つは入れない）', () => {
     expect(job.settings.nige).toEqual([
-      { id: 'nige-0.5', value: 0.5 },
-      { id: 'nige-1', value: 1 },
+      { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+      { id: 'nige-1', name: '逃げ', value: 1 },
     ])
   })
 

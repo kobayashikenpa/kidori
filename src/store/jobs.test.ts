@@ -269,25 +269,80 @@ describe('仕事の名前・コピー・削除', () => {
 describe('逃げ', () => {
   it('逃げ1mm をもう1つ足すとエラー、逃げ2mm は足せて末尾に並ぶ', () => {
     const job = createJob('a')
-    const dup = addNige(job, 1)
+    const dup = addNige(job, '逃げ', 1)
     expect(dup.ok).toBe(false)
     if (!dup.ok) expect(dup.message).toBe('逃げ1 はすでにあります')
-    const next = unwrap(addNige(job, 2, 'nige-x'))
-    expect(next.settings.nige).toEqual([...job.settings.nige, { id: 'nige-x', value: 2 }])
+    const next = unwrap(addNige(job, '逃げ', 2, 'nige-x'))
+    expect(next.settings.nige).toEqual([...job.settings.nige, { id: 'nige-x', name: '逃げ', value: 2 }])
     expect(job.settings.nige).toHaveLength(2)
   })
 
   it('0 以下・数でない寸法は足せない', () => {
     const job = createJob('a')
-    expect(addNige(job, 0).ok).toBe(false)
-    expect(addNige(job, -1).ok).toBe(false)
-    expect(addNige(job, Number.NaN).ok).toBe(false)
+    expect(addNige(job, '逃げ', 0).ok).toBe(false)
+    expect(addNige(job, '逃げ', -1).ok).toBe(false)
+    expect(addNige(job, '逃げ', Number.NaN).ok).toBe(false)
+  })
+
+  it('名前が違えば同じ寸法でも足せる（ほぞ1）。名前は前後の空白を外し、空なら断る', () => {
+    const job = createJob('a')
+    const next = unwrap(addNige(job, ' ほぞ ', 1, 'n-hozo'))
+    expect(next.settings.nige.at(-1)).toEqual({ id: 'n-hozo', name: 'ほぞ', value: 1 })
+    const dup = addNige(next, 'ほぞ', 1)
+    expect(dup.ok).toBe(false)
+    if (!dup.ok) expect(dup.message).toBe('ほぞ1 はすでにあります')
+    expect(addNige(job, '  ', 1).ok).toBe(false)
+  })
+
+  it('名前と寸法を変えられる。式は id で参照しているので表示と値がついてくる', () => {
+    const job = bookshelfJob()
+    const next = unwrap(updateNige(job, 'nige-1', 'ほぞ', 15))
+    expect(next.settings.nige[1]).toEqual({ id: 'nige-1', name: 'ほぞ', value: 15 })
+    expect(computeDimensions(next).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(849)
+    expect(unwrap(updateNige(job, 'nige-1', '逃げ', 1)).settings.nige[1].value).toBe(1)
+    expect(updateNige(job, 'nige-1', '', 1).ok).toBe(false)
+  })
+
+  it('表示名（名前＋寸法）がほかと同じになるものは足せない・変えられない（逃げ1 と 5 → 逃げ15、逃げ と 15 → 逃げ15）', () => {
+    const job = unwrap(addNige(createJob('a'), '逃げ', 15, 'n-15'))
+    const add = addNige(job, '逃げ1', 5)
+    expect(add.ok).toBe(false)
+    if (!add.ok) expect(add.message).toBe('逃げ15 はすでにあります')
+    // 全角の「１」でも同じ表示名とみなす
+    expect(addNige(job, '逃げ１', 5).ok).toBe(false)
+    // 逆向き：先に「逃げ1」5 があって「逃げ」15 を足す
+    const job2 = unwrap(addNige(createJob('a'), '逃げ1', 5, 'n-x'))
+    expect(addNige(job2, '逃げ', 15).ok).toBe(false)
+    // 変更でも同じ
+    const upd = updateNige(job, 'nige-1', '逃げ1', 5)
+    expect(upd.ok).toBe(false)
+    if (!upd.ok) expect(upd.message).toBe('逃げ15 はすでにあります')
+    // 自分自身と同じ表示名への変更（名前の分け方を変えるだけ）はよい
+    expect(unwrap(updateNige(job, 'n-15', '逃げ1', 5)).settings.nige.at(-1)).toEqual({ id: 'n-15', name: '逃げ1', value: 5 })
+    // 表示名が違えば足せる（逃げ1 と 6 → 逃げ16）
+    expect(addNige(job, '逃げ1', 6).ok).toBe(true)
+  })
+
+  it('寸法は丸めずに持つ：逃げ0.25 を足しても 0.25、名前だけ変えても 0.25 のままで式の結果も変わらない', () => {
+    const job = unwrap(updateNige(bookshelfJob(), 'nige-1', '逃げ', 0.25))
+    expect(job.settings.nige[1]).toEqual({ id: 'nige-1', name: '逃げ', value: 0.25 })
+    const before = computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W
+    const renamed = unwrap(updateNige(job, 'nige-1', 'すき間', 0.25))
+    expect(renamed.settings.nige[1]).toEqual({ id: 'nige-1', name: 'すき間', value: 0.25 })
+    expect(computeDimensions(renamed).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(before)
+    expect(unwrap(addNige(createJob('a'), 'ほぞ', 0.25, 'n-h')).settings.nige.at(-1)!.value).toBe(0.25)
+    // 表示名が違えば別のもの（逃げ0.25 と 逃げ0.3）
+    expect(addNige(job, '逃げ', 0.3).ok).toBe(true)
+    // 浮動小数の誤差だけの違いは同じものとみなす
+    expect(addNige(job, '逃げ', 0.1 + 0.15).ok).toBe(false)
+    // 0 より大きければ小さい値も持てる
+    expect(addNige(job, '逃げ', 0.04).ok).toBe(true)
   })
 
   it('寸法を変えると式の値がついてくる。ほかの逃げと同じ寸法には変えられない', () => {
     const job = bookshelfJob()
-    expect(updateNige(job, 'nige-1', 0.5).ok).toBe(false)
-    const next = unwrap(updateNige(job, 'nige-1', 2))
+    expect(updateNige(job, 'nige-1', '逃げ', 0.5).ok).toBe(false)
+    const next = unwrap(updateNige(job, 'nige-1', '逃げ', 2))
     const shelf = computeDimensions(next).parts.find((d) => d.name === '棚板')!
     expect(shelf.finished?.W).toBe(862)
   })
