@@ -1007,6 +1007,9 @@ select.input {
 .kd-hints li + li {
   margin-top: 4px;
 }
+.kd-hints.pending ul {
+  opacity: 0.5;
+}
 .kd-summary {
   display: flex;
   flex-direction: column;

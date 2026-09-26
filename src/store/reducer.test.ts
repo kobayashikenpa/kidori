@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bookshelfJob } from '../engine/fixtures/bookshelf'
-import { createJob, updatePart, updateSettings } from './jobs'
+import { findSavingHints } from '../engine/hints/saving'
+import { createJob, newPart, updatePart, updateSettings } from './jobs'
 import { currentJob, initialState, storeReducer, type StoreState } from './reducer'
 
 const NOW = new Date('2026-09-24T10:00:00.000Z')
@@ -107,5 +108,36 @@ describe('removeJob', () => {
     const s2 = storeReducer(s1, { type: 'removeJob', id: 'job-other' })
     expect(s2.currentJobId).toBe(s0.currentJobId)
     expect(s2.jobs).toHaveLength(1)
+  })
+})
+
+describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
+  /** 初期の材料の仕事で、ラワン4 W602 H1200 D4（木目 H）×4枚・部材の切り代は空欄・仕事の切り代 0 */
+  function stateWithRawan(): StoreState {
+    const r = updateSettings(createJob('お知らせ', NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
+    if (!r.ok) throw new Error(r.message)
+    let job = r.job
+    const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
+    job = { ...job, parts: [newPart({ name: '棚', boardId: rawan4.id, expr: { W: '602', H: '1200', D: '4' }, quantity: 4, grain: 'H' })] }
+    return initialState({ status: 'ok', data: { jobs: [job], currentJobId: job.id } })
+  }
+  const apply = (s: StoreState, allowance: number) =>
+    storeReducer(s, { type: 'applyOp', jobId: 'job-h', op: (j) => updateSettings(j, { allowance }), now: NOW.toISOString() })
+
+  it('切り代を 0 → 5 → 0 と変えるたびに新しい仕事になり、お知らせがすぐ変わる', () => {
+    const s0 = stateWithRawan()
+    const j0 = currentJob(s0)!
+    expect(findSavingHints(j0)).toEqual([])
+
+    const s5 = apply(s0, 5)
+    const j5 = currentJob(s5)!
+    expect(j5).not.toBe(j0)
+    expect(j5.settings).not.toBe(j0.settings)
+    expect(j5.settings.allowance).toBe(5)
+    expect(findSavingHints(j5).map((h) => h.message)).toEqual(['切り代を 4mm にすると、ラワン 4mm が 1 枚減ります（2枚 → 1枚）'])
+
+    const back = currentJob(apply(s5, 0))!
+    expect(back).not.toBe(j5)
+    expect(findSavingHints(back)).toEqual([])
   })
 })
