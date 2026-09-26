@@ -24,14 +24,14 @@ describe('explainDimension（寸法表の内訳）', () => {
     expect(explanationText(e)).toBe('全体.W 900 − 側板.W 18 × 2 = 864')
   })
 
-  it('棚板.W：天地板.W 864 − 逃げ1 1 = 863（調整寸法は名前＋寸法と値）', () => {
+  it('棚板.W：天地板.W 864 − 逃げ1 = 863（調整寸法は名前＋寸法に値が入っているので、値を重ねて出さない）', () => {
     const e = explainDimension(bookshelfJob(), 'part-tanaita', 'W')!
     expect(e.pieces).toEqual([
       { kind: 'ref', ref: 'part', label: '天地板.W', value: 864 },
       { kind: 'op', text: '−' },
       { kind: 'ref', ref: 'nige', label: '逃げ1', value: 1 },
     ])
-    expect(explanationText(e)).toBe('天地板.W 864 − 逃げ1 1 = 863')
+    expect(explanationText(e)).toBe('天地板.W 864 − 逃げ1 = 863')
   })
 
   it('数だけの式は 数 = 結果（全体.W：900 = 900）', () => {
@@ -43,17 +43,17 @@ describe('explainDimension（寸法表の内訳）', () => {
   it('括弧・÷・符号・材料の厚みもそのままの順に並ぶ', () => {
     const job = withPart(bookshelfJob(), '仕切', '(全体.W - {t:' + LUMBER_18_ID + '}) / 2 + -1')
     const e = explainDimension(job, 'p-仕切', 'W')!
-    expect(explanationText(e)).toBe('( 全体.W 900 − シナランバー18 18 ) ÷ 2 + − 1 = 440')
+    expect(explanationText(e)).toBe('( 全体.W 900 − シナランバー18 ) ÷ 2 + − 1 = 440')
     expect(e.pieces[3]).toEqual({ kind: 'ref', ref: 'thickness', label: 'シナランバー18', value: 18 })
   })
 
-  it('小数は小数第1位まで（仕上がり 432.25 は 432.3）。調整寸法の値は丸めない（逃げ0.25 0.25）', () => {
+  it('小数は小数第1位まで（仕上がり 432.25 は 432.3）。調整寸法は名前＋寸法だけ（逃げ0.25）', () => {
     let job = bookshelfJob()
     job.settings.nige.push({ id: 'n-q', name: '逃げ', value: 0.25 })
     job = withPart(job, 'A', '864.5 / 2')
     job = withPart(job, 'B', 'A.W - {n:n-q}')
     expect(explanationText(explainDimension(job, 'p-A', 'W')!)).toBe('864.5 ÷ 2 = 432.3')
-    expect(explanationText(explainDimension(job, 'p-B', 'W')!)).toBe('A.W 432.3 − 逃げ0.25 0.25 = 432')
+    expect(explanationText(explainDimension(job, 'p-B', 'W')!)).toBe('A.W 432.3 − 逃げ0.25 = 432')
   })
 
   it('削除した調整寸法を使う式は結果が null で、エラーを返す', () => {

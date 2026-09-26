@@ -2,7 +2,7 @@
 import { boardTokenLabel, nigeName } from '../defaults'
 import { parse } from '../formula/parse'
 import { normalizePartName, tokenize } from '../formula/tokenize'
-import { round1 } from '../round'
+import { exactText, round1 } from '../round'
 import type { Axis, DimensionError, Job } from '../types'
 import { computeFinished, type FinishedDims } from './finished'
 
@@ -81,20 +81,21 @@ export function explainDimension(
   return { pieces, result, errors }
 }
 
-/** 内訳の数の表示。式に書いた数・調整寸法はそのまま（誤差だけ消す）、それ以外は小数第1位まで */
+/** 内訳の数の表示。式に書いた数はそのまま（誤差だけ消す）、それ以外は小数第1位まで */
 function num(v: number, exact: boolean): string {
-  return String(exact ? Number(v.toFixed(6)) : round1(v))
+  return exact ? exactText(v) : String(round1(v))
 }
 
 /**
- * 内訳を1行の文字にする（例：全体.W 900 − 側板.W 18 × 2 = 864）。
+ * 内訳を1行の文字にする（例：全体.W 900 − 側板.W 18 × 2 = 864、天地板.W 864 − 逃げ1 = 863）。
+ * 値を後ろに出すのは部材の寸法の参照だけ。調整寸法（逃げ1）・材料の厚み（ラワン4）は名前に値が入っているので名前だけ。
  * 値の無い参照は名前だけ、結果が無ければ「= 」の代わりに「?」
  */
 export function explanationText(e: DimensionExplanation): string {
   const words = e.pieces.map((p) => {
     if (p.kind === 'op') return p.text
     if (p.kind === 'number') return num(p.value, true)
-    return p.value === null ? p.label : `${p.label} ${num(p.value, p.ref === 'nige')}`
+    return p.ref !== 'part' || p.value === null ? p.label : `${p.label} ${num(p.value, false)}`
   })
   words.push(e.result === null ? '?' : `= ${num(e.result, false)}`)
   return words.join(' ')
