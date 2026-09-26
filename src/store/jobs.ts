@@ -1,4 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
+import { defaultNige } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -39,7 +40,7 @@ export function createJob(name: string, now: Date = new Date(), id: string = new
   return {
     id,
     name: name.trim() || '名前のない仕事',
-    settings: { ...DEFAULT_SETTINGS },
+    settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
     boards: [],
     parts: [],
     createdAt: t,
@@ -87,12 +88,13 @@ export function copyJob(
     id: newId('part'),
     boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
     expr: { ...p.expr },
+    checks: { ...p.checks },
     clearance: { ...p.clearance },
   }))
   return {
     id,
     name: copyName(job.name, existingNames),
-    settings: { ...job.settings },
+    settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     boards,
     parts,
     createdAt: t,
@@ -227,6 +229,8 @@ export function newPart(p: Partial<Part> = {}): Part {
     thicknessAxis: null,
     quantity: 1,
     grain: 'any',
+    memo: '',
+    checks: { finished: false, cut: false },
     clearance: {},
     allowance: null,
     ...p,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { defaultSettings } from '../engine/defaults'
 import { bookshelfJob, VENEER_4_ID } from '../engine/fixtures/bookshelf'
 import { computeDimensions } from '../engine/dimensions'
-import { DEFAULT_SETTINGS } from '../engine/types'
 import {
   BROKEN_BACKUP_INDEX_KEY,
   BROKEN_BACKUP_KEY,
@@ -151,7 +151,7 @@ describe('中身の検査と修復', () => {
       T1,
     )
     expect(r.status).toBe('repaired')
-    expect(r.data.jobs[0]!.settings).toEqual({ ...DEFAULT_SETTINGS, kerf: 4 })
+    expect(r.data.jobs[0]!.settings).toEqual({ ...defaultSettings(), kerf: 4 })
   })
 
   it('設定・板・部材が無い仕事も、空として読む', () => {
@@ -164,7 +164,7 @@ describe('中身の検査と修復', () => {
       T1,
     )
     const job = r.data.jobs[0]!
-    expect(job.settings).toEqual(DEFAULT_SETTINGS)
+    expect(job.settings).toEqual(defaultSettings())
     expect(job.boards).toEqual([])
     expect(job.parts).toEqual([])
   })

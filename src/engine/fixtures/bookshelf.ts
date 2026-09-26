@@ -1,4 +1,5 @@
 // 見本データ（本棚 W900）。テストで使う。期待する値は docs/tasks.md の「見本」の表を参照
+import { defaultNige } from '../defaults'
 import { BOARD_SIZES, DEFAULT_SETTINGS, type Board, type Job, type Part } from '../types'
 
 export const LUMBER_18_ID = 'board-shina-lumber-18'
@@ -10,6 +11,8 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
     thicknessAxis: null,
     quantity: 1,
     grain: 'any',
+    memo: '',
+    checks: { finished: false, cut: false },
     clearance: {},
     allowance: null,
     ...p,
@@ -63,7 +66,7 @@ export function bookshelfJob(): Job {
   return {
     id: 'job-bookshelf-w900',
     name: '本棚 W900',
-    settings: { ...DEFAULT_SETTINGS },
+    settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
     boards,
     parts,
     createdAt: '2026-01-01T00:00:00.000Z',

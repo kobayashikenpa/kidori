@@ -10,6 +10,14 @@ export const AXES: readonly Axis[] = ['W', 'H', 'D']
 /** 切り方：縦切り優先 / 横切り優先 / おまかせ */
 export type CutMode = 'vertical' | 'horizontal' | 'auto'
 
+/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}mm」を作る（nigeName） */
+export interface Nige {
+  /** 仕事の中で重複しない。式からはこの id で参照する（{n:id}） */
+  id: string
+  /** mm。0 より大きい */
+  value: number
+}
+
 /** 仕事ごとの設定 */
 export interface Settings {
   /** 刃厚（初期値 3） */
@@ -23,9 +31,12 @@ export interface Settings {
   allowance: number
   /** 切り方（初期値 縦切り優先） */
   cutMode: CutMode
+  /** 逃げ。登録順＝画面の並び順。同じ値（小数第1位で比較）は重ねて登録しない */
+  nige: Nige[]
 }
 
-export const DEFAULT_SETTINGS: Readonly<Settings> = {
+/** 設定の数値の初期値。逃げは配列なので含めない（新しい設定は defaults.ts の defaultSettings() で作る） */
+export const DEFAULT_SETTINGS: Readonly<Omit<Settings, 'nige'>> = {
   kerf: 3,
   trim: 5,
   allowance: 10,
@@ -63,6 +74,14 @@ export interface Board {
 /** 部材の木目：板の面になる2つの軸のどちらか、または「どちらでもよい」 */
 export type PartGrain = Axis | 'any'
 
+/** 加工のチェック（部材ごと。枚数ごとではない） */
+export interface PartChecks {
+  /** 仕上がり寸法の加工が終わった */
+  finished: boolean
+  /** 木取り寸法の加工（切り出し）が終わった */
+  cut: boolean
+}
+
 /** 部材 */
 export interface Part {
   id: string
@@ -77,6 +96,10 @@ export interface Part {
   /** 枚数（0 は切り出さない寸法だけの行） */
   quantity: number
   grain: PartGrain
+  /** 切り出した後の加工など。空文字＝なし */
+  memo: string
+  /** 加工のチェック */
+  checks: PartChecks
   /** 逃げ（mm）。板の面になる軸だけ有効 */
   clearance: Partial<Record<Axis, number>>
   /** 切り代の上書き。null は仕事の初期値 */
@@ -104,6 +127,8 @@ export type DimensionErrorKind =
   | 'cycle' // 循環参照
   | 'nonPositive' // 計算結果が 0 以下
   | 'divideByZero' // 0 で割った
+  | 'missingBoard' // 式が使っている材料の厚みの材料が削除されている
+  | 'missingNige' // 式が使っている逃げが削除されている
 
 export interface DimensionError {
   partId: string

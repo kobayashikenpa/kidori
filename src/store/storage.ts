@@ -1,4 +1,5 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
+import { defaultNige, defaultSettings } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { eq1 } from '../engine/round'
 import {
@@ -9,6 +10,7 @@ import {
   type BoardSizeKind,
   type CutMode,
   type Job,
+  type Nige,
   type Part,
   type PartGrain,
   type Settings,
@@ -98,14 +100,22 @@ function pick<T>(v: unknown, ok: (x: unknown) => x is T, fallback: T, fx: Fixes)
 function sanitizeSettings(v: unknown, fx: Fixes): Settings {
   if (!isRecord(v)) {
     fx.count++
-    return { ...DEFAULT_SETTINGS }
+    return defaultSettings()
   }
   return {
     kerf: pick(v.kerf, isNonNegative, DEFAULT_SETTINGS.kerf, fx),
     trim: pick(v.trim, isNonNegative, DEFAULT_SETTINGS.trim, fx),
     allowance: pick(v.allowance, isNonNegative, DEFAULT_SETTINGS.allowance, fx),
     cutMode: pick(v.cutMode, (x): x is CutMode => CUT_MODES.includes(x as CutMode), DEFAULT_SETTINGS.cutMode, fx),
+    // 保存データ第2版の検査と修復は S-05 で作る。ここでは読めなければ初期値にするだけ
+    nige: sanitizeNige(v.nige),
   }
+}
+
+/** 逃げ（仮）。配列で、id と 0 より大きい値がそろっているものだけ残す。配列でなければ初期値 */
+function sanitizeNige(v: unknown): Nige[] {
+  if (!Array.isArray(v)) return defaultNige()
+  return v.filter((x): x is Nige => isRecord(x) && isId(x.id) && isPositive(x.value)).map((x) => ({ id: x.id, value: x.value }))
 }
 
 /** 板。材料名・厚み・大きさが読めない板は外す（null） */
@@ -168,6 +178,11 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Par
     thicknessAxis: v.thicknessAxis === null ? null : pick(v.thicknessAxis, isAxis, null, fx),
     quantity: pick(v.quantity, (x): x is number => Number.isInteger(x) && (x as number) >= 0, 1, fx),
     grain: pick(v.grain, (x): x is PartGrain => x === 'any' || isAxis(x), 'any', fx),
+    memo: typeof v.memo === 'string' ? v.memo : '',
+    checks: {
+      finished: isRecord(v.checks) && v.checks.finished === true,
+      cut: isRecord(v.checks) && v.checks.cut === true,
+    },
     clearance: sanitizeClearance(v.clearance, fx),
     allowance: v.allowance === null || v.allowance === undefined ? null : pick(v.allowance, isNonNegative, null, fx),
   }

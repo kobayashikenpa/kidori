@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultSettings } from '../engine/defaults'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../engine/fixtures/bookshelf'
 import { computeDimensions } from '../engine/dimensions'
 import { DEFAULT_SETTINGS, type Job } from '../engine/types'
@@ -31,7 +32,7 @@ function unwrap(r: OpResult): Job {
 describe('createJob', () => {
   it('新しい仕事の設定は初期値で、板・部材はない', () => {
     const job = createJob('食器棚', new Date('2026-09-01T00:00:00Z'), 'job-1')
-    expect(job.settings).toEqual(DEFAULT_SETTINGS)
+    expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
     expect(job.boards).toEqual([])
     expect(job.parts).toEqual([])
@@ -47,7 +48,7 @@ describe('createJob', () => {
 describe('updateSettings', () => {
   it('設定の一部を変える', () => {
     const job = unwrap(updateSettings(bookshelfJob(), { kerf: 4, cutMode: 'auto' }))
-    expect(job.settings).toEqual({ ...DEFAULT_SETTINGS, kerf: 4, cutMode: 'auto' })
+    expect(job.settings).toEqual({ ...defaultSettings(), kerf: 4, cutMode: 'auto' })
   })
   it('負の数は断る', () => {
     expect(updateSettings(bookshelfJob(), { trim: -1 }).ok).toBe(false)
