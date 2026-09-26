@@ -1,5 +1,6 @@
 // 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
 import { useMemo, useState } from 'react'
+import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
@@ -19,7 +20,7 @@ interface Props {
 
 export function PartEditor({ part, onClose }: Props) {
   const { job, run } = useCurrentJob()
-  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: job.boards[0]?.id ?? null }))
+  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: orderedBoards(job)[0]?.id ?? null }))
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const patch = (p: Partial<Part>) => {
@@ -106,7 +107,7 @@ export function PartEditor({ part, onClose }: Props) {
             onChange={(e) => patch({ boardId: e.target.value || null })}
           >
             <option value="">（材料が未設定）</option>
-            {job.boards.map((b) => (
+            {orderedBoards(job).map((b) => (
               <option key={b.id} value={b.id}>
                 {boardLabel(b)}
               </option>

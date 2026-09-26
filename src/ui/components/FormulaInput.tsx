@@ -2,6 +2,7 @@
 // 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・材料の厚み・逃げ・数字・演算子のボタンだけで式を作る。
 // 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4・逃げ1 と見せる（「mm」は付けない）
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { orderedBoards } from '../../engine/boards'
 import { boardTokenLabel, nigeName } from '../../engine/defaults'
 import { formulaLabels } from '../../engine/formula/display'
 import { formulaUnits } from '../../engine/formula/units'
@@ -187,7 +188,7 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
             <div className="pad-group">
               <span className="pad-title">材料の厚み</span>
               <div className="pad-chips">
-                {job.boards.map((b) => (
+                {orderedBoards(job).map((b) => (
                   <button
                     key={b.id}
                     type="button"
