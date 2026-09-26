@@ -1,16 +1,21 @@
 // 寸法表の画面：部材ごとのカードで、①仕上がり寸法（青）と ②木取り寸法（橙）を別の段に分けて出す
 // 段ごとに「完了」のチェックがあり、チェックした段はグレーにする。メモもカードに出す
-import { useMemo } from 'react'
+// 「カード」「表（試作）」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
+import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
 import { boardLabel, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
+import { DimensionTable } from '../components/DimensionTable'
+import { Segmented } from '../components/Segmented'
+import { loadDimensionView, saveDimensionView, type DimensionView } from '../dimensionView'
 import { fmt } from '../format'
 
 export function DimensionScreen() {
   const { job, run } = useCurrentJob()
   const dims = useMemo(() => computeDimensions(job), [job])
   const pieces = job.parts.reduce((n, p) => n + p.quantity, 0)
+  const [view, setView] = useState<DimensionView>(loadDimensionView)
 
   return (
     <section>
@@ -20,17 +25,38 @@ export function DimensionScreen() {
         <span className="legend fin">① 仕上がり寸法</span>
         <span className="legend cut">② 木取り寸法</span>
       </p>
-      <div className="stack">
-        {job.parts.map((p, i) => (
-          <DimensionCard
-            key={p.id}
-            part={p}
-            dims={dims.parts[i]}
-            board={job.boards.find((b) => b.id === p.boardId) ?? null}
-            onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
-          />
-        ))}
-      </div>
+      <Segmented<DimensionView>
+        ariaLabel="寸法表の見せ方"
+        value={view}
+        options={[
+          { value: 'card', label: 'カード' },
+          { value: 'table', label: '表（試作）' },
+        ]}
+        onChange={(v) => {
+          setView(v)
+          saveDimensionView(v)
+        }}
+      />
+      {view === 'table' ? (
+        <>
+          <p className="lead" style={{ margin: '8px 0' }}>
+            青の数字（仕上がり寸法）を押すと内訳が開きます。完了のチェックはカードで付けます（完了した寸法はグレー）。
+          </p>
+          <DimensionTable job={job} dims={dims.parts} />
+        </>
+      ) : (
+        <div className="stack" style={{ marginTop: 10 }}>
+          {job.parts.map((p, i) => (
+            <DimensionCard
+              key={p.id}
+              part={p}
+              dims={dims.parts[i]}
+              board={job.boards.find((b) => b.id === p.boardId) ?? null}
+              onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
+            />
+          ))}
+        </div>
+      )}
     </section>
   )
 }

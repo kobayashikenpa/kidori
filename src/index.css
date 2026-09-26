@@ -1506,3 +1506,122 @@ select.input {
   display: flex;
   align-items: center;
 }
+
+/* ---------- 寸法表の表（試作。外すときはこの段を消す） ---------- */
+.dim-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.dim-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--surface);
+}
+.dim-table th,
+.dim-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0 3px;
+  text-align: right;
+  vertical-align: middle;
+}
+.dim-table thead th {
+  font-size: 12px;
+  padding: 6px 3px;
+  color: var(--muted);
+}
+.dim-table thead th.c-fin {
+  color: var(--fin);
+  background: var(--fin-soft);
+}
+.dim-table thead th.c-cut {
+  color: var(--cut);
+  background: var(--cut-soft);
+}
+.dim-table .c-name {
+  text-align: left;
+  font-weight: 700;
+  word-break: break-all;
+  padding-left: 6px;
+}
+.dim-table .c-qty {
+  width: 2.2em;
+}
+.dim-table td.c-fin {
+  background: var(--fin-soft);
+  padding: 0;
+}
+.dim-table td.c-cut {
+  background: var(--cut-soft);
+  color: var(--cut);
+  font-weight: 700;
+  white-space: nowrap;
+  padding-right: 6px;
+}
+.dim-table td.done,
+.dim-table td.done .dim-cell {
+  background: var(--bg);
+  color: var(--muted);
+}
+.dim-table .x {
+  margin: 0 1px;
+  font-weight: 400;
+}
+.dim-cell {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--fin);
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dim-cell.thick {
+  font-weight: 400;
+}
+.dim-cell.on {
+  outline: 2px solid var(--fin);
+  outline-offset: -2px;
+}
+.dim-cell.bad,
+.dim-note.bad {
+  color: var(--err);
+}
+.dim-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.dim-explain td {
+  text-align: left;
+  padding: 6px 8px 8px;
+  background: var(--fin-soft);
+}
+.dim-explain-head {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.dim-explain-text {
+  display: block;
+  font-size: 14px;
+  word-break: break-word;
+}
+.dim-explain-err {
+  display: block;
+  color: var(--err);
+  font-weight: 700;
+}
+.dim-table thead th.c-group {
+  text-align: center;
+  padding-bottom: 0;
+}
+.dim-table thead th.c-cut {
+  white-space: nowrap;
+}
