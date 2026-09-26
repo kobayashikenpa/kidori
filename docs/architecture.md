@@ -762,8 +762,9 @@ explanationText(e): string   // 「全体.W 900 − 側板.W 18 × 2 = 864」
 ### 9.3 厚みの寸法の自動表示（`dimensions/thickness.ts`）
 
 ```ts
-thicknessChoice(part, board, finished): { autoAxis; ambiguous; showSelector }
+thicknessChoice(part, board, finished): { autoAxis; candidates; ambiguous; showSelector }
 ```
 
-- `autoAxis`：自動で選ぶ軸（手で選んだ軸は見ない。W→H→D で材料の厚みと同じ最初の軸）。`ambiguous`：材料の厚みと同じ値の軸が2つ以上。`showSelector`：`ambiguous` か、手で選んだ軸があるとき
+- `autoAxis`：自動で選ぶ軸（手で選んだ軸は見ない。W→H→D で材料の厚みと同じ最初の軸）。`candidates`：材料の厚みと同じ値の軸。`ambiguous`：候補が2つ以上
+- `showSelector`：`ambiguous`、手で選んだ軸がある、厚みと同じ寸法が無い（不一致のエラーで「厚みの寸法を選んでください」と出るため）のどれか（暫定）。枚数0の行・材料が未設定なら false
 - 画面は `showSelector` が false なら「厚み：W（自動）」と表示だけにする
