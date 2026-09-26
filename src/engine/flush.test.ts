@@ -5,6 +5,7 @@ import { FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID } from './f
 import {
   flushBreakdown,
   flushBreakdownText,
+  flushesEmptiedByBoards,
   flushesUsingBoards,
   flushThickness,
   partsUsingFlushes,
@@ -126,6 +127,12 @@ describe('使っているものの一覧', () => {
     const job = flushJob()
     expect(flushesUsingBoards(job, [LAUAN_4_ID])).toEqual(['フラッシュ25'])
     expect(flushesUsingBoards(job, ['なし'])).toEqual([])
+  })
+
+  it('材料を削除すると表面材が無くなるフラッシュの名前', () => {
+    const job = flushJob()
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID])).toEqual([])
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID])).toEqual(['フラッシュ25'])
   })
 
   it('フラッシュを選んでいる部材の名前', () => {

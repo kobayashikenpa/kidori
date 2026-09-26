@@ -78,6 +78,17 @@ export function flushesUsingBoards(job: Pick<Job, 'flushes'>, boardIds: readonly
   return job.flushes.filter((f) => f.faces.some((x) => ids.has(x.boardId))).map((f) => f.name)
 }
 
+/** その材料をまとめて削除すると表面材が1つも残らなくなるフラッシュの名前（登録順）。材料を削除する前の確認に使う */
+export function flushesEmptiedByBoards(job: Pick<Job, 'boards' | 'flushes'>, boardIds: readonly string[]): string[] {
+  const ids = new Set(boardIds)
+  return job.flushes
+    .filter((f) => {
+      const live = f.faces.filter((x) => job.boards.some((b) => b.id === x.boardId))
+      return live.length > 0 && live.every((x) => ids.has(x.boardId))
+    })
+    .map((f) => f.name)
+}
+
 /** 材料の欄でそのフラッシュのどれかを選んでいる部材の名前（部材の並び順）。フラッシュを削除する前の確認に使う */
 export function partsUsingFlushes(job: Pick<Job, 'parts'>, flushIds: readonly string[]): string[] {
   const ids = new Set(flushIds)

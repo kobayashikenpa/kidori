@@ -34,6 +34,7 @@ export function FlushEditor() {
           const users = flushesUsages(job, [f.id]).parts
           return `${b ? flushThicknessText(b) : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
         }}
+        warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '表面材がありません（編集で選んでください）' : null)}
         add={<FlushForm flush={null} done={() => {}} />}
         renderEdit={(f, done) => <FlushForm flush={f} done={done} />}
         removeWarning={(ids) => {

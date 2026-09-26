@@ -2,7 +2,7 @@
 // 材料のサイズ（3×6・4×8・自由入力）と木目の方向は、木取りの画面で選ぶ（仕様書 5.1・9）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
-import { flushesUsingBoards } from '../../engine/flush'
+import { flushesEmptiedByBoards, flushesUsingBoards } from '../../engine/flush'
 import type { Board } from '../../engine/types'
 import { addBoard, boardLabel, boardsUsages, newBoard, partsUsingBoard, removeBoards, updateBoard } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -34,6 +34,7 @@ export function BoardEditor() {
         removeWarning={(ids) => {
           const u = boardsUsages(job, ids)
           const one = ids.length > 1 ? '選んだ材料' : 'この材料'
+          const emptied = flushesEmptiedByBoards(job, ids)
           if (u.cutFrom.length === 0 && u.thickness.length === 0 && u.flushes.length === 0) return null
           return (
             <>
@@ -50,6 +51,11 @@ export function BoardEditor() {
               {u.flushes.length > 0 && (
                 <p className="msg warn" style={{ margin: 0 }}>
                   フラッシュ <b>{u.flushes.join('・')}</b> の表面材に{one}を使っています。削除すると、その表面材は外れて、フラッシュの厚みが変わります。
+                </p>
+              )}
+              {emptied.length > 0 && (
+                <p className="msg warn" style={{ margin: 0 }}>
+                  <b>{emptied.join('・')}</b> の表面材が無くなります（木取りできなくなります）。
                 </p>
               )}
             </>
