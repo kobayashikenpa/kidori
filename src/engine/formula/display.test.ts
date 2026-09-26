@@ -11,15 +11,15 @@ function jobWithLauan4(): Job {
 }
 
 describe('unitLabel（単位の表示名）', () => {
-  it('全体.W - {n:nige-1} * 12 → 全体.W・−・逃げ1mm・×・1・2', () => {
+  it('全体.W - {n:nige-1} * 12 → 全体.W・−・逃げ1・×・1・2（mm は付けない）', () => {
     const job = bookshelfJob()
     const expr = '全体.W - {n:nige-1} * 12'
-    expect(formulaUnits(expr).map((u) => unitLabel(u, job))).toEqual(['全体.W', '−', '逃げ1mm', '×', '1', '2'])
+    expect(formulaUnits(expr).map((u) => unitLabel(u, job))).toEqual(['全体.W', '−', '逃げ1', '×', '1', '2'])
   })
 
-  it('材料の厚みは ラワン4mm、÷ と + と括弧', () => {
+  it('材料の厚みは ラワン4（mm は付けない）、÷ と + と括弧', () => {
     const job = jobWithLauan4()
-    expect(formulaLabels('(600 + {t:b-4}) / 2', job)).toEqual(['(', '6', '0', '0', '+', 'ラワン4mm', ')', '÷', '2'])
+    expect(formulaLabels('(600 + {t:b-4}) / 2', job)).toEqual(['(', '6', '0', '0', '+', 'ラワン4', ')', '÷', '2'])
   })
 
   it('消した逃げは（削除した逃げ）、消した材料は（削除した材料）', () => {
@@ -30,7 +30,7 @@ describe('unitLabel（単位の表示名）', () => {
   it('逃げの寸法を変えると表示名もついてくる', () => {
     const job = bookshelfJob()
     job.settings.nige[1].value = 2
-    expect(formulaLabels('天地板.W - {n:nige-1}', job)).toEqual(['天地板.W', '−', '逃げ2mm'])
+    expect(formulaLabels('天地板.W - {n:nige-1}', job)).toEqual(['天地板.W', '−', '逃げ2'])
   })
 
   it('全角で書いた部材の参照・数字は半角にそろえて見せる', () => {

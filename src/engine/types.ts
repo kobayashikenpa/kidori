@@ -10,7 +10,7 @@ export const AXES: readonly Axis[] = ['W', 'H', 'D']
 /** 切り方：縦切り優先 / 横切り優先 / おまかせ */
 export type CutMode = 'vertical' | 'horizontal' | 'auto'
 
-/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}mm」を作る（nigeName） */
+/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}」を作る（nigeName） */
 export interface Nige {
   /** 仕事の中で重複しない。式からはこの id で参照する（{n:id}） */
   id: string

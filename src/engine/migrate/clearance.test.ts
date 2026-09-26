@@ -80,13 +80,13 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     expect(computeDimensions(job).parts.find((p) => p.name === '天地板')!.finished!.W).toBeCloseTo(860.96, 9)
   })
 
-  it('逃げの値は丸めない：0.25 は 0.25 のまま（名前は 逃げ0.25mm）。0.25 と 0.3 は別の逃げ', () => {
+  it('逃げの値は丸めない：0.25 は 0.25 のまま（名前は 逃げ0.25）。0.25 と 0.3 は別の逃げ', () => {
     const legacy = legacyBookshelf()
     ;(find(legacy, '側板')).clearance = { D: 0.25 }
     ;(find(legacy, '背板')).clearance = { W: 0.3, H: 0.25 }
     const { job, changed } = migrateClearanceChecked(legacy, ids())
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 0.25, 0.3])
-    expect(nigeName(0.25)).toBe('逃げ0.25mm')
+    expect(nigeName(0.25)).toBe('逃げ0.25')
     const d = computeDimensions(job)
     expect(d.parts.find((p) => p.name === '側板')!.finished!.D).toBe(399.75)
     expect(d.parts.find((p) => p.name === '背板')!.finished).toEqual({ W: 899.7, H: 1799.75, D: 4 })

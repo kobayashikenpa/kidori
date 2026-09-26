@@ -2,7 +2,7 @@
 import { round1 } from './round'
 import { BOARD_SIZES, DEFAULT_SETTINGS, type Board, type Nige, type Settings } from './types'
 
-/** 新しい仕事の逃げ：逃げ0.5mm・逃げ1mm。呼ぶたびに新しい配列。id は仕事の中で重複しなければよいので固定 */
+/** 新しい仕事の逃げ：逃げ0.5・逃げ1。呼ぶたびに新しい配列。id は仕事の中で重複しなければよいので固定 */
 export function defaultNige(): Nige[] {
   return [
     { id: 'nige-0.5', value: 0.5 },
@@ -41,14 +41,14 @@ function mm(v: number): string {
 }
 
 /**
- * 逃げの名前（例：逃げ0.5mm、逃げ1mm、逃げ0.25mm）。
+ * 逃げの名前（例：逃げ0.5、逃げ1、逃げ0.25。「mm」は付けない。仕様書 4）。
  * 逃げは寸法そのものを式で引くので、名前も丸めない（0.25 を 0.3 と見せない）。浮動小数の誤差（0.1 + 0.2 など）だけ消す
  */
 export function nigeName(value: number): string {
-  return `逃げ${Number(value.toFixed(6))}mm`
+  return `逃げ${Number(value.toFixed(6))}`
 }
 
-/** 式の中の材料の厚みの表示（例：ラワン4mm。間に空白なし） */
+/** 式のボタン・式の中の材料の厚みの表示（例：ラワン4。「mm」は付けず、間に空白なし。仕様書 5.1） */
 export function boardTokenLabel(board: Pick<Board, 'material' | 'thickness'>): string {
-  return `${board.material}${mm(board.thickness)}mm`
+  return `${board.material}${mm(board.thickness)}`
 }
