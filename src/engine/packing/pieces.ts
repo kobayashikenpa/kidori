@@ -43,6 +43,8 @@ export interface ExpandResult {
   groups: BoardPieces[]
   /** 計算から除いた部材（枚数0の行は含めない） */
   skipped: PackingResult['skipped']
+  /** 木取り済み（checks.cut）で除いた部材 */
+  done: PackingResult['done']
 }
 
 function fmt(v: number): string {
@@ -54,9 +56,15 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   const partById = new Map(job.parts.map((p) => [p.id, p]))
   const byBoard = new Map<string, BoardPieces>()
   const skipped: ExpandResult['skipped'] = []
+  const done: ExpandResult['done'] = []
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
+    // 木取り済みの部材は、ほかの判定より先に除く（エラーがあっても直さずに済むように。仕様書 8）
+    if (partById.get(d.partId)?.checks.cut === true) {
+      done.push({ partId: d.partId, name: d.name, quantity: d.quantity, boardId: d.boardId })
+      continue
+    }
     const board = d.boardId ? boardById.get(d.boardId) : undefined
     if (!board) {
       skipped.push({ partId: d.partId, name: d.name, reason: 'noBoard' })
@@ -113,5 +121,5 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   }
 
   const groups = job.boards.map((b) => byBoard.get(b.id)).filter((g): g is BoardPieces => g !== undefined)
-  return { groups, skipped }
+  return { groups, skipped, done }
 }

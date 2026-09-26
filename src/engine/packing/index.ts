@@ -64,7 +64,7 @@ function preferFirst(a: Layout, b: Layout): boolean {
 
 export function packJob(job: Job, dims: DimensionResult): PackingResult {
   const { kerf, trim, cutMode } = job.settings
-  const { groups, skipped } = expandPieces(job, dims)
+  const { groups, skipped, done } = expandPieces(job, dims)
 
   const materials = groups.map(({ board, pieces, unplaced }): MaterialResult => {
     let chosen: Layout
@@ -93,5 +93,5 @@ export function packJob(job: Job, dims: DimensionResult): PackingResult {
   })
 
   const total = combineYield(materials.flatMap((m) => m.sheets.map(areasOf)))
-  return { materials, totalYieldRate: total.yieldRate, skipped }
+  return { materials, totalYieldRate: total.yieldRate, skipped, done }
 }

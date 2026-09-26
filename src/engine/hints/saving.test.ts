@@ -293,3 +293,11 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
     expect(hints.map((h) => h.message)).toEqual([HINT_4])
   })
 })
+
+describe('木取り済みの部材とお知らせ（第1.3版）', () => {
+  it('W445 ×4 に木取りの完了をつけると、お知らせは出ない', () => {
+    const job = jobWith(445, 4)
+    job.parts[0].checks.cut = true
+    expect(findSavingHints(job)).toEqual([])
+  })
+})

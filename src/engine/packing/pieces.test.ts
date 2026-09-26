@@ -192,3 +192,65 @@ describe('expandPieces（片の展開と木目による向き）', () => {
     expect(expand(job).groups.map((g) => g.board.id)).toEqual([LUMBER_18_ID])
   })
 })
+
+describe('木取り済み（checks.cut）の部材を除く（第1.3版）', () => {
+  function markCut(job: Job, name: string, finished = false) {
+    const p = job.parts.find((x) => x.name === name)!
+    p.checks = { finished, cut: true }
+  }
+
+  it('棚板の木取りを完了にすると片にせず done に入る（skipped には入らない）', () => {
+    const job = bookshelfJob()
+    markCut(job, '棚板')
+    const r = expand(job)
+    expect(group(job, LUMBER_18_ID).pieces.map((p) => p.name)).toEqual(['側板', '側板', '天地板', '天地板'])
+    expect(r.done).toEqual([{ partId: 'part-tanaita', name: '棚板', quantity: 4, boardId: LUMBER_18_ID }])
+    expect(r.skipped).toEqual([])
+  })
+
+  it('仕上がりの完了だけでは除かない', () => {
+    const job = bookshelfJob()
+    job.parts.find((p) => p.name === '棚板')!.checks = { finished: true, cut: false }
+    const r = expand(job)
+    expect(r.groups[0].pieces).toHaveLength(8)
+    expect(r.done).toEqual([])
+  })
+
+  it('背板を完了にすると、シナベニヤ 4 の組が無くなる', () => {
+    const job = bookshelfJob()
+    markCut(job, '背板', true)
+    const r = expand(job)
+    expect(r.groups.map((g) => g.board.id)).toEqual([LUMBER_18_ID])
+    expect(r.done.map((d) => d.name)).toEqual(['背板'])
+  })
+
+  it('材料が無い・式のエラー・厚みの不一致・入らない部材でも、完了なら done に入り skipped・unplaced には出ない', () => {
+    const job = bookshelfJob()
+    addPart(job, { id: 'x1', name: '材料なし', boardId: null, expr: { W: '100', H: '100', D: '18' }, checks: { finished: false, cut: true } })
+    addPart(job, { id: 'x2', name: '式エラー', expr: { W: '無い.W', H: '100', D: '18' }, checks: { finished: false, cut: true } })
+    addPart(job, { id: 'x3', name: '厚み違い', expr: { W: '100', H: '100', D: '20' }, checks: { finished: false, cut: true } })
+    addPart(job, { id: 'x4', name: '大きすぎ', expr: { W: '3000', H: '100', D: '18' }, checks: { finished: false, cut: true }, quantity: 2 })
+    const r = expand(job)
+    expect(r.skipped).toEqual([])
+    expect(r.groups[0].unplaced).toEqual([])
+    expect(r.done).toEqual([
+      { partId: 'x1', name: '材料なし', quantity: 1, boardId: null },
+      { partId: 'x2', name: '式エラー', quantity: 1, boardId: LUMBER_18_ID },
+      { partId: 'x3', name: '厚み違い', quantity: 1, boardId: LUMBER_18_ID },
+      { partId: 'x4', name: '大きすぎ', quantity: 2, boardId: LUMBER_18_ID },
+    ])
+  })
+
+  it('枚数0の行は完了でも done に入れない', () => {
+    const job = bookshelfJob()
+    markCut(job, '全体')
+    expect(expand(job).done).toEqual([])
+  })
+
+  it('done は部材の並び順', () => {
+    const job = bookshelfJob()
+    markCut(job, '背板')
+    markCut(job, '側板')
+    expect(expand(job).done.map((d) => d.name)).toEqual(['側板', '背板'])
+  })
+})

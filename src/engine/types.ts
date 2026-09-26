@@ -282,4 +282,9 @@ export interface PackingResult {
    * noThickness は第1.2版からは出ない（厚みが決まらない部材は thicknessMismatch になる）。型は以前のまま残す
    */
   skipped: { partId: string; name: string; reason: 'dimensionError' | 'thicknessMismatch' | 'noThickness' | 'noBoard' }[]
+  /**
+   * 木取り済み（寸法表で木取りの「完了」＝ checks.cut）で計算から除いた部材（第1.3版。仕様書 8）。
+   * 部材の並び順。枚数0の行は含めない。材料が無い・寸法のエラーがあっても skipped ではなくこちらに入る
+   */
+  done: { partId: string; name: string; quantity: number; boardId: string | null }[]
 }
