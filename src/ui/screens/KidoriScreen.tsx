@@ -29,6 +29,10 @@ export function KidoriScreen() {
   const unplaced = result.materials.flatMap((m) => m.unplaced.map((u) => ({ ...u, board: boardLabel(m) })))
   const empty = result.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
+  const doneBoardLabel = (boardId: string | null) => {
+    const b = job.boards.find((x) => x.id === boardId)
+    return b ? boardLabel(b) : '材料が未設定'
+  }
   const grainOf = (boardId: string): BoardGrain => job.boards.find((b) => b.id === boardId)?.grain ?? 'long'
 
   return (
@@ -57,7 +61,11 @@ export function KidoriScreen() {
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
-          <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と材料を入れてください。</p>
+          <p style={{ margin: '6px 0 0' }}>
+            {result.done.length > 0 && result.skipped.length === 0
+              ? 'すべての部材が木取り済みです。'
+              : '部材の画面で、枚数と材料を入れてください。'}
+          </p>
         </div>
       ) : (
         <SavingHints job={job} />
@@ -99,6 +107,20 @@ export function KidoriScreen() {
             {result.skipped.map((k) => (
               <li key={k.partId}>
                 <b>{k.name}</b>：{SKIP_REASON[k.reason]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {result.done.length > 0 && (
+        <div className="card kd-issues done">
+          <h4>木取り済み（計算から除いています）</h4>
+          <p className="band-note">寸法表で木取りの「完了」をつけた部材です。完了を外すと、木取りに戻ります。</p>
+          <ul>
+            {result.done.map((d) => (
+              <li key={d.partId} className="num">
+                <b>{d.name}</b>（{doneBoardLabel(d.boardId)}）{d.quantity}枚
               </li>
             ))}
           </ul>
