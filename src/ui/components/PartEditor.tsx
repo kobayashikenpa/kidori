@@ -145,7 +145,7 @@ export function PartEditor({ part, onClose }: Props) {
       {cutting && (
         <>
           <div className="field">
-            <span className="label">厚み</span>
+            {choice.showSelector && <span className="label">厚み</span>}
             {!choice.showSelector ? (
               <p className="thick-auto" style={{ margin: 0 }}>
                 {board ? `厚み：${choice.autoAxis ?? '—'}（自動）` : '厚み：材料を選ぶと自動で決まります'}
