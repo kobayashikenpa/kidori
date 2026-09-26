@@ -2,6 +2,7 @@
 // 材料のサイズ（3×6・4×8・自由入力）と木目の方向は、木取りの画面で選ぶ（仕様書 5.1・9）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
+import { flushesUsingBoards } from '../../engine/flush'
 import type { Board } from '../../engine/types'
 import { addBoard, boardLabel, boardsUsages, newBoard, partsUsingBoard, removeBoards, updateBoard } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -24,14 +25,16 @@ export function BoardEditor() {
         label={boardLabel}
         usage={(b) => {
           const users = partsUsingBoard(job, b.id)
-          return users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'
+          const flushes = flushesUsingBoards(job, [b.id])
+          const text = users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'
+          return flushes.length > 0 ? `${text}　フラッシュ：${flushes.join('・')}` : text
         }}
         add={<BoardForm board={null} done={() => {}} />}
         renderEdit={(b, done) => <BoardForm board={b} done={done} />}
         removeWarning={(ids) => {
           const u = boardsUsages(job, ids)
           const one = ids.length > 1 ? '選んだ材料' : 'この材料'
-          if (u.cutFrom.length === 0 && u.thickness.length === 0) return null
+          if (u.cutFrom.length === 0 && u.thickness.length === 0 && u.flushes.length === 0) return null
           return (
             <>
               {u.cutFrom.length > 0 && (
@@ -42,6 +45,11 @@ export function BoardEditor() {
               {u.thickness.length > 0 && (
                 <p className="msg warn" style={{ margin: 0 }}>
                   <b>{u.thickness.join('・')}</b> の式が{one}の厚みを使っています。削除すると、その寸法は「削除した材料の厚みを使っています」のエラーになります。
+                </p>
+              )}
+              {u.flushes.length > 0 && (
+                <p className="msg warn" style={{ margin: 0 }}>
+                  フラッシュ <b>{u.flushes.join('・')}</b> の表面材に{one}を使っています。削除すると、その表面材は外れて、フラッシュの厚みが変わります。
                 </p>
               )}
             </>

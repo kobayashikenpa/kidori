@@ -4,6 +4,7 @@ import type { Settings } from '../../engine/types'
 import { updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { BoardEditor } from '../components/BoardEditor'
+import { FlushEditor } from '../components/FlushEditor'
 import { NigeEditor } from '../components/NigeEditor'
 import { NumberField } from '../components/NumberField'
 import { Segmented } from '../components/Segmented'
@@ -78,6 +79,9 @@ export function SettingsScreen() {
 
       <h3>材料</h3>
       <BoardEditor />
+
+      <h3>フラッシュ</h3>
+      <FlushEditor />
 
       <h3>配色</h3>
       <Segmented<ThemeChoice>
