@@ -1,11 +1,11 @@
 // 寸法表の画面：部材ごとのカードで、①仕上がり寸法（青）と ②木取り寸法（橙）を別の段に分けて出す
-// 段ごとに「完了」のチェックがあり、チェックした段はグレーにする。メモもカードに出す
+// ① に仕上がりの「完了」のチェックがあり、完了した段はグレーにする（② の切り出しの完了は木取り画面で付ける）。メモもカードに出す
 // 「カード」「表」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { flushBreakdown } from '../../engine/flush'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
-import { boardLabel, setFlushCutCheck, setPartChecks } from '../../store/jobs'
+import { boardLabel, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { DimensionTable } from '../components/DimensionTable'
 import { Segmented } from '../components/Segmented'
@@ -41,12 +41,11 @@ export function DimensionScreen() {
       {view === 'table' ? (
         <>
           <p className="lead" style={{ margin: '8px 0' }}>
-            部材名を押すと完了を付けられます（完了したものはグレー）。青の数字を押すと内訳が開きます。
+            部材名を押すと仕上がりの完了を付けられます。切り出しの完了は木取り画面で付けます（完了したものはグレー）。青の数字を押すと内訳が開きます。
           </p>
           <DimensionTable
             job={job}
             dims={dims.parts}
-            onFlushCheck={(partId, boardId, done) => run((j) => setFlushCutCheck(j, partId, boardId, done))}
             onCheck={(partId, patch) => run((j) => setPartChecks(j, partId, patch))}
           />
         </>
@@ -58,7 +57,7 @@ export function DimensionScreen() {
               part={p}
               dims={dims.parts[i]}
               board={job.boards.find((b) => b.id === p.boardId) ?? null}
-            flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
+              flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
               flushFaceIds={p.flushId !== undefined ? (flushBreakdown(job, p.flushId)?.faces.map((f) => f.boardId) ?? []) : null}
               onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
             />
@@ -75,7 +74,7 @@ interface CardProps {
   board: Board | null
   /** フラッシュを選んだ部材ならその名前 */
   flushName: string | null
-  /** フラッシュの部材なら表面材の材料の id（完了は表面材ごと。表で付ける） */
+  /** フラッシュの部材なら表面材の材料の id（切り出しの完了は表面材ごと。木取り画面で付ける） */
   flushFaceIds: string[] | null
   onCheck: (patch: Partial<PartChecks>) => void
 }
@@ -172,11 +171,7 @@ function DimensionCard({ part, dims: d, board, flushName, flushFaceIds, onCheck 
                 <h4>
                   ② 木取り寸法
                 </h4>
-                {flushFaceIds ? (
-                  <span className="band-note">表面材ごとの完了は「表」で付けます</span>
-                ) : (
-                  <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
-                )}
+                <span className="band-note">{cutDone ? '切り出し済み（木取り画面で外せます）' : '切り出しの完了は木取り画面で付けます'}</span>
               </div>
               {d.cutSize && d.faceAxes ? (
                 <>
