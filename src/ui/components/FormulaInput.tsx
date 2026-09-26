@@ -52,7 +52,7 @@ interface Props {
   value: string
   onChange: (v: string) => void
   /** 表示名（ラワン4・逃げ1 など）を作るための材料と設定 */
-  job: Pick<Job, 'boards' | 'settings'>
+  job: Pick<Job, 'boards' | 'flushes' | 'settings'>
   /** 編集中の部材で選んでいる材料の id。厚みのボタンはこの材料の1つだけ出す（null なら出さない） */
   boardId: string | null
   /** 参照ボタンに出す部材（編集中の部材自身は除く） */

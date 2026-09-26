@@ -63,6 +63,7 @@ export function createJob(
       if (m.builtIn) b.builtIn = true
       return b
     }),
+    flushes: [],
     parts: [],
     createdAt: t,
     updatedAt: t,
@@ -121,6 +122,7 @@ export function copyJob(
     name: copyName(job.name, existingNames),
     settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     boards,
+    flushes: [],
     parts,
     createdAt: t,
     updatedAt: t,

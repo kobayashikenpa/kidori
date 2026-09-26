@@ -229,6 +229,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
       name: '棚',
       settings: { ...defaultSettings(), ...settings },
       boards,
+      flushes: [],
       parts: parts.map((p, i) => ({
         id: `p${i + 1}`,
         name: `背板${i + 1}`,

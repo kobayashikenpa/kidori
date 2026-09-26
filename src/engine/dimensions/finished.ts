@@ -1,5 +1,6 @@
 // 仕上がり寸法：計算順に式を計算する。仕上がり寸法 = 式の計算結果（逃げは式の中で引く）。0 以下はエラー
 import { evaluate } from '../formula/evaluate'
+import { thicknessOfId } from '../flush'
 import { normalizePartName } from '../formula/tokenize'
 import { round1 } from '../round'
 import { AXES, type Axis, type DimensionError, type Job } from '../types'
@@ -17,13 +18,12 @@ export interface FinishedDims {
 /**
  * 全部材の仕上がり寸法を求める。キーは部材の id。
  * - 参照先の値は、その部材の仕上がり寸法（式の計算結果）
- * - 材料の厚み {t:…} は job.boards の厚み、逃げ {n:…} は job.settings.nige の寸法
+ * - 材料の厚み {t:…} は job.boards の厚み（id がフラッシュなら合計の厚み。第1.5版）、逃げ {n:…} は job.settings.nige の寸法
  * - エラーのある寸法を参照している寸法は計算せず、元のエラーの寸法を from で示す
  */
-export function computeFinished(job: Pick<Job, 'parts' | 'boards' | 'settings'>): Map<string, FinishedDims> {
+export function computeFinished(job: Pick<Job, 'parts' | 'boards' | 'flushes' | 'settings'>): Map<string, FinishedDims> {
   const res = resolve(job.parts)
   const partById = new Map(job.parts.map((p) => [p.id, p]))
-  const boardById = new Map(job.boards.map((b) => [b.id, b]))
   const nigeById = new Map(job.settings.nige.map((n) => [n.id, n.value]))
   // 全角・半角をそろえた部材名 → id（式の中の参照は、そろえた名前で出てくる）
   const idByName = new Map<string, string>()
@@ -85,7 +85,7 @@ export function computeFinished(job: Pick<Job, 'parts' | 'boards' | 'settings'>)
         const id = idByName.get(part)
         return id === undefined ? null : (values.get(dimKey(id, axis)) ?? null)
       },
-      thickness: (boardId) => boardById.get(boardId)?.thickness ?? null,
+      thickness: (id) => thicknessOfId(job, id),
       nige: (nigeId) => nigeById.get(nigeId) ?? null,
     })
     if (!r.ok) return setOwnError(d, { partId: d.partId, axis: d.axis, kind: r.error.kind, message: r.error.message })

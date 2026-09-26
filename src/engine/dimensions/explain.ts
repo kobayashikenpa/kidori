@@ -1,5 +1,6 @@
 // 寸法表の内訳：式の各項（記号・数・参照とその値）と計算結果（仕様書 9「寸法表の表示の切り替え」、architecture.md 9.2）
-import { boardTokenLabel, nigeName } from '../defaults'
+import { nigeName } from '../defaults'
+import { thicknessOfId, thicknessRefLabel } from '../flush'
 import { parse } from '../formula/parse'
 import { normalizePartName, tokenize } from '../formula/tokenize'
 import { exactText, round1 } from '../round'
@@ -34,7 +35,7 @@ const OP_TEXT: Readonly<Record<string, string>> = { '+': '+', '-': '−', '*': '
  * finished に computeFinished(job) の結果を渡すと計算し直さない（寸法表でたくさん呼ぶとき用）
  */
 export function explainDimension(
-  job: Pick<Job, 'parts' | 'boards' | 'settings'>,
+  job: Pick<Job, 'parts' | 'boards' | 'flushes' | 'settings'>,
   partId: string,
   axis: Axis,
   finished: ReadonlyMap<string, FinishedDims> = computeFinished(job),
@@ -63,9 +64,9 @@ export function explainDimension(
         return { kind: 'ref', ref: 'part', label: `${tok.part}.${tok.axis}`, value }
       }
       case 'thickness': {
-        const board = job.boards.find((b) => b.id === tok.boardId)
-        return board
-          ? { kind: 'ref', ref: 'thickness', label: boardTokenLabel(board), value: board.thickness }
+        const label = thicknessRefLabel(job, tok.boardId)
+        return label !== null
+          ? { kind: 'ref', ref: 'thickness', label, value: thicknessOfId(job, tok.boardId) }
           : { kind: 'ref', ref: 'thickness', label: '（削除した材料）', value: null }
       }
       case 'nige': {

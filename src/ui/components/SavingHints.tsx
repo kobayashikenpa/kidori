@@ -6,12 +6,12 @@ import type { Job } from '../../engine/types'
 import { fmt } from '../format'
 
 export function SavingHints({ job }: { job: Job }) {
-  // お知らせの計算に使うのは 部材・材料・設定 だけ。どれかが変われば（切り代・端切りの変更を含む）必ず計算し直す
-  const { id, name, createdAt, parts, boards, settings } = job
+  // お知らせの計算に使うのは 部材・材料・フラッシュ・設定 だけ。どれかが変われば（切り代・端切りの変更を含む）必ず計算し直す
+  const { id, name, createdAt, parts, boards, flushes, settings } = job
   // 更新日時は操作のたびに変わるが、計算には使わないので、ここでは計算し直しの理由にしない
   const input = useMemo<Job>(
-    () => ({ id, name, createdAt, updatedAt: createdAt, parts, boards, settings }),
-    [id, name, createdAt, parts, boards, settings],
+    () => ({ id, name, createdAt, updatedAt: createdAt, parts, boards, flushes, settings }),
+    [id, name, createdAt, parts, boards, flushes, settings],
   )
   // 何回も計算し直すので、木取りの結果を先に出してから後回しで計算する（最初は null）
   const deferred = useDeferredValue<Job | null>(input, null)

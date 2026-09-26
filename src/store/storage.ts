@@ -271,6 +271,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     name,
     settings: sanitizeSettings(v.settings, fx),
     boards,
+    flushes: [],
     parts,
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
