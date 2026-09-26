@@ -11,6 +11,7 @@ import { DimensionTable } from '../components/DimensionTable'
 import { Segmented } from '../components/Segmented'
 import { loadDimensionView, saveDimensionView, type DimensionView } from '../dimensionView'
 import { fmt } from '../format'
+import { Help } from '../components/Help'
 
 export function DimensionScreen() {
   const { job, run } = useCurrentJob()
@@ -20,7 +21,13 @@ export function DimensionScreen() {
 
   return (
     <section>
-      <h2>寸法表</h2>
+      <h2>
+        <Help title="寸法表">
+          ① 仕上がり寸法は家具として仕上げる寸法、② 木取り寸法は切り代を足した、材料から切り出す寸法です。
+          {view === 'table' &&
+            ' 表では、部材名を押すと仕上がりの完了を付けられます。切り出しの完了は木取り画面で付けます（完了したものはグレー）。青の数字を押すと内訳が開きます。'}
+        </Help>
+      </h2>
       <p className="lead">
         部材 {job.parts.length}種類・合計 {pieces}枚。
         <span className="legend fin">① 仕上がり寸法</span>
@@ -40,9 +47,6 @@ export function DimensionScreen() {
       />
       {view === 'table' ? (
         <>
-          <p className="lead" style={{ margin: '8px 0' }}>
-            部材名を押すと仕上がりの完了を付けられます。切り出しの完了は木取り画面で付けます（完了したものはグレー）。青の数字を押すと内訳が開きます。
-          </p>
           <DimensionTable
             job={job}
             dims={dims.parts}

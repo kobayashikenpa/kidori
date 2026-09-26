@@ -16,6 +16,7 @@ import { SheetDiagram } from '../components/SheetDiagram'
 import { SheetSizePicker } from '../components/SheetSizePicker'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
+import { Help } from '../components/Help'
 
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
   noBoard: '材料が未設定',
@@ -70,25 +71,30 @@ export function KidoriScreen() {
 
   return (
     <section>
-      <h2>木取り</h2>
+      <h2>
+        <Help title="木取り">
+          刃厚・端切り・切り代は設定の画面で変えられます。部材ごとに切り代を入れた部材は、設定の切り代を変えてもその値のままです。
+        </Help>
+      </h2>
       <p className="lead num">
-        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm（設定の画面で変えられます）
+        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm
       </p>
       {own.length > 0 && (
         <p className="lead num">
-          部材ごとに切り代を入れた部材：{own.map((p) => `${p.name} ${fmt(p.allowance ?? 0)}mm`).join('・')}（設定の切り代を変えても、この値のまま）
+          部材ごとに切り代を入れた部材：{own.map((p) => `${p.name} ${fmt(p.allowance ?? 0)}mm`).join('・')}
         </p>
       )}
 
       <div className="field">
-        <span className="label">切り方</span>
+        <Help className="label" title="切り方">
+          {CUT_MODE_HINT[s.cutMode]}
+        </Help>
         <Segmented
           ariaLabel="切り方"
           value={s.cutMode}
           options={CUT_MODES}
           onChange={(v) => run((j) => updateSettings(j, { cutMode: v }))}
         />
-        <span className="hint">{CUT_MODE_HINT[s.cutMode]}</span>
       </div>
 
       {empty ? (

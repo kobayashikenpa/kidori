@@ -28,9 +28,6 @@ export function FlushEditor() {
   const { job, run } = useCurrentJob()
   return (
     <div className="stack">
-      <p className="lead" style={{ margin: 0 }}>
-        芯材の両面に表面材を貼って厚みを作る部材のための登録です。部材の「材料」の欄で選べます。表面材は材料ごとに木取りし、芯材は木取りに入れません。
-      </p>
       <SettingsList<Flush>
         kind="フラッシュ"
         idPrefix="flush"

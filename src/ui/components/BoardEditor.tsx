@@ -14,9 +14,6 @@ export function BoardEditor() {
   const { job, run } = useCurrentJob()
   return (
     <div className="stack">
-      <p className="lead" style={{ margin: 0 }}>
-        材料名と厚みで区別します。材料のサイズ（3×6・4×8）は木取りの画面で選びます。
-      </p>
       <SettingsList<Board>
         kind="材料"
         idPrefix="board"

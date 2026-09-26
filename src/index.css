@@ -1724,3 +1724,65 @@ select.input {
   border-color: var(--muted);
   color: var(--surface);
 }
+
+/* ---------- 見出しを押して出る説明（仕様書 9.1） ---------- */
+.help {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+.help-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  margin: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.field > .help {
+  margin: -12px 0 -10px; /* 押せる高さは 44px のまま、見た目の行間は変えない */
+}
+.help-mark {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--accent);
+  line-height: 1;
+}
+.help-btn[aria-expanded='true'] .help-mark {
+  font-weight: 700;
+}
+.help-bubble {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+h2 > .help,
+h3 > .help {
+  margin: -12px 0;
+}
+.lead.help {
+  color: var(--muted);
+  margin: -8px 0;
+}

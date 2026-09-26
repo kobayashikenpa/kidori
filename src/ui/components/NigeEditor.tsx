@@ -23,9 +23,6 @@ export function NigeEditor() {
   const { job, run } = useCurrentJob()
   return (
     <div className="stack">
-      <p className="lead" style={{ margin: 0 }}>
-        逃げ・ほぞなど、仕上がり寸法を伸ばしたり短くしたりする寸法です。式の中で足したり引いたりして使います（例：天地板.W − 逃げ1、棚板.D + ほぞ15）。名前や寸法を変えると、使っている式もついてきます。
-      </p>
       <SettingsList<Nige>
         kind="調整寸法"
         idPrefix="nige"

@@ -4,6 +4,7 @@ import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
 import { sampleFromTemplate } from '../../store/sample'
 import { useJobStore } from '../../store/useJobStore'
+import { Help } from '../components/Help'
 
 /** 更新日の表示（例：2026/9/25 14:05）。読めない日時なら空 */
 function formatDate(iso: string): string {
@@ -93,17 +94,19 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
 
   return (
     <section>
-      <h2>仕事</h2>
-      <p className="lead">仕事はこのスマホの中に保存されます。家具1台（1件の注文）を1つの仕事にします。</p>
+      <h2>
+        <Help title="仕事">仕事はこのスマホの中に保存されます。家具1台（1件の注文）を1つの仕事にします。</Help>
+      </h2>
 
       {creating ? (
         <form className="card stack" onSubmit={create}>
           <div className="field">
-            <label className="label" htmlFor="new-job-name">
-              新しい仕事の名前
-            </label>
+            <Help className="label" title="新しい仕事の名前">
+              あとで変えられます。空欄なら「名前のない仕事」になります
+            </Help>
             <input
               id="new-job-name"
+              aria-label="新しい仕事の名前"
               className="input"
               value={newName}
               placeholder="例：食器棚 W1200"
@@ -111,7 +114,6 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
               enterKeyHint="done"
               onChange={(e) => setNewName(e.target.value)}
             />
-            <span className="hint">あとで変えられます。空欄なら「名前のない仕事」になります</span>
           </div>
           <div className="sheet-foot">
             <button type="button" className="btn" onClick={() => setCreating(false)}>
@@ -239,7 +241,9 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
         <button type="button" className="btn ghost" onClick={addSample}>
           見本（本棚 W900）を追加
         </button>
-        <p className="lead" style={{ margin: 0 }}>使い方を試したいときだけ使ってください（今の設定で作ります。なくても困りません。あとで削除できます）</p>
+        <Help className="lead" title="見本について">
+          使い方を試したいときだけ使ってください（今の設定で作ります。なくても困りません。あとで削除できます）
+        </Help>
       </div>
     </section>
   )

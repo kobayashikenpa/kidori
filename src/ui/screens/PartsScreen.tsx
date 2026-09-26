@@ -6,6 +6,7 @@ import { boardLabel } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { PartEditor } from '../components/PartEditor'
 import { fmt } from '../format'
+import { Help } from '../components/Help'
 
 export function PartsScreen() {
   const { job } = useCurrentJob()
@@ -16,9 +17,11 @@ export function PartsScreen() {
 
   return (
     <section>
-      <h2>部材</h2>
+      <h2>
+        <Help title="部材">部材を押すと編集できます。枚数0の行（例：全体）は切り出さない、寸法だけの行です。</Help>
+      </h2>
       <p className="lead">
-        {job.parts.length}種類・合計 {pieces}枚。押すと編集できます。
+        {job.parts.length}種類・合計 {pieces}枚
       </p>
       <div className="stack">
         {job.parts.map((p) => (
