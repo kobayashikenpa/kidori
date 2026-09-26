@@ -34,6 +34,7 @@ src/
       scraps.ts        端材の取り出し
       yield.ts         歩留まり
       index.ts         packJob(job, dims)：おまかせの比較を含む入口
+    checklist.ts       cuttingChecklist(job, dims)：木取り画面の切り出しのチェックリスト（材料ごと。第1.6版）
   store/             仕事データの状態管理と保存
     jobs.ts            仕事・板・部材の追加／変更／削除（純粋関数）
     storage.ts         localStorage の読み書き（try/catch）

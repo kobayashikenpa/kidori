@@ -1,5 +1,6 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import type { CutChecklistRow } from '../engine/checklist'
 import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
@@ -549,4 +550,18 @@ export function setPartChecks(job: Job, partId: string, patch: Partial<PartCheck
     ...job,
     parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, ...patch } } : p)),
   })
+}
+
+/**
+ * 切り出しのチェックリスト（木取り画面。第1.6版）の行の完了を変える。
+ * ふつうの部材は checks.cut（setPartChecks）、フラッシュの表面材は checks.cutByBoard（setFlushCutCheck）
+ */
+export function setCutChecklistRow(
+  job: Job,
+  row: Pick<CutChecklistRow, 'kind' | 'partId' | 'boardId'>,
+  done: boolean,
+): OpResult {
+  return row.kind === 'flushFace'
+    ? setFlushCutCheck(job, row.partId, row.boardId, done)
+    : setPartChecks(job, row.partId, { cut: done })
 }

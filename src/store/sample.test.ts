@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { orderedBoards } from '../engine/boards'
+import { cuttingChecklist } from '../engine/checklist'
 import { computeDimensions } from '../engine/dimensions'
 import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
@@ -13,6 +14,7 @@ import {
   newBoard,
   removeBoards,
   removeNiges,
+  setCutChecklistRow,
   updateSettings,
   type JobOp,
   type OpResult,
@@ -188,5 +190,42 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
     const before = JSON.stringify(t)
     sampleFromTemplate(t, NOW)
     expect(JSON.stringify(t)).toBe(before)
+  })
+})
+
+describe('setCutChecklistRow（切り出しのチェックリストの完了）', () => {
+  const rowsOf = (job: Job) => cuttingChecklist(job, computeDimensions(job))
+
+  it('見本：メラミン1 の天地板を完了にすると、木取りで メラミン1 だけ除かれる。外すと戻る', () => {
+    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const groups = rowsOf(job)
+    expect(groups.map((g) => [boardLabel(g.board), g.rows.map((r) => `${r.partName} ${r.sizeLabel} ×${r.count}`)])).toEqual([
+      ['シナランバー 18mm', ['側板 1810×410 ×2', '棚板 873×390 ×4']],
+      ['シナベニヤ 4mm', ['背板 900×1800 ×1']],
+      ['メラミン 1mm', ['天地板 874×410 ×4']],
+      ['ラワン 4mm', ['天地板 874×410 ×4']],
+    ])
+    const mel = groups[2].rows[0]
+    const done = must(setCutChecklistRow(job, mel, true))
+    expect(rowsOf(done)[2].rows[0].done).toBe(true)
+    const r = packJob(done, computeDimensions(done))
+    expect(r.materials.map(boardLabel)).toEqual(['ラワン 4mm', 'シナランバー 18mm', 'シナベニヤ 4mm'])
+    const undone = must(setCutChecklistRow(done, mel, false))
+    expect(packJob(undone, computeDimensions(undone)).materials).toHaveLength(4)
+  })
+
+  it('ふつうの部材は checks.cut を変える（仕上がりの完了は変えない）', () => {
+    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const side = rowsOf(job)[0].rows[0]
+    const done = must(setCutChecklistRow(job, side, true))
+    expect(partOf(done, '側板').checks).toEqual({ finished: false, cut: true })
+    expect(rowsOf(done)[0].rows[0].done).toBe(true)
+  })
+
+  it('無い部材・表面材でない材料は断る', () => {
+    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    expect(setCutChecklistRow(job, { kind: 'part', partId: 'nope', boardId: 'x' }, true).ok).toBe(false)
+    const tenchi = partOf(job, '天地板')
+    expect(setCutChecklistRow(job, { kind: 'flushFace', partId: tenchi.id, boardId: 'x' }, true).ok).toBe(false)
   })
 })
