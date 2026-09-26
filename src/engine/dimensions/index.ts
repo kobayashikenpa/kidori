@@ -10,7 +10,7 @@ export function computeDimensions(job: Job): DimensionResult {
   const parts: PartDimensions[] = job.parts.map((p) => {
     const f = fin.get(p.id)!
     const board = p.boardId ? (boardById.get(p.boardId) ?? null) : null
-    const t = detectThickness(p, board, f.input, f.thicknessInput)
+    const t = detectThickness(p, board, f.input)
     const allowance = p.allowance ?? job.settings.allowance
     return {
       partId: p.id,

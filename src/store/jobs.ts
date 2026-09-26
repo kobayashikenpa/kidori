@@ -89,7 +89,6 @@ export function copyJob(
     boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
     expr: { ...p.expr },
     checks: { ...p.checks },
-    clearance: { ...p.clearance },
   }))
   return {
     id,
@@ -231,7 +230,6 @@ export function newPart(p: Partial<Part> = {}): Part {
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    clearance: {},
     allowance: null,
     ...p,
   }
@@ -239,9 +237,6 @@ export function newPart(p: Partial<Part> = {}): Part {
 
 function validatePartFields(part: Part): string | null {
   if (!(Number.isInteger(part.quantity) && part.quantity >= 0)) return '枚数は 0 以上の整数を入れてください'
-  for (const v of Object.values(part.clearance)) {
-    if (v !== undefined && !(Number.isFinite(v) && v >= 0)) return '逃げは 0 以上の数を入れてください'
-  }
   if (part.allowance !== null && !(Number.isFinite(part.allowance) && part.allowance >= 0)) {
     return '切り代は 0 以上の数を入れてください（空欄なら仕事の初期値）'
   }

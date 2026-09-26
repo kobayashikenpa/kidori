@@ -226,7 +226,6 @@ describe('中身の検査と修復', () => {
         p.quantity = -2
         p.grain = 'X'
         p.thicknessAxis = 'Z'
-        p.clearance = { H: 1, W: -3, Q: 2 }
         p.allowance = 'x'
         p.boardId = 'board-none'
       }),
@@ -237,7 +236,6 @@ describe('中身の検査と修復', () => {
     expect(p.quantity).toBe(1)
     expect(p.grain).toBe('any')
     expect(p.thicknessAxis).toBeNull()
-    expect(p.clearance).toEqual({ H: 1 })
     expect(p.allowance).toBeNull()
     expect(p.boardId).toBeNull()
     expect(() => computeDimensions(r.data.jobs[0]!)).not.toThrow()

@@ -33,6 +33,12 @@ describe('見本（本棚 W900）', () => {
     }
   })
 
+  it('棚板の W は 天地板.W − 逃げ1mm（部材ごとの逃げはない）', () => {
+    const tana = job.parts.find((p) => p.name === '棚板')!
+    expect(tana.expr.W).toBe('天地板.W - {n:nige-1}')
+    expect('clearance' in tana).toBe(false)
+  })
+
   it('板はシナランバー18とシナベニヤ4（サブロク・木目は長辺方向）', () => {
     expect(job.boards.map((b) => [b.material, b.thickness, b.width, b.length, b.grain])).toEqual([
       ['シナランバー', 18, 910, 1820, 'long'],

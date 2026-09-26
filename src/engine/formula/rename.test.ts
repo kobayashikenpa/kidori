@@ -41,7 +41,7 @@ describe('renamePart（部材名の変更と参照のつけ替え）', () => {
     expect(byName['外形']).toEqual({ W: '900', H: '1800', D: '400' })
     expect(byName['側板']).toEqual({ W: '18', H: '外形.H', D: '外形.D' })
     expect(byName['天地板']).toEqual({ W: '外形.W - 側板.W * 2', H: '18', D: '外形.D' })
-    expect(byName['棚板']).toEqual({ W: '天地板.W', H: '18', D: '外形.D - 20' })
+    expect(byName['棚板']).toEqual({ W: '天地板.W - {n:nige-1}', H: '18', D: '外形.D - 20' })
     expect(byName['背板']).toEqual({ W: '外形.W', H: '外形.H', D: '4' })
   })
 

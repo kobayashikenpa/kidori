@@ -70,7 +70,7 @@ describe('computeDimensions（寸法表のまとめ）', () => {
     expect(r.parts.map((p) => p.partId)).toEqual(job.parts.map((p) => p.id))
     expect(r.errors).toEqual([])
     const tana = r.parts[3]
-    expect(tana).toMatchObject({ name: '棚板', boardId: LUMBER_18_ID, input: { W: 864, H: 18, D: 380 } })
+    expect(tana).toMatchObject({ name: '棚板', boardId: LUMBER_18_ID, input: { W: 863, H: 18, D: 380 } })
   })
 
   it('参照先を変えると参照している部材も変わる（全体.W 900 → 1200）', () => {
@@ -124,25 +124,23 @@ describe('computeDimensions（寸法表のまとめ）', () => {
   })
 })
 
-describe('自分の寸法を参照する部材（W = A.H、逃げ H1）', () => {
-  it('厚みの寸法は W（逃げを引く前の 18 で判定）。仕上がり W は 17 なので不一致の印が付く', () => {
+describe('厚みの判定は仕上がり寸法で行う（W = A.H、H = 18 − 逃げ1mm）', () => {
+  it('どの軸も板の厚み 18 と合わないので、厚みは決まらず不一致の印が付く', () => {
     const job = bookshelfJob()
     job.parts.push({
       ...job.parts[1],
       id: 'a',
       name: 'A',
-      expr: { W: 'A.H', H: '18', D: '600' },
-      clearance: { H: 1 },
+      expr: { W: 'A.H', H: '18 - {n:nige-1}', D: '600' },
     })
     const r = computeDimensions(job)
     const a = r.parts.find((p) => p.partId === 'a')!
     expect(r.errors).toEqual([])
     expect(a).toMatchObject({
       finished: { W: 17, H: 17, D: 600 },
-      thicknessAxis: 'W',
+      thicknessAxis: null,
       thicknessMismatch: true,
-      faceAxes: ['H', 'D'],
-      cutSize: { W: 17, H: 27, D: 610 },
+      cutSize: null,
     })
   })
 })

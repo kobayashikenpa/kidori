@@ -87,10 +87,10 @@ describe('部材', () => {
   })
 
   it('名前を変えずに中身を変える', () => {
-    const job = unwrap(updatePart(bookshelfJob(), 'part-tanaita', { quantity: 5, clearance: { W: 2 } }))
+    const job = unwrap(updatePart(bookshelfJob(), 'part-tanaita', { quantity: 5, allowance: 3 }))
     const tana = job.parts.find((p) => p.id === 'part-tanaita')!
     expect(tana.quantity).toBe(5)
-    expect(tana.clearance).toEqual({ W: 2 })
+    expect(tana.allowance).toBe(3)
   })
 
   it('名前と式を同時に変えると、新しい式の参照もつけ替わる', () => {
@@ -234,10 +234,12 @@ describe('仕事の名前・コピー・削除', () => {
     const copy = copyJob(src, [])
     const side = copy.parts.find((p) => p.name === '側板')!
     side.expr.H = '1'
-    side.clearance.H = 99
+    side.checks.cut = true
+    copy.settings.nige[0].value = 9
     copy.settings.kerf = 9
     expect(src.parts.find((p) => p.name === '側板')!.expr.H).not.toBe('1')
-    expect(src.parts.find((p) => p.name === '側板')!.clearance.H).not.toBe(99)
+    expect(src.parts.find((p) => p.name === '側板')!.checks.cut).toBe(false)
+    expect(src.settings.nige[0].value).toBe(0.5)
     expect(src.settings.kerf).toBe(3)
   })
 

@@ -34,8 +34,6 @@ export function PartEditor({ part, onClose }: Props) {
   // ボタンの並びを開いている欄（1つだけ）
   const [padAxis, setPadAxis] = useState<Axis | null>(null)
   const faces = dims.faceAxes
-  // 逃げを入れられる軸＝engine が逃げを引く軸（厚みの寸法以外。厚みが決まらなければ3つとも）
-  const clearanceAxes = AXES.filter((a) => a !== dims.thicknessAxis)
   const board = job.boards.find((b) => b.id === draft.boardId) ?? null
   const cutting = draft.quantity > 0
   // 厚みの寸法が変わって、木目が面でない軸のままなら「どちらでもよい」とみなす（暫定：未決事項 15）
@@ -121,35 +119,6 @@ export function PartEditor({ part, onClose }: Props) {
           onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
         />
       ))}
-
-      <div className="field">
-        <span className="label">逃げ</span>
-        <div className="row" style={{ flexWrap: 'nowrap' }}>
-          {clearanceAxes.map((a) => (
-            <div key={a} className="field" style={{ flex: 1, minWidth: 0 }}>
-              <label className="hint" htmlFor={`part-clr-${a}`}>
-                {a}
-              </label>
-              <NumberField
-                id={`part-clr-${a}`}
-                allowEmpty
-                placeholder="0"
-                value={draft.clearance[a] ?? null}
-                onChange={(v) => {
-                  const c = { ...draft.clearance }
-                  if (v === null || v === 0) delete c[a]
-                  else c[a] = v
-                  patch({ clearance: c })
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        <span className="hint">
-          仕上がり寸法から引きます
-          {dims.thicknessAxis ? '' : '。厚みが決まるまでは W・H・D の3つとも引きます'}
-        </span>
-      </div>
 
       {cutting && (
         <>

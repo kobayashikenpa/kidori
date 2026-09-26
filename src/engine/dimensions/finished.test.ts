@@ -14,7 +14,6 @@ function mkPart(name: string, expr: Partial<Record<Axis, string>>, extra: Partia
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    clearance: {},
     allowance: null,
     ...extra,
   }
@@ -42,9 +41,9 @@ describe('computeFinished（仕上がり寸法）', () => {
     expect(finishedOf(bookshelfJob(), '天地板').finished).toEqual({ W: 864, H: 18, D: 400 })
   })
 
-  it('見本：棚板 W=863（入力 864 から逃げ1を引いた値）・D=380', () => {
+  it('見本：棚板 W=863（天地板.W 864 − 逃げ1mm）・D=380。仕上がり寸法 = 式の計算結果', () => {
     const f = finishedOf(bookshelfJob(), '棚板')
-    expect(f.input).toEqual({ W: 864, H: 18, D: 380 })
+    expect(f.input).toEqual({ W: 863, H: 18, D: 380 })
     expect(f.finished).toEqual({ W: 863, H: 18, D: 380 })
     expect(f.errors).toEqual([])
   })
@@ -72,8 +71,8 @@ describe('computeFinished（仕上がり寸法）', () => {
     expect(f.errors[0]).toMatchObject({ kind: 'nonPositive' })
   })
 
-  it('逃げを引いて 0 以下になるときも nonPositive', () => {
-    const f = finishedOf(withParts(mkPart('X', { W: '5' }, { clearance: { W: 5 } })), 'X')
+  it('逃げを引いて 0 以下になるときも nonPositive（1 − 逃げ1mm = 0）', () => {
+    const f = finishedOf(withParts(mkPart('X', { W: '1 - {n:nige-1}' })), 'X')
     expect(f.errors[0]).toMatchObject({ axis: 'W', kind: 'nonPositive' })
   })
 
@@ -108,31 +107,18 @@ describe('computeFinished（仕上がり寸法）', () => {
     expect(finishedOf(job, 'C').errors[0]).toMatchObject({ kind: 'cycle' })
   })
 
-  it('厚みの寸法には逃げを引かない（棚板 H に逃げ1 → H は 18 のまま）', () => {
+  it('逃げは式で引いた軸だけに効く（厚みの軸 H はそのまま 18）', () => {
     const job = bookshelfJob()
-    job.parts.find((p) => p.name === '棚板')!.clearance = { W: 1, H: 1, D: 2 }
+    job.parts.find((p) => p.name === '棚板')!.expr.D = '全体.D - 20 - {n:nige-0.5} * 4'
     expect(finishedOf(job, '棚板').finished).toEqual({ W: 863, H: 18, D: 378 })
   })
 
-  it('厚みと同じ値の軸が2つあるときは先の軸（W）が厚み。H の逃げは引く', () => {
-    const f = finishedOf(withParts(mkPart('X', { W: '18', H: '18', D: '600' }, { clearance: { H: 1 } })), 'X')
-    expect(f.finished).toEqual({ W: 18, H: 17, D: 600 })
-  })
-
-  it('厚みの寸法を手で選んでいれば、その軸には逃げを引かない', () => {
-    const f = finishedOf(
-      withParts(mkPart('桟', { W: '30', H: '18', D: '600' }, { thicknessAxis: 'W', clearance: { W: 1, H: 1 } })),
-      '桟',
-    )
-    expect(f.finished).toEqual({ W: 30, H: 17, D: 600 })
-  })
-
-  it('枚数0の行（板なし）は、指定した逃げをそのまま引く', () => {
+  it('枚数0の行（板なし）でも逃げを式で引ける。参照している部材も変わる', () => {
     const job = bookshelfJob()
-    job.parts[0].clearance = { W: 2 }
+    job.parts[0].expr.W = '900 - {n:nige-1} * 2'
     expect(finishedOf(job, '全体').finished).toEqual({ W: 898, H: 1800, D: 400 })
-    // 参照している天地板も変わる
     expect(finishedOf(job, '天地板').finished?.W).toBe(862)
+    expect(finishedOf(job, '棚板').finished?.W).toBe(861)
   })
 
   it('小数の計算も、丸め誤差なく参照先に渡る', () => {
@@ -149,21 +135,14 @@ describe('全角の式', () => {
   })
 })
 
-describe('自分の寸法を参照する部材の逃げと厚みの判定', () => {
-  // A：W = A.H、H 18、D 600、逃げ H1、板の厚み 18
-  const selfRef = () => mkPart('A', { W: 'A.H', H: '18', D: '600' }, { clearance: { H: 1 } })
+describe('自分の寸法を参照する部材', () => {
+  // A：W = A.H、H = 18 − 逃げ1mm、D 600
+  const selfRef = () => mkPart('A', { W: 'A.H', H: '18 - {n:nige-1}', D: '600' })
 
-  it('厚みの判定は自分の逃げを引く前の値で行い（W 18 → 厚みは W）、参照は逃げを引いた後の値（W = 17）', () => {
+  it('自分の別の軸を参照できる（W = A.H = 17）', () => {
     const f = finishedOf(withParts(selfRef()), 'A')
     expect(f.errors).toEqual([])
     expect(f.finished).toEqual({ W: 17, H: 17, D: 600 })
-    expect(f.input).toEqual({ W: 17, H: 18, D: 600 })
-    expect(f.thicknessInput).toEqual({ W: 18 })
-  })
-
-  it('隠れたエラーを残さない（全部材のエラーが空）', () => {
-    const fin = computeFinished(withParts(selfRef()))
-    expect([...fin.values()].flatMap((f) => f.errors)).toEqual([])
   })
 
   it('部材の並び順が変わっても同じ結果', () => {
@@ -172,41 +151,22 @@ describe('自分の寸法を参照する部材の逃げと厚みの判定', () =
     expect(finishedOf(job, 'A').finished).toEqual({ W: 17, H: 17, D: 600 })
   })
 
-  it('A.W を参照するほかの部材も 17 を受け取る', () => {
-    const job = withParts(mkPart('B', { W: 'A.W * 10' }), selfRef())
-    expect(finishedOf(job, 'B').finished?.W).toBe(170)
-  })
-
-  it('ほかの部材を通って自分の逃げに戻るとき（P.W = Q.W、Q.W = P.H、P の逃げ H1）は循環参照', () => {
+  it('ほかの部材を通って自分の別の軸に戻る（P.W = Q.W、Q.W = P.H）のは循環参照ではない', () => {
     const job = withParts(
-      mkPart('P', { W: 'Q.W', H: '18', D: '600' }, { clearance: { H: 1 } }),
+      mkPart('P', { W: 'Q.W', H: '18', D: '600' }),
       mkPart('Q', { W: 'P.H', H: '18', D: '100' }, { quantity: 0, boardId: null }),
     )
-    const p = finishedOf(job, 'P')
-    const q = finishedOf(job, 'Q')
-    expect(p.errors.map((e) => [e.axis, e.kind])).toEqual([
-      ['W', 'cycle'],
-      ['H', 'cycle'],
-    ])
-    const ph = p.errors.find((e) => e.axis === 'H')!
-    expect(ph.from).toBeUndefined()
-    expect(ph.message).toContain('厚み')
-    expect(p.errors.find((e) => e.axis === 'W')!.from).toEqual({ partId: 'id-P', axis: 'H' })
-    // 元のエラーのメッセージを1回だけ含む（入れ子にならない）
-    const pwMessage = p.errors.find((e) => e.axis === 'W')!.message
-    expect(pwMessage.split('参照している').length - 1).toBe(1)
-    expect(pwMessage).toContain(ph.message)
-    expect(q.errors).toEqual([expect.objectContaining({ axis: 'W', kind: 'cycle', from: { partId: 'id-P', axis: 'H' } })])
-    // 循環に関係しない寸法は計算できている
-    expect(p.input).toMatchObject({ H: 18, D: 600 })
+    expect(finishedOf(job, 'P').finished).toEqual({ W: 18, H: 18, D: 600 })
+    expect(finishedOf(job, 'Q').errors).toEqual([])
   })
 
-  it('循環参照の結果は、計算を始める部材の順に左右されない', () => {
-    const P = mkPart('P', { W: 'Q.W', H: '18', D: '600' }, { clearance: { H: 1 } })
-    const Q = mkPart('Q', { W: 'P.H', H: '18', D: '100' }, { quantity: 0, boardId: null })
-    const a = computeFinished(withParts(P, Q))
-    const b = computeFinished(withParts(Q, P))
-    expect(a.get('id-P')).toEqual(b.get('id-P'))
-    expect(a.get('id-Q')).toEqual(b.get('id-Q'))
+  it('同じ軸に戻るのは循環参照。循環に関係しない軸は計算できる', () => {
+    const job = withParts(
+      mkPart('P', { W: 'Q.W - {n:nige-1}', H: '18', D: '600' }),
+      mkPart('Q', { W: 'P.W', H: '18', D: '100' }, { quantity: 0, boardId: null }),
+    )
+    const p = finishedOf(job, 'P')
+    expect(p.errors.map((e) => [e.axis, e.kind])).toEqual([['W', 'cycle']])
+    expect(p.input).toEqual({ H: 18, D: 600 })
   })
 })

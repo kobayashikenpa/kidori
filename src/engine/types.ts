@@ -100,8 +100,6 @@ export interface Part {
   memo: string
   /** 加工のチェック */
   checks: PartChecks
-  /** 逃げ（mm）。板の面になる軸だけ有効 */
-  clearance: Partial<Record<Axis, number>>
   /** 切り代の上書き。null は仕事の初期値 */
   allowance: number | null
 }
@@ -150,9 +148,9 @@ export interface PartDimensions {
   name: string
   quantity: number
   boardId: string | null
-  /** 式の計算結果。エラーがあれば null */
+  /** 式の計算結果。エラーがあれば null。第1.1版からは finished と同じ値 */
   input: Record<Axis, number> | null
-  /** 仕上がり寸法（入力 − 逃げ） */
+  /** 仕上がり寸法（式の計算結果。逃げは式の中で引く） */
   finished: Record<Axis, number> | null
   /** 採用した厚みの寸法 */
   thicknessAxis: Axis | null

@@ -146,21 +146,6 @@ function sanitizeExpr(v: unknown, fx: Fixes): Record<Axis, string> {
   return { W: one(src.W), H: one(src.H), D: one(src.D) }
 }
 
-function sanitizeClearance(v: unknown, fx: Fixes): Partial<Record<Axis, number>> {
-  if (v === undefined || v === null) return {}
-  if (!isRecord(v)) {
-    fx.count++
-    return {}
-  }
-  const out: Partial<Record<Axis, number>> = {}
-  for (const [k, x] of Object.entries(v)) {
-    if (x === undefined) continue
-    if (isAxis(k) && isNonNegative(x)) out[k] = x
-    else fx.count++
-  }
-  return out
-}
-
 /** 部材。id・名前が読めない部材は外す（null）。ほかの値は初期値に直す */
 function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Part | null {
   if (!isRecord(v) || !isId(v.id) || typeof v.name !== 'string') return null
@@ -183,7 +168,6 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Par
       finished: isRecord(v.checks) && v.checks.finished === true,
       cut: isRecord(v.checks) && v.checks.cut === true,
     },
-    clearance: sanitizeClearance(v.clearance, fx),
     allowance: v.allowance === null || v.allowance === undefined ? null : pick(v.allowance, isNonNegative, null, fx),
   }
 }

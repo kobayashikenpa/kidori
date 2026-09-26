@@ -24,7 +24,6 @@ function addPart(job: Job, p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    clearance: {},
     allowance: null,
     ...p,
   })

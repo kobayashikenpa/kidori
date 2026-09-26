@@ -35,8 +35,6 @@ export function DimensionScreen() {
 
 function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensions; board: Board | null }) {
   const cutting = part.quantity > 0
-  // engine が逃げを引いた軸（厚みの寸法以外。厚みが決まらなければ3つとも）
-  const clearances = AXES.filter((a) => (part.clearance[a] ?? 0) !== 0 && a !== d.thicknessAxis)
 
   return (
     <article className="card dim-card">
@@ -74,9 +72,6 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
                 </div>
               ))}
             </div>
-            {clearances.length > 0 && (
-              <p className="band-note">逃げ {clearances.map((a) => `${a} ${fmt(part.clearance[a]!)}`).join('・')} を引いた値</p>
-            )}
           </section>
 
           {cutting && (

@@ -13,7 +13,6 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    clearance: {},
     allowance: null,
     ...p,
   }
@@ -48,10 +47,9 @@ export function bookshelfJob(): Job {
       id: 'part-tanaita',
       name: '棚板',
       boardId: LUMBER_18_ID,
-      expr: { W: '天地板.W', H: '18', D: '全体.D - 20' },
+      expr: { W: '天地板.W - {n:nige-1}', H: '18', D: '全体.D - 20' },
       quantity: 4,
       grain: 'W',
-      clearance: { W: 1 },
     }),
     part({
       id: 'part-seita',

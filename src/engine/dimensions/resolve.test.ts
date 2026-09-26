@@ -14,7 +14,6 @@ function mkPart(name: string, expr: Partial<Record<Axis, string>>): Part {
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    clearance: {},
     allowance: null,
   }
 }
