@@ -61,7 +61,8 @@ export interface ChangedPart {
  * 4. 式を「元の式 - {n:id}」（数値1つ・参照1つ以外は括弧をつける）に書き換える
  * 5. 書き換えた後の自動判定で厚みの軸が以前と変わる部材は、以前の軸を手で選んだことにする（thicknessAxis に入れる）
  * 6. 以前の計算と、書き換えた後の計算で、仕上がり寸法・厚みの軸・木取り寸法を比べ、違う部材を changed に入れる
- *    （部材はそのまま残す。例：以前は厚みが決まらなかった部材が、今は決まるとき）
+ *    （部材はそのまま残す）。ただし、以前は厚みが決まらなかった（木取り寸法が出なかった）部材が、
+ *    仕上がり寸法は同じまま今は厚みが決まるときは、良くなっただけなので入れない
  * 7. メモ・チェックが無ければ足す
  * 部材ごとの逃げの無い仕事は、逃げ・メモ・チェックを補うだけなので、2回移し替えても変わらない
  */
@@ -124,7 +125,10 @@ export function migrateClearanceChecked(
     .filter((p) => {
       const a = v1.get(p.id)!
       const b = after.get(p.id)!
-      return a.thicknessAxis !== b.thicknessAxis || !sameDims(a.finished, b.finished) || !sameDims(a.cutSize, b.cutSize)
+      if (!sameDims(a.finished, b.finished)) return true
+      // 以前は厚みが決まらず木取り寸法が出なかった部材が、今は決まるのは良くなっただけなので知らせない
+      if (a.thicknessAxis === null) return false
+      return a.thicknessAxis !== b.thicknessAxis || !sameDims(a.cutSize, b.cutSize)
     })
     .map((p) => ({ partId: p.id, name: p.name }))
   return { job: migrated, changed }

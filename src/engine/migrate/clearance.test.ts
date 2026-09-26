@@ -220,10 +220,12 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     expect(after[1]).toEqual(before[1])
     expect(after[1]).toEqual({ name: 'B', finished: { W: 18, H: 500, D: 300 }, thicknessAxis: 'W', cutSize: { W: 18, H: 510, D: 310 } })
     // A は以前は厚みが決まらなかった（どの軸も 18 でない）が、今は H が 18 になり厚みが H に決まる。
-    // 「厚みが決まらない」は今の形では残せないので、変わった部材として知らせる
+    // 仕上がり寸法は同じで、木取り寸法が出るようになっただけなので、変わった部材として知らせない
     expect(before[0]!.thicknessAxis).toBeNull()
+    expect(before[0]!.cutSize).toBeNull()
     expect(after[0]!.thicknessAxis).toBe('H')
-    expect(changed).toEqual([{ partId: 'a', name: 'A' }])
+    expect(after[0]!.cutSize).toEqual({ W: 410, H: 18, D: 310 })
+    expect(changed).toEqual([])
   })
 
   it('手で選んだ厚みの軸はそのまま（固定し直さない）', () => {
@@ -234,5 +236,16 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     expect(find(job, 'P').thicknessAxis).toBe('D')
     expect(after).toEqual(before)
     expect(changed).toEqual([])
+  })
+
+  it('以前は厚みの判定の循環でエラーだった部材が、今は計算できるときは、変わった部材として知らせる', () => {
+    const legacy = legacyJob([
+      lp({ id: 'p', name: 'P', expr: { W: 'Q.W', H: '18', D: '600' }, clearance: { H: 1 } }),
+      lp({ id: 'q', name: 'Q', expr: { W: 'P.H', H: '18', D: '100' }, quantity: 0, boardId: null }),
+    ])
+    const { before, after, changed } = beforeAfter(legacy)
+    expect(before[0]!.finished).toBeNull()
+    expect(after[0]!.finished).toEqual({ W: 17, H: 17, D: 600 })
+    expect(changed.map((c) => c.name)).toContain('P')
   })
 })

@@ -436,7 +436,20 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     expect(computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(863)
   })
 
-  it('移し替えで寸法が変わった部材があれば、ok のまま部材名を知らせる', () => {
+  it('移し替えで寸法が変わった部材があれば、ok のまま部材名を知らせる（以前は厚みの判定の循環でエラーだった P）', () => {
+    const legacy = legacyBookshelf()
+    legacy.parts = [
+      ...legacy.parts,
+      { ...legacy.parts[1], id: 'p', name: 'P', expr: { W: 'Q.W', H: '18', D: '600' }, clearance: { H: 1 }, quantity: 1 },
+      { ...legacy.parts[1], id: 'q', name: 'Q', expr: { W: 'P.H', H: '18', D: '100' }, clearance: {}, quantity: 0, boardId: null },
+    ]
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacy] }) })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('ok')
+    expect(r.status === 'ok' && r.message).toBe(`以前の版から移したときに寸法が変わった部材：${legacy.name}の P・Q（寸法表で確かめてください）`)
+  })
+
+  it('以前は厚みが決まらなかった部材が、仕上がり寸法は同じまま今は決まるだけなら知らせない', () => {
     const legacy = legacyBookshelf()
     legacy.parts = [
       ...legacy.parts,
@@ -445,8 +458,7 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     ]
     const s = memoryStorage({ [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacy] }) })
     const r = loadSaved(s, T1)
-    expect(r.status).toBe('ok')
-    expect(r.status === 'ok' && r.message).toBe(`以前の版から移したときに寸法が変わった部材：${legacy.name}の A（寸法表で確かめてください）`)
+    expect(r.status === 'ok' && r.message).toBeFalsy()
   })
 
   it('寸法の変わらない移し替えでは知らせない', () => {
