@@ -1,7 +1,10 @@
-# kidori 設計（第1版）
+# kidori 設計（第1版・第1.1版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
+計画係（planner）が決めたものには **決定（planner）** を付けている。
+
+> **第1.1版の変更は 6章にまとめている。** 1〜5章と 6章が食い違うところは 6章が正（例：部材ごとの逃げ `Part.clearance` は第1.1版でなくなる）。
 
 ## 1. 全体の構成
 
@@ -316,3 +319,217 @@ export interface PackingResult {
 | 設定 | 刃厚・耳落とし・切り代（よく使う値のボタン＋数値入力）・切り方。板の一覧と追加・編集・削除（使っている部材がある場合は部材名を示して確認） |
 
 **配置図**（`SheetDiagram.tsx`）：`viewBox` を板の寸法（mm）にして画面幅に合わせる。`sheet.orientation` が landscape なら長辺を横にする。端切り（`sheet.trims`）・部材（名前と寸法）・端材を色分け。y は上が + なので描くときに反転する。
+
+---
+
+## 6. 第1.1版の変更（実機で使ってみての改善）
+
+仕様書 4（逃げ）・5.1・5.2（メモ）・5.4・6・9（お知らせ・加工のチェック・メモ）・10 の変更に対応する。材料と逃げは仕事ごと（決定（オーナー））。
+
+### 6.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts               Nige・Settings.nige・Part.memo・Part.checks を追加、Part.clearance を削除
+  defaults.ts            defaultNige()・defaultBoards(newId)・nigeName()・boardTokenLabel()
+  formula/
+    tokenize.ts          材料の厚み・逃げの字句 {t:…} {n:…} を読む
+    parse.ts / evaluate.ts  厚み・逃げの値を受け取って計算する
+    units.ts             式を「カーソルで動く単位」に分ける（ボタン入力と表示用）
+    display.ts           単位を画面の表示名に変える（ラワン4mm、逃げ1mm など）
+    usages.ts            材料の厚み・逃げを使っている部材の一覧、id のつけ替え
+  dimensions/finished.ts 逃げの処理をなくし、仕上がり寸法 = 式の計算結果 にする
+  migrate/clearance.ts   以前の版の部材ごとの逃げを、設定の逃げ＋式に移す
+  migrate/v1Dimensions.ts 以前の版の寸法の計算（移し替えの前後で寸法が変わらないかを確かめるためだけに使う）
+  hints/saving.ts        材料を減らせるときのお知らせ
+src/store/
+  storage.ts             保存データ第2版（キー kidori.jobs.v2）と第1版からの移し替え
+  jobs.ts                新しい仕事の初期値（材料・逃げ）、逃げの追加・変更・削除、メモ・チェック
+src/ui/
+  formulaEdit.ts         カーソル（単位の番号）での挿入・左右移動・1字消す・全部消す
+  components/FormulaInput.tsx  キーボードを出さない式の入力
+  components/NigeEditor.tsx    設定の画面の逃げの一覧
+  components/SavingHints.tsx   木取りの画面のお知らせ
+```
+
+### 6.2 データ型の変更（`types.ts`）
+
+```ts
+/** 逃げ（仕事ごと）。名前は持たず、表示のたびに value から「逃げ{value}mm」を作る */
+export interface Nige {
+  id: string      // 仕事の中で重複しない。式からはこの id で参照する
+  value: number   // mm。0 より大きい
+}
+
+export interface Settings {
+  kerf: number
+  trim: number
+  allowance: number
+  cutMode: CutMode
+  nige: Nige[]    // 登録順＝画面の並び順。同じ値（小数第1位で比較）は重ねて登録しない
+}
+
+export interface PartChecks {
+  finished: boolean  // 仕上がり寸法の加工が終わった
+  cut: boolean       // 木取り寸法の加工（切り出し）が終わった
+}
+
+export interface Part {
+  id: string
+  name: string
+  boardId: string | null
+  expr: Record<Axis, string>
+  thicknessAxis: Axis | null
+  quantity: number
+  grain: PartGrain
+  memo: string            // 切り出した後の加工など。空文字＝なし
+  checks: PartChecks      // 部材ごと（枚数ごとではない）
+  allowance: number | null
+  // clearance は削除（逃げは式の中で引く）
+}
+
+export type DimensionErrorKind =
+  | 'syntax' | 'unknownRef' | 'cycle' | 'nonPositive' | 'divideByZero'
+  | 'missingBoard'  // 式が使っている材料の厚みの材料が削除されている
+  | 'missingNige'   // 式が使っている逃げが削除されている
+```
+
+- `PartDimensions.input` は残すが、第1.1版では `finished` と同じ値になる（逃げを引く処理がなくなるため）
+- 初期値（`defaults.ts`）— 決定（planner）
+  - `defaultNige()`：毎回新しい配列 `[{ id: 'nige-0.5', value: 0.5 }, { id: 'nige-1', value: 1 }]`。id は仕事の中で重複しなければよいので固定の文字列にする。あとから足す逃げの id は `newId('nige')`
+  - `defaultBoards(newId)`：メラミン 1、ラワン 2.5、ラワン 4、ラワン 5.5（すべて 4×8 1220×2440、木目 長手方向。仕様書 5.1）。id は `newId('board')`。新しい仕事（`createJob`）はこれをそのまま使う
+  - `nigeName(value)` → `逃げ0.5mm`・`逃げ1mm`（数値は小数第1位まで、末尾の .0 は付けない）
+  - `boardTokenLabel(board)` → `ラワン4mm`（材料名＋厚み＋mm、間に空白なし。仕様書 5.4 の例に合わせる）
+- 見本（本棚 W900）：板は今のまま2つ（シナランバー 18・シナベニヤ 4）、逃げは `defaultNige()`。棚板は `clearance: { W: 1 }` をやめて **W = `天地板.W - {n:nige-1}`**（表示は `天地板.W − 逃げ1mm`）。仕上がり 863 は変わらない — 決定（planner）
+
+### 6.3 式から材料の厚み・逃げを参照する書き方 — 決定（planner）
+
+**方針：式の文字列の中に id で書き、画面では名前に置き換えて見せる。**
+
+材料は「材料名＋厚み」、逃げは「逃げ＋寸法」で名前が決まるので、名前で書くと厚みや逃げの寸法を変えたとたんに式が別の名前を指して壊れる。そこで式には変わらない id を入れる。
+
+| 参照するもの | 式に保存する文字 | 画面の表示 | 値 |
+|---|---|---|---|
+| 部材の寸法（今のまま） | `全体.W` | `全体.W` | その部材の仕上がり寸法 |
+| 材料の厚み | `{t:板のid}` | `ラワン4mm` | `board.thickness` |
+| 逃げ | `{n:逃げのid}` | `逃げ1mm` | `nige.value` |
+
+- 例：保存 `全体.W - 側板.W * 2 - {t:board-abc} * 2` → 表示 `全体.W − 側板.W × 2 − ラワン4mm × 2`
+- 部材の参照は今のまま名前で書く（仕様書 6 の `部材名.W`。名前を変えたときのつけ替え `renamePart` もそのまま）
+- 材料の厚み・逃げの寸法を変えても id は同じなので、式はそのままで値がついてくる。材料名を変えても同じ
+
+**字句（`tokenize.ts`）**
+- `splitChunks`：`{` から次の `}` までを1つのかたまりにする（中に記号や空白があっても区切らない）。`}` が無ければ式の終わりまでを1つのかたまりにし、字句のエラーにする
+- かたまりが `{t:ID}` なら `{ type: 'thickness', boardId: ID }`、`{n:ID}` なら `{ type: 'nige', nigeId: ID }`。それ以外の `{…}` は字句のエラー（「読めない参照があります」）
+- 全角の `｛ ｝` は NFKC で `{ }` になるので同じに扱う
+- `validatePartName`：`{` `}`（全角も）を部材名に使えない文字に加える
+- `renameRefsInExpr`：`{…}` のかたまりは部材の参照として読まない（書き換えない）
+
+**構文木と計算（`parse.ts`・`evaluate.ts`）**
+- 構文木に `{ type: 'thickness'; boardId }`・`{ type: 'nige'; nigeId }` を足す。どちらも数値と同じ位置に書ける
+- `evaluate(ast, lookup)` の lookup を関数1つから次の形に広げる
+  ```ts
+  export interface Lookup {
+    ref(part: string, axis: Axis): number | null   // 部材の仕上がり寸法。無ければ null
+    thickness(boardId: string): number | null       // 材料の厚み。材料が無ければ null
+    nige(nigeId: string): number | null             // 逃げの寸法。逃げが無ければ null
+  }
+  ```
+- null のとき：厚み → `missingBoard`「削除した材料の厚みを使っています」、逃げ → `missingNige`「削除した逃げを使っています」
+- 参照の依存関係（`resolve.ts`）には入れない（部材ではなく定数なので、循環は起きない）
+- `computeDimensions(job)` は `job.boards` と `job.settings.nige` から値を渡す
+
+**削除したとき** — 決定（planner）
+- 材料・逃げを削除しても、式の中の `{t:…}` `{n:…}` はそのまま残し、その寸法をエラー（`missingBoard`／`missingNige`）にする。数値に置き換えて黙って計算を続けることはしない（どこを直せばよいか分かるように）
+- 表示は `（削除した材料）`・`（削除した逃げ）` にし、1つの塊として消せる
+- 削除する前に、使っている部材を示して確認する（仕様書 4・5.1）。一覧は `usages.ts` の関数で作る
+  - `partsUsingNige(job, nigeId)`：式に `{n:id}` がある部材名と軸（例：`棚板（W）`）
+  - `partsUsingBoardThickness(job, boardId)`：式に `{t:id}` がある部材名と軸
+  - 材料の削除の確認には、`partsUsingBoard`（その材料から切る部材）と `partsUsingBoardThickness` の両方を出す
+
+**仕事のコピー**：`copyJob` は板の id を新しくするので、式の `{t:古いid}` を `{t:新しいid}` につけ替える（`remapBoardIds(expr, map)`）。逃げの id は設定ごとそのまま写すので、つけ替えない
+
+**カーソルで動く単位（`units.ts`）**
+- `formulaUnits(expr): Unit[]`。単位は `{ kind, start, end }`（`start`・`end` は保存した文字列の位置）
+  - `kind`：`digit`（数字1文字・小数点1文字ずつ）/ `op`（`+ - * /`）/ `paren` / `partRef`（`全体.W`）/ `thickness` / `nige` / `bad`（読めない文字のかたまり。古いデータ用）
+  - 空白は単位にしない
+  - 部材の参照・材料の厚み・逃げは1つの単位（仕様書 5.4「1つの塊として移動・削除する」）
+- 画面のカーソルは **単位の番号**（0〜単位の数。k は「k 番目の単位の前」）で持つ
+- `display.ts` の `unitLabel(unit, job)`：`*` → `×`、`/` → `÷`、`-` → `−`、`{t:…}` → `ラワン4mm`、`{n:…}` → `逃げ1mm`、見つからなければ `（削除した材料）`／`（削除した逃げ）`
+
+### 6.4 仕上がり寸法の計算の単純化（`finished.ts`）
+
+- 逃げは式の中で引くので、**仕上がり寸法 = 式の計算結果**（仕様書 7）
+- 3.2 の手順 3・4 にある「面の2軸だけ逃げを引く」「自分の逃げを引く前の値で厚みを判定する」「厚みの判定を通った循環」はすべて不要になる。厚みの判定は仕上がり寸法で行う
+- `thicknessInput`・`AbortThickness` などの仕組みは削除してよい
+
+### 6.5 以前の版のデータの移し替え（`migrate/clearance.ts`）— 決定（planner）
+
+仕様書 10：以前の版で部材ごとに入れていた逃げは、設定の逃げへ移し、その部材の式から引く形に書き換える。
+
+`migrateClearanceChecked(job: LegacyJob, makeId: () => string): { job: Job; changed: { partId; name }[] }`、仕事だけ欲しいときは `migrateClearance(job, makeId): Job`（`LegacyJob` は `clearance` を持つ古い形。この関数の中だけで使う。engine は store の `newId` を import しないので、id の作り方は引数で受け取る）
+1. 設定に `nige` が無ければ `defaultNige()` を入れる
+2. 各部材の逃げのうち値が 0 より大きい軸について、同じ値の逃げが設定に無ければ足す（id は `makeId()`、値の小さい順に足す）。**値は丸めない**（0.25 は 0.25 のまま、名前は「逃げ0.25mm」）。同じ値かどうかは浮動小数の誤差（1e-9）だけ見のがして比べる（3 と 3.04、0.25 と 0.3 は別の逃げ）
+3. どの軸に引くか：以前の計算と同じく **厚みの寸法の軸には引かない**。厚みの軸は `migrate/v1Dimensions.ts` の `computeV1Dimensions`（以前の版の `dimensions/finished.ts` をそのまま残したもの）で求める。以前の版は、厚みの自動判定をその部材自身の逃げを引く前の値で、ほかの部材の値は逃げを引いた後の値で行っていたので、逃げをすべて外した仕事では同じ軸にならないことがある。決まらなければ3軸とも引く＝以前と同じ
+4. 式の書き換え：式が数値1つか部材の参照1つなら `元の式 - {n:id}`、それ以外は `(元の式) - {n:id}`。元の式が空ならそのまま（エラーのまま）
+5. 書き換えた後の自動判定で厚みの軸が以前と変わる部材（例：材料 18・W `19`・H 600・D `18`・逃げ W1 → 今は W が 18 になり W が選ばれる）は、以前の軸を手で選んだことにする（`thicknessAxis` に入れる）
+6. 確かめ：以前の計算と書き換えた後の計算で、部材ごとに仕上がり寸法・厚みの軸・木取り寸法を比べ、違う部材を `changed` に入れる（部材はそのまま残す）。ただし、以前は厚みが決まらず木取り寸法が出なかった部材が、仕上がり寸法は同じまま今は厚みが決まるときは、良くなっただけなので入れない
+7. `memo: ''`、`checks: { finished: false, cut: false }` を足す
+- 同じ仕事を2回移し替えても結果が変わらない（`clearance` が無い部材は何もしない）
+
+### 6.6 保存データ第2版（`storage.ts`）— 決定（planner）
+
+- 新しいキー `kidori.jobs.v2` に `{ version: 2, jobs: Job[] }` で書く。`kidori.currentJobId` はそのまま
+- 読み込み
+  1. `kidori.jobs.v2` があればそれを読む（第2版の形で検査・修復）
+  2. 無くて `kidori.jobs.v1`（version 1）があれば、第1版の形で検査・修復したあと `migrateClearanceChecked` で移し替える。結果は次の保存で v2 に書く
+  - 移し替えで寸法が変わった部材（`changed`）があれば、読み込みの知らせ（`LoadResult` の `message`。`ok` でも付く）に「以前の版から移したときに寸法が変わった部材：{仕事名}の {部材名・…}（寸法表で確かめてください）」を出す。画面では `loadError` と同じ帯に出す。保存は続ける
+  3. **`kidori.jobs.v1` は消さず、書き換えもしない**（移し替えがうまくいかなかったときの控え）
+- 第2版の検査・修復で足すもの
+  - `settings.nige`：配列でなければ `defaultNige()`。id が空・重複、値が 0 以下・数でない、値が前の逃げと同じ（丸めずに比べる。移し替えで足した 0.25 と 0.3 を両方残すため）、のものは外す（外したら直した数に数える）
+  - `part.memo`：文字列でなければ `''`
+  - `part.checks`：`finished`・`cut` が真偽値でなければ false
+  - `part.clearance` が残っていても読み捨てずに、`migrateClearance` を通す（v2 に古い形が混ざっても値が変わらないように）
+- 退避のキーは第2版用に `kidori.jobs.v2.broken…` を使う
+
+### 6.7 材料を減らせるときのお知らせ（`hints/saving.ts`）— 決定（オーナー）
+
+`findSavingHints(job): SavingHint[]`（仕様書 9、未決事項 19）。試す値を変える引数はない
+- **試す値**（`smallerSteps(current)`）：今の値より小さい整数を大きい値から 1mm まで（1mm 刻み）、最後に 0.5mm。**0mm は試さない**。今の値が小数なら切り捨てた値から（7.5 → 7, 6, …, 1, 0.5）。今の値が 0.5 以下なら何も試さない
+  - 例：切り代 10 → 9, 8, …, 1, 0.5。端切り 5 → 4, 3, 2, 1, 0.5
+- **切り代を優先**：まず切り代（仕事の切り代だけ。部材ごとの上書き（例：背板 0）はそのまま）を試す。**切り代でどの値でも減らなかった材料だけ**、端切りを試す
+- 切り代と端切りを同時に変える組み合わせは試さない。切り方・刃厚は今の設定のまま（おまかせならおまかせで）
+
+各値で `computeDimensions` → `packJob` をやり直し、材料ごとに必要枚数を今と比べる
+- 必要枚数が減り、かつ入らない部材が増えない材料を「減る」とする
+- 大きい値から試し、**まだお知らせに出していない材料が減った値**でお知らせを1つ出す（＝材料ごとに、減る一番大きい値で知らせる）
+  - 切り代のお知らせには、その値で減る材料をすべて入れる（先に出した材料も、その値で減るなら入れる）
+  - 端切りのお知らせには、切り代で減らなかった材料だけを入れる
+- 並び：切り代（大きい値から）→ 端切り（大きい値から）
+- 計算の回数：最大で 1 +（切り代の試す数）+（端切りの試す数）回（切り代10・端切り5 なら 16 回）。2枚以上使う材料がすべてお知らせに出たら、そこで打ち切る。今の計算で2枚以上使う材料が無ければ、計算し直さない。部材150枚・おまかせで数十ms
+
+```ts
+export interface SavingHint {
+  change: { kind: 'allowance' | 'trim'; value: number }
+  materials: { boardId: string; label: string; from: number; to: number }[] // label は「ラワン 4mm」
+  message: string
+}
+```
+
+- 文言：`切り代を 7mm にすると、ラワン 4mm が 1 枚減ります（3枚 → 2枚）`。材料が複数なら `、` でつなぐ：`切り代を 3mm にすると、シナランバー 18mm が 1 枚（3枚 → 2枚）、ラワン 4mm が 1 枚（2枚 → 1枚）減ります`
+- 設定は自動で変えない（仕様書 9）。画面は知らせるだけ
+- 画面側は `useMemo` で部材・設定が変わったときだけ計算する
+
+### 6.8 画面の変更 — 決定（planner）
+
+| 画面 | 変更 |
+|---|---|
+| 仕事 | 新しい仕事には初期の材料4つ・逃げ2つが入っている（`createJob`） |
+| 部材の編集 | 逃げの欄をなくす。メモ（複数行の文字入力、ふつうのキーボード）を足す |
+| 式の入力 | **`<input>` を使わず、式を表示する枠（`div`）にする**ので、押してもキーボードが出ない。枠を押すと末尾にカーソル。ボタン：部材の寸法・材料の厚み（登録順）・逃げ（登録順）・数字・小数点・`+ − × ÷ ( )`・◀ ▶（カーソル移動）・1字消す・全部消す。参照・厚み・逃げは色つきの塊で表示する。エラーは今のまま欄の下 |
+| 寸法表 | メモを表示。部材ごとに「仕上がり 済」「木取り 済」のチェック（押せる大きさ 44px 以上）。チェックした段の数字はグレーにする（色だけでなく「済」の文字も出す）。部材の寸法を変えてもチェックは外さない |
+| 木取り | 材料の一覧の上に、お知らせ（`SavingHint.message`）を出す。無ければ何も出さない |
+| 設定 | 逃げの一覧（`逃げ0.5mm` など）。追加：寸法を入れるだけ（同じ寸法は登録できない）。寸法の変更（同じく重複不可。式の値もついてくる）。削除：式で使っていれば部材名と軸を示して確認。材料の削除の確認に、式で厚みを使っている部材も出す |
+
+- ◀ ▶ と 1字消す は、部材の参照・厚み・逃げを1つの塊として扱う（`formulaEdit.ts`：`moveLeft`・`moveRight`・`insertAt`・`deleteBefore`・`clearAll`。すべてカーソル＝単位の番号で受け渡す）
+- 挿入するときは、今と同じく前後に空白をはさんで読みやすくする（保存する文字列の空白は計算に影響しない）

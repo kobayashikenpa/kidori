@@ -11,6 +11,10 @@ function kinds(expr: string) {
         return { number: t.value }
       case 'ref':
         return { ref: [t.part, t.axis] }
+      case 'thickness':
+        return { thickness: t.boardId }
+      case 'nige':
+        return { nige: t.nigeId }
       default:
         return t.type
     }
@@ -152,5 +156,85 @@ describe('全角の記号・数字（入力の揺れを吸収する）', () => {
 
   it('長音 ー を含む名前は使える', () => {
     expect(validatePartName('ボード')).toBeNull()
+  })
+})
+
+describe('材料の厚み {t:板のid}・逃げ {n:逃げのid} の字句', () => {
+  it('天地板.W - {n:nige-1} → 参照(天地板,W), -, 逃げ(nige-1)', () => {
+    expect(kinds('天地板.W - {n:nige-1}')).toEqual([{ ref: ['天地板', 'W'] }, '-', { nige: 'nige-1' }])
+  })
+
+  it('600 - {t:b-4} * 2 → 数値600, -, 厚み(b-4), *, 数値2', () => {
+    expect(kinds('600 - {t:b-4} * 2')).toEqual([{ number: 600 }, '-', { thickness: 'b-4' }, '*', { number: 2 }])
+  })
+
+  it('空白がなくても区切れる（id の中の - は引き算にしない）', () => {
+    expect(kinds('全体.W-{t:board-a1b2}*2-{n:nige-0.5}')).toEqual([
+      { ref: ['全体', 'W'] },
+      '-',
+      { thickness: 'board-a1b2' },
+      '*',
+      { number: 2 },
+      '-',
+      { nige: 'nige-0.5' },
+    ])
+  })
+
+  it('字句の位置は { から } まで', () => {
+    const r = tokenize('900 - {n:nige-1}')
+    if (!r.ok) throw new Error(r.message)
+    expect(r.tokens[2]).toMatchObject({ type: 'nige', start: 6, end: 16 })
+  })
+
+  it('全角の ｛ ｝ も同じに読む', () => {
+    expect(kinds('９００－｛n:nige-1｝')).toEqual([{ number: 900 }, '-', { nige: 'nige-1' }])
+  })
+
+  it('{x:1} は字句のエラー（読めない参照）', () => {
+    const r = tokenize('900 - {x:1}')
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.message).toContain('読めない参照')
+      expect([r.start, r.end]).toEqual([6, 11])
+    }
+  })
+
+  it('id が空の {n:} や {t} も字句のエラー', () => {
+    expect(tokenize('{n:}').ok).toBe(false)
+    expect(tokenize('{t}').ok).toBe(false)
+    expect(tokenize('{}').ok).toBe(false)
+  })
+
+  it('閉じていない {n:nige-1 は字句のエラー（式の終わりまでを1つのかたまりにする）', () => {
+    const r = tokenize('900 - {n:nige-1')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect([r.start, r.end]).toEqual([6, 15])
+  })
+
+  it('閉じていない { の後ろに記号があっても、式の終わりまでを1つのかたまりにする', () => {
+    const r = tokenize('{n:nige-1 + 2')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect([r.start, r.end]).toEqual([0, 13])
+  })
+
+  it('部材名の直後に { が続いても、別のかたまりとして読む', () => {
+    const r = tokenize('全体.W{n:nige-1}')
+    // 並べただけで記号がないのは構文のエラー（字句は読める）
+    expect(r.ok).toBe(true)
+    expect(kinds('全体.W{n:nige-1}')).toEqual([{ ref: ['全体', 'W'] }, { nige: 'nige-1' }])
+  })
+
+  it('かたまりの外の } は字句のエラー', () => {
+    expect(tokenize('900 }').ok).toBe(false)
+  })
+})
+
+describe('validatePartName：{ } は使えない', () => {
+  it('部材名「棚{1}」は使えない', () => {
+    expect(validatePartName('棚{1}')).toContain('{')
+  })
+  it('全角の ｛ ｝ も使えない', () => {
+    expect(validatePartName('棚｛1')).not.toBeNull()
+    expect(validatePartName('棚1｝')).not.toBeNull()
   })
 })

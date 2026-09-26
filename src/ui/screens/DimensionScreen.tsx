@@ -1,13 +1,14 @@
 // 寸法表の画面：部材ごとのカードで、①仕上がり寸法（青）と ②木取り寸法（橙）を別の段に分けて出す
+// 段ごとに加工のチェックがあり、チェックした段はグレーにして「済」を出す。メモもカードに出す
 import { useMemo } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
-import { AXES, type Board, type Part, type PartDimensions } from '../../engine/types'
-import { boardLabel } from '../../store/jobs'
+import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
+import { boardLabel, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
 
 export function DimensionScreen() {
-  const { job } = useCurrentJob()
+  const { job, run } = useCurrentJob()
   const dims = useMemo(() => computeDimensions(job), [job])
   const pieces = job.parts.reduce((n, p) => n + p.quantity, 0)
 
@@ -26,6 +27,7 @@ export function DimensionScreen() {
             part={p}
             dims={dims.parts[i]}
             board={job.boards.find((b) => b.id === p.boardId) ?? null}
+            onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
           />
         ))}
       </div>
@@ -33,10 +35,17 @@ export function DimensionScreen() {
   )
 }
 
-function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensions; board: Board | null }) {
+interface CardProps {
+  part: Part
+  dims: PartDimensions
+  board: Board | null
+  onCheck: (patch: Partial<PartChecks>) => void
+}
+
+function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
   const cutting = part.quantity > 0
-  // engine が逃げを引いた軸（厚みの寸法以外。厚みが決まらなければ3つとも）
-  const clearances = AXES.filter((a) => (part.clearance[a] ?? 0) !== 0 && a !== d.thicknessAxis)
+  const finDone = cutting && part.checks.finished
+  const cutDone = cutting && part.checks.cut
 
   return (
     <article className="card dim-card">
@@ -50,6 +59,12 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
           {d.thicknessMismatch && <span className="chip warn">厚みを確認</span>}
         </div>
       )}
+      {part.memo.trim() !== '' && (
+        <p className="part-memo">
+          <span className="part-memo-label">メモ</span>
+          {part.memo}
+        </p>
+      )}
 
       {d.errors.length > 0 ? (
         <div className="part-errors">
@@ -61,8 +76,15 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
         </div>
       ) : (
         <>
-          <section className="band fin" aria-label="仕上がり寸法">
-            <h4>① 仕上がり寸法</h4>
+          <section className={`band fin${finDone ? ' done' : ''}`} aria-label="仕上がり寸法">
+            <div className="band-head">
+              <h4>
+                ① 仕上がり寸法{finDone && <span className="done-mark">済</span>}
+              </h4>
+              {cutting && (
+                <CheckButton label="仕上がり 加工済み" checked={finDone} onToggle={() => onCheck({ finished: !finDone })} />
+              )}
+            </div>
             <div className="band-dims">
               {AXES.map((a) => (
                 <div key={a} className={`band-dim${d.thicknessAxis === a ? ' thick' : ''}`}>
@@ -74,14 +96,16 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
                 </div>
               ))}
             </div>
-            {clearances.length > 0 && (
-              <p className="band-note">逃げ {clearances.map((a) => `${a} ${fmt(part.clearance[a]!)}`).join('・')} を引いた値</p>
-            )}
           </section>
 
           {cutting && (
-            <section className="band cut" aria-label="木取り寸法">
-              <h4>② 木取り寸法</h4>
+            <section className={`band cut${cutDone ? ' done' : ''}`} aria-label="木取り寸法">
+              <div className="band-head">
+                <h4>
+                  ② 木取り寸法{cutDone && <span className="done-mark">済</span>}
+                </h4>
+                <CheckButton label="木取り 切り出し済み" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+              </div>
               {d.cutSize && d.faceAxes ? (
                 <>
                   <div className="cut-size num">
@@ -104,5 +128,17 @@ function DimensionCard({ part, dims: d, board }: { part: Part; dims: PartDimensi
         </>
       )}
     </article>
+  )
+}
+
+/** 加工のチェック（押しやすい大きさのボタン。押すたびに付ける・外すを切り替える） */
+function CheckButton({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" role="checkbox" aria-checked={checked} className="check-btn" onClick={onToggle}>
+      <span className="check-box" aria-hidden="true">
+        {checked ? '✓' : ''}
+      </span>
+      {label}
+    </button>
   )
 }

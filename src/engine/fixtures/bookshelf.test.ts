@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../types'
+import { defaultSettings } from '../defaults'
 import { bookshelfJob } from './bookshelf'
 
 describe('見本（本棚 W900）', () => {
@@ -16,7 +16,27 @@ describe('見本（本棚 W900）', () => {
   })
 
   it('設定は初期値', () => {
-    expect(job.settings).toEqual(DEFAULT_SETTINGS)
+    expect(job.settings).toEqual(defaultSettings())
+  })
+
+  it('逃げは 逃げ0.5mm・逃げ1mm（初期の材料4つは入れない）', () => {
+    expect(job.settings.nige).toEqual([
+      { id: 'nige-0.5', value: 0.5 },
+      { id: 'nige-1', value: 1 },
+    ])
+  })
+
+  it('メモは空、加工のチェックはすべて外れている', () => {
+    for (const p of job.parts) {
+      expect(p.memo).toBe('')
+      expect(p.checks).toEqual({ finished: false, cut: false })
+    }
+  })
+
+  it('棚板の W は 天地板.W − 逃げ1mm（部材ごとの逃げはない）', () => {
+    const tana = job.parts.find((p) => p.name === '棚板')!
+    expect(tana.expr.W).toBe('天地板.W - {n:nige-1}')
+    expect('clearance' in tana).toBe(false)
   })
 
   it('板はシナランバー18とシナベニヤ4（サブロク・木目は長辺方向）', () => {

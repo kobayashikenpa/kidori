@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { evaluate, evaluateExpr, refsOf } from './evaluate'
+import { evaluate, evaluateExpr, refsOf, type Lookup, type RefLookup } from './evaluate'
 import { parse } from './parse'
+
+/** 部材の参照だけを返す lookup（材料の厚み・逃げはどれも見つからない） */
+function refLookup(ref: RefLookup): Lookup {
+  return { ref, thickness: () => null, nige: () => null }
+}
 
 /** 参照のない式を計算する */
 function calc(expr: string) {
-  return evaluateExpr(expr, () => null)
+  return evaluateExpr(expr, refLookup(() => null))
 }
 
 describe('parse・evaluate（式の構文解析と計算）', () => {
@@ -70,14 +75,14 @@ describe('parse・evaluate（式の構文解析と計算）', () => {
 
   it('参照の値を渡して計算する', () => {
     const values: Record<string, number> = { '全体.W': 900, '側板.W': 18 }
-    expect(evaluateExpr('全体.W - 側板.W * 2', (part, axis) => values[`${part}.${axis}`] ?? null)).toEqual({
+    expect(evaluateExpr('全体.W - 側板.W * 2', refLookup((part, axis) => values[`${part}.${axis}`] ?? null))).toEqual({
       ok: true,
       value: 864,
     })
   })
 
   it('値のない参照は unknownRef エラー（部材名を示す）', () => {
-    const r = evaluateExpr('天板.W + 1', () => null)
+    const r = evaluateExpr('天板.W + 1', refLookup(() => null))
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.error.kind).toBe('unknownRef')
@@ -114,8 +119,8 @@ describe('refsOf（参照の一覧）', () => {
   it('構文解析した式は evaluate で何度でも計算できる', () => {
     const r = parse('全体.W / 2')
     if (!r.ok) throw new Error(r.error.message)
-    expect(evaluate(r.ast, () => 900)).toEqual({ ok: true, value: 450 })
-    expect(evaluate(r.ast, () => 600)).toEqual({ ok: true, value: 300 })
+    expect(evaluate(r.ast, refLookup(() => 900))).toEqual({ ok: true, value: 450 })
+    expect(evaluate(r.ast, refLookup(() => 600))).toEqual({ ok: true, value: 300 })
   })
 })
 
@@ -134,9 +139,59 @@ describe('全角の記号・数字の式も計算できる', () => {
   })
 
   it('全体．Ｗ の参照', () => {
-    expect(evaluateExpr('全体．Ｗ − 100', (part, axis) => (part === '全体' && axis === 'W' ? 900 : null))).toEqual({
+    expect(evaluateExpr('全体．Ｗ − 100', refLookup((part, axis) => (part === '全体' && axis === 'W' ? 900 : null)))).toEqual({
       ok: true,
       value: 800,
     })
+  })
+})
+
+describe('材料の厚み・逃げの値', () => {
+  const lookup: Lookup = {
+    ref: (part, axis) => (part === '全体' && axis === 'W' ? 900 : null),
+    thickness: (id) => (id === 'b-4' ? 4 : null),
+    nige: (id) => (id === 'nige-1' ? 1 : id === 'nige-0.5' ? 0.5 : null),
+  }
+
+  it('600 - {t:b-4} * 2 = 592', () => {
+    expect(evaluateExpr('600 - {t:b-4} * 2', lookup)).toEqual({ ok: true, value: 592 })
+  })
+
+  it('全体.W - {n:nige-1} = 899', () => {
+    expect(evaluateExpr('全体.W - {n:nige-1}', lookup)).toEqual({ ok: true, value: 899 })
+  })
+
+  it('厚み・逃げは数値と同じ位置に書ける（符号・括弧の中）', () => {
+    expect(evaluateExpr('-{n:nige-0.5} + ({t:b-4})', lookup)).toEqual({ ok: true, value: 3.5 })
+  })
+
+  it('無い材料の厚みは missingBoard', () => {
+    const r = evaluateExpr('600 - {t:gone}', lookup)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.error.kind).toBe('missingBoard')
+      expect(r.error.message).toBe('削除した材料の厚みを使っています')
+    }
+  })
+
+  it('無い逃げは missingNige', () => {
+    const r = evaluateExpr('600 - {n:gone}', lookup)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.error.kind).toBe('missingNige')
+      expect(r.error.message).toBe('削除した逃げを使っています')
+    }
+  })
+
+  it('厚み・逃げは部材の参照（refsOf）に入らない', () => {
+    const r = parse('全体.W - {n:nige-1} - {t:b-4}')
+    if (!r.ok) throw new Error(r.error.message)
+    expect(refsOf(r.ast)).toEqual([{ part: '全体', axis: 'W' }])
+  })
+
+  it('厚みと逃げを並べただけ（記号なし）は構文のエラー', () => {
+    const r = evaluateExpr('{t:b-4} {n:nige-1}', lookup)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error.kind).toBe('syntax')
   })
 })

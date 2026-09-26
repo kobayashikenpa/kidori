@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { defaultSettings } from '../engine/defaults'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../engine/fixtures/bookshelf'
 import { computeDimensions } from '../engine/dimensions'
 import { DEFAULT_SETTINGS, type Job } from '../engine/types'
 import {
   addBoard,
+  addNige,
   addPart,
+  boardUsages,
   boardLabel,
   copyJob,
   copyName,
@@ -12,12 +15,16 @@ import {
   deleteJob,
   newBoard,
   newPart,
+  nigeUsages,
   partsReferencing,
   partsUsingBoard,
   removeBoard,
+  removeNige,
   removePart,
   renameJob,
+  setPartChecks,
   updateBoard,
+  updateNige,
   updatePart,
   updateSettings,
   type OpResult,
@@ -29,11 +36,16 @@ function unwrap(r: OpResult): Job {
 }
 
 describe('createJob', () => {
-  it('新しい仕事の設定は初期値で、板・部材はない', () => {
+  it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は4つ、部材はない', () => {
     const job = createJob('食器棚', new Date('2026-09-01T00:00:00Z'), 'job-1')
-    expect(job.settings).toEqual(DEFAULT_SETTINGS)
+    expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
-    expect(job.boards).toEqual([])
+    expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
+    expect(job.boards.map(boardLabel)).toEqual(['メラミン 1mm', 'ラワン 2.5mm', 'ラワン 4mm', 'ラワン 5.5mm'])
+    for (const b of job.boards) {
+      expect([b.sizeKind, b.width, b.length, b.grain]).toEqual(['shihachi', 1220, 2440, 'long'])
+    }
+    expect(new Set(job.boards.map((b) => b.id)).size).toBe(4)
     expect(job.parts).toEqual([])
     expect(job.name).toBe('食器棚')
     expect(job.createdAt).toBe('2026-09-01T00:00:00.000Z')
@@ -47,7 +59,7 @@ describe('createJob', () => {
 describe('updateSettings', () => {
   it('設定の一部を変える', () => {
     const job = unwrap(updateSettings(bookshelfJob(), { kerf: 4, cutMode: 'auto' }))
-    expect(job.settings).toEqual({ ...DEFAULT_SETTINGS, kerf: 4, cutMode: 'auto' })
+    expect(job.settings).toEqual({ ...defaultSettings(), kerf: 4, cutMode: 'auto' })
   })
   it('負の数は断る', () => {
     expect(updateSettings(bookshelfJob(), { trim: -1 }).ok).toBe(false)
@@ -86,10 +98,10 @@ describe('部材', () => {
   })
 
   it('名前を変えずに中身を変える', () => {
-    const job = unwrap(updatePart(bookshelfJob(), 'part-tanaita', { quantity: 5, clearance: { W: 2 } }))
+    const job = unwrap(updatePart(bookshelfJob(), 'part-tanaita', { quantity: 5, allowance: 3 }))
     const tana = job.parts.find((p) => p.id === 'part-tanaita')!
     expect(tana.quantity).toBe(5)
-    expect(tana.clearance).toEqual({ W: 2 })
+    expect(tana.allowance).toBe(3)
   })
 
   it('名前と式を同時に変えると、新しい式の参照もつけ替わる', () => {
@@ -132,6 +144,7 @@ describe('板', () => {
 
   it('見本の板2つを新しい仕事に登録できる', () => {
     let job = createJob('本棚')
+    job = { ...job, boards: [] }
     job = unwrap(addBoard(job, newBoard({ material: 'シナランバー', thickness: 18 })))
     job = unwrap(addBoard(job, newBoard({ material: 'シナベニヤ', thickness: 4 })))
     expect(job.boards.map(boardLabel)).toEqual(['シナランバー 18mm', 'シナベニヤ 4mm'])
@@ -233,10 +246,12 @@ describe('仕事の名前・コピー・削除', () => {
     const copy = copyJob(src, [])
     const side = copy.parts.find((p) => p.name === '側板')!
     side.expr.H = '1'
-    side.clearance.H = 99
+    side.checks.cut = true
+    copy.settings.nige[0].value = 9
     copy.settings.kerf = 9
     expect(src.parts.find((p) => p.name === '側板')!.expr.H).not.toBe('1')
-    expect(src.parts.find((p) => p.name === '側板')!.clearance.H).not.toBe(99)
+    expect(src.parts.find((p) => p.name === '側板')!.checks.cut).toBe(false)
+    expect(src.settings.nige[0].value).toBe(0.5)
     expect(src.settings.kerf).toBe(3)
   })
 
@@ -246,5 +261,88 @@ describe('仕事の名前・コピー・削除', () => {
     expect(deleteJob([a, b], 'a', 'a')).toEqual({ jobs: [b], currentJobId: null })
     expect(deleteJob([a, b], 'b', 'a')).toEqual({ jobs: [b], currentJobId: 'b' })
     expect(deleteJob([a, b], null, 'x')).toEqual({ jobs: [a, b], currentJobId: null })
+  })
+})
+
+describe('逃げ', () => {
+  it('逃げ1mm をもう1つ足すとエラー、逃げ2mm は足せて末尾に並ぶ', () => {
+    const job = createJob('a')
+    const dup = addNige(job, 1)
+    expect(dup.ok).toBe(false)
+    if (!dup.ok) expect(dup.message).toBe('逃げ1mm はすでにあります')
+    const next = unwrap(addNige(job, 2, 'nige-x'))
+    expect(next.settings.nige).toEqual([...job.settings.nige, { id: 'nige-x', value: 2 }])
+    expect(job.settings.nige).toHaveLength(2)
+  })
+
+  it('0 以下・数でない寸法は足せない', () => {
+    const job = createJob('a')
+    expect(addNige(job, 0).ok).toBe(false)
+    expect(addNige(job, -1).ok).toBe(false)
+    expect(addNige(job, Number.NaN).ok).toBe(false)
+  })
+
+  it('寸法を変えると式の値がついてくる。ほかの逃げと同じ寸法には変えられない', () => {
+    const job = bookshelfJob()
+    expect(updateNige(job, 'nige-1', 0.5).ok).toBe(false)
+    const next = unwrap(updateNige(job, 'nige-1', 2))
+    const shelf = computeDimensions(next).parts.find((d) => d.name === '棚板')!
+    expect(shelf.finished?.W).toBe(862)
+  })
+
+  it('見本の逃げ1mm を使っているのは［棚板（W）］、逃げ0.5mm はだれも使っていない', () => {
+    const job = bookshelfJob()
+    expect(nigeUsages(job, 'nige-1')).toEqual(['棚板（W）'])
+    expect(nigeUsages(job, 'nige-0.5')).toEqual([])
+  })
+
+  it('逃げを消すと、使っていた寸法は missingNige になる', () => {
+    const job = unwrap(removeNige(bookshelfJob(), 'nige-1'))
+    expect(job.settings.nige.map((n) => n.id)).toEqual(['nige-0.5'])
+    const errs = computeDimensions(job).errors
+    expect(errs.some((e) => e.kind === 'missingNige')).toBe(true)
+  })
+})
+
+describe('材料の厚みを式で使うとき', () => {
+  function jobWithThickness(): Job {
+    const job = createJob('箱')
+    const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
+    return unwrap(
+      addPart(job, newPart({ name: '底板', boardId: rawan4.id, expr: { W: `600 - {t:${rawan4.id}} * 2`, H: '4', D: '300' } })),
+    )
+  }
+
+  it('削除の確認用に、その板から切る部材と、式で厚みを使っている部材を返す', () => {
+    const job = jobWithThickness()
+    const rawan4 = job.boards.find((b) => b.thickness === 4)!
+    expect(boardUsages(job, rawan4.id)).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
+  })
+
+  it('コピー先の式は新しい板の id を指し、同じ寸法になる', () => {
+    const src = jobWithThickness()
+    const copy = copyJob(src, [])
+    const newRawan4 = copy.boards.find((b) => b.thickness === 4)!
+    expect(copy.parts[0].expr.W).toBe(`600 - {t:${newRawan4.id}} * 2`)
+    expect(computeDimensions(copy).parts[0].finished).toEqual(computeDimensions(src).parts[0].finished)
+    expect(computeDimensions(copy).parts[0].finished?.W).toBe(592)
+  })
+})
+
+describe('メモと加工のチェック', () => {
+  it('チェックを付けても寸法は変わらない', () => {
+    const job = bookshelfJob()
+    const shelf = job.parts.find((p) => p.name === '棚板')!
+    const next = unwrap(setPartChecks(job, shelf.id, { cut: true }))
+    expect(next.parts.find((p) => p.id === shelf.id)!.checks).toEqual({ finished: false, cut: true })
+    expect(computeDimensions(next).parts).toEqual(computeDimensions(job).parts)
+  })
+
+  it('メモを変える（部材の変更 updatePart で）', () => {
+    const job = bookshelfJob()
+    const side = job.parts.find((p) => p.name === '側板')!
+    const next = unwrap(updatePart(job, side.id, { memo: '切り出したあとに穴あけ' }))
+    expect(next.parts.find((p) => p.id === side.id)!.memo).toBe('切り出したあとに穴あけ')
+    expect(side.memo).toBe('')
   })
 })

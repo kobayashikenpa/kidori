@@ -7,7 +7,7 @@ export interface StoreState {
   jobs: Job[]
   /** 開いている仕事。null なら開いていない */
   currentJobId: string | null
-  /** 読み込みに失敗したときの知らせ（画面の上に出す） */
+  /** 読み込みに失敗したとき・以前の版から移して寸法が変わった部材があるときの知らせ（画面の上に出す） */
   loadError: string | null
   /** 保存してよいか（壊れたデータを守るため、保存を止めることがある） */
   canSave: boolean
@@ -31,7 +31,7 @@ export function initialState(load: LoadResult): StoreState {
   if (load.status === 'error' || load.status === 'repaired') {
     return { ...load.data, loadError: load.message, canSave: load.canSave }
   }
-  return { ...load.data, loadError: null, canSave: true }
+  return { ...load.data, loadError: load.message ?? null, canSave: true }
 }
 
 export function storeReducer(state: StoreState, action: StoreAction): StoreState {

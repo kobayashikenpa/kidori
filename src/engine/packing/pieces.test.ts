@@ -18,7 +18,8 @@ function addPart(job: Job, p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>
     thicknessAxis: null,
     quantity: 1,
     grain: 'any',
-    clearance: {},
+    memo: '',
+    checks: { finished: false, cut: false },
     allowance: null,
     ...p,
   })

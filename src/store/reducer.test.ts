@@ -13,6 +13,12 @@ function stateWithSample(): StoreState {
 }
 
 describe('initialState', () => {
+  it('読めたが知らせがあるとき（移し替えで寸法が変わった部材）は、知らせを出して保存は続ける', () => {
+    const s = initialState({ status: 'ok', data: { jobs: [], currentJobId: null }, message: '以前の版から移したときに寸法が変わった部材：本棚の A' })
+    expect(s.loadError).toBe('以前の版から移したときに寸法が変わった部材：本棚の A')
+    expect(s.canSave).toBe(true)
+  })
+
   it('何も保存されていなければ、仕事が1つもない空の状態で始める（見本は自動で開かない）', () => {
     const s = initialState({ status: 'empty', data: { jobs: [], currentJobId: null } })
     expect(s.jobs).toEqual([])

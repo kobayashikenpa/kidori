@@ -7,6 +7,7 @@ import type { BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../
 import { boardLabel, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { CutSteps } from '../components/CutSteps'
+import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
@@ -51,6 +52,10 @@ export function KidoriScreen() {
           <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と材料を入れてください。</p>
         </div>
       ) : (
+        <SavingHints job={job} />
+      )}
+
+      {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
           <div className="kd-total">
             <span className="kd-total-label">全体の歩留まり</span>

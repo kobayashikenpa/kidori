@@ -1,7 +1,7 @@
 // 板の追加・編集・削除のシート
 import { useState } from 'react'
 import { BOARD_SIZES, type Board, type BoardGrain, type BoardSizeKind } from '../../engine/types'
-import { addBoard, boardLabel, newBoard, partsUsingBoard, removeBoard, updateBoard } from '../../store/jobs'
+import { addBoard, boardLabel, boardUsages, newBoard, removeBoard, updateBoard } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
@@ -24,7 +24,9 @@ export function BoardEditor({ board, onClose }: Props) {
   const [draft, setDraft] = useState<Board>(() => board ?? newBoard({ material: '' }))
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
-  const users = board ? partsUsingBoard(job, board.id) : []
+  // 削除の確認用：この材料から切る部材と、式でこの材料の厚みを使っている部材（部材名と軸）
+  const usages = board ? boardUsages(job, board.id) : { cutFrom: [], thickness: [] }
+  const users = usages.cutFrom
 
   const patch = (p: Partial<Board>) => setDraft((d) => ({ ...d, ...p }))
 
@@ -122,7 +124,12 @@ export function BoardEditor({ board, onClose }: Props) {
                 この材料は <b>{users.join('・')}</b> で使っています。削除すると、これらの部材は「材料が未設定」になります。
               </p>
             ) : (
-              <p style={{ margin: 0 }}>この材料を使っている部材はありません。</p>
+              usages.thickness.length === 0 && <p style={{ margin: 0 }}>この材料を使っている部材はありません。</p>
+            )}
+            {usages.thickness.length > 0 && (
+              <p className="msg warn" style={{ margin: 0 }}>
+                <b>{usages.thickness.join('・')}</b> の式がこの材料の厚みを使っています。削除すると、その寸法は「削除した材料の厚みを使っています」のエラーになります。
+              </p>
             )}
             <p style={{ margin: 0 }}>「{boardLabel(board)}」を削除しますか？</p>
             <div className="sheet-foot">

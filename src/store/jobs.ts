@@ -1,9 +1,11 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
+import { defaultBoards, defaultNige, nigeName } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
+import { partsUsingBoardThickness, partsUsingNige, remapBoardIds } from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
-import { eq1 } from '../engine/round'
+import { eq1, round1 } from '../engine/round'
 import {
   AXES,
   BOARD_SIZES,
@@ -11,7 +13,9 @@ import {
   type Board,
   type BoardSizeKind,
   type Job,
+  type Nige,
   type Part,
+  type PartChecks,
   type Settings,
 } from '../engine/types'
 
@@ -33,14 +37,14 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 
 // ---------- 仕事 ----------
 
-/** 新しい仕事：設定は初期値、板・部材なし */
+/** 新しい仕事：設定は初期値（逃げ0.5mm・逃げ1mm）、材料は defaultBoards（4×8 の4つ）、部材なし */
 export function createJob(name: string, now: Date = new Date(), id: string = newId('job')): Job {
   const t = now.toISOString()
   return {
     id,
     name: name.trim() || '名前のない仕事',
-    settings: { ...DEFAULT_SETTINGS },
-    boards: [],
+    settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
+    boards: defaultBoards(newId),
     parts: [],
     createdAt: t,
     updatedAt: t,
@@ -67,7 +71,8 @@ export function copyName(name: string, existingNames: readonly string[]): string
 
 /**
  * 仕事をコピーする（似た家具を作るとき用）。仕事・板・部材の id は新しくし、部材が使う板は新しい板の id につけ替える。
- * 式は部材の名前で参照しているので、そのままで同じように計算できる。元の仕事は書き換えない
+ * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板の id につけ替える。逃げの id は設定ごと写すのでそのまま。
+ * 元の仕事は書き換えない
  */
 export function copyJob(
   job: Job,
@@ -86,13 +91,17 @@ export function copyJob(
     ...p,
     id: newId('part'),
     boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
-    expr: { ...p.expr },
-    clearance: { ...p.clearance },
+    expr: {
+      W: remapBoardIds(p.expr.W, boardIds),
+      H: remapBoardIds(p.expr.H, boardIds),
+      D: remapBoardIds(p.expr.D, boardIds),
+    },
+    checks: { ...p.checks },
   }))
   return {
     id,
     name: copyName(job.name, existingNames),
-    settings: { ...job.settings },
+    settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     boards,
     parts,
     createdAt: t,
@@ -205,6 +214,13 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
   return job.parts.filter((p) => p.boardId === boardId).map((p) => p.name)
 }
 
+/**
+ * 板を消す前の確認用：その板から切る部材の名前と、式でその板の厚みを使っている部材（「部材名（軸）」）
+ */
+export function boardUsages(job: Job, boardId: string): { cutFrom: string[]; thickness: string[] } {
+  return { cutFrom: partsUsingBoard(job, boardId), thickness: partsUsingBoardThickness(job, boardId) }
+}
+
 /** 板を消す。使っていた部材の板は未設定（null）になる。確認は画面側で partsUsingBoard を使って行う */
 export function removeBoard(job: Job, boardId: string): OpResult {
   if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
@@ -213,6 +229,44 @@ export function removeBoard(job: Job, boardId: string): OpResult {
     boards: job.boards.filter((b) => b.id !== boardId),
     parts: job.parts.map((p) => (p.boardId === boardId ? { ...p, boardId: null } : p)),
   })
+}
+
+// ---------- 逃げ ----------
+
+/** 逃げの寸法の検査。0 より大きく、ほかの逃げと同じ寸法（小数第1位で比較）でないこと */
+function validateNige(job: Job, value: number, selfId: string | null): string | null {
+  if (!(Number.isFinite(value) && round1(value) > 0)) return '逃げの寸法は 0 より大きい数を入れてください'
+  const dup = job.settings.nige.find((n) => n.id !== selfId && eq1(n.value, value))
+  if (dup) return `${nigeName(dup.value)} はすでにあります`
+  return null
+}
+
+/** 逃げを足す。入れるのは寸法だけ（名前は「逃げ＋寸法」）。同じ寸法の逃げがあれば断る */
+export function addNige(job: Job, value: number, id: string = newId('nige')): OpResult {
+  const err = validateNige(job, value, null)
+  if (err) return fail(err)
+  const nige: Nige = { id, value: round1(value) }
+  return ok({ ...job, settings: { ...job.settings, nige: [...job.settings.nige, nige] } })
+}
+
+/** 逃げの寸法を変える。式は id で参照しているので、値がついてくる。同じ寸法のほかの逃げがあれば断る */
+export function updateNige(job: Job, nigeId: string, value: number): OpResult {
+  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
+  const err = validateNige(job, value, nigeId)
+  if (err) return fail(err)
+  const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, value: round1(value) } : n))
+  return ok({ ...job, settings: { ...job.settings, nige } })
+}
+
+/** 逃げを使っている部材（「部材名（軸）」）。消す前の確認に使う */
+export function nigeUsages(job: Job, nigeId: string): string[] {
+  return partsUsingNige(job, nigeId)
+}
+
+/** 逃げを消す。式の {n:…} は残り、その寸法は「削除した逃げを使っています」になる。確認は画面側で nigeUsages を使う */
+export function removeNige(job: Job, nigeId: string): OpResult {
+  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
+  return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => n.id !== nigeId) } })
 }
 
 // ---------- 部材 ----------
@@ -227,7 +281,8 @@ export function newPart(p: Partial<Part> = {}): Part {
     thicknessAxis: null,
     quantity: 1,
     grain: 'any',
-    clearance: {},
+    memo: '',
+    checks: { finished: false, cut: false },
     allowance: null,
     ...p,
   }
@@ -235,9 +290,6 @@ export function newPart(p: Partial<Part> = {}): Part {
 
 function validatePartFields(part: Part): string | null {
   if (!(Number.isInteger(part.quantity) && part.quantity >= 0)) return '枚数は 0 以上の整数を入れてください'
-  for (const v of Object.values(part.clearance)) {
-    if (v !== undefined && !(Number.isFinite(v) && v >= 0)) return '逃げは 0 以上の数を入れてください'
-  }
   if (part.allowance !== null && !(Number.isFinite(part.allowance) && part.allowance >= 0)) {
     return '切り代は 0 以上の数を入れてください（空欄なら仕事の初期値）'
   }
@@ -296,4 +348,13 @@ export function partsReferencing(job: Job, partId: string): string[] {
       }),
     )
     .map((p) => p.name)
+}
+
+/** 部材の加工のチェック（仕上がり 済・木取り 済）を変える。寸法は変えない */
+export function setPartChecks(job: Job, partId: string, patch: Partial<PartChecks>): OpResult {
+  if (!job.parts.some((p) => p.id === partId)) return fail('部材が見つかりません')
+  return ok({
+    ...job,
+    parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, ...patch } } : p)),
+  })
 }
