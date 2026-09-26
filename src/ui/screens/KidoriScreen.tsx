@@ -3,13 +3,15 @@
 import { useMemo } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
-import type { BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
+import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
+import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
 import { boardLabel, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { CutSteps } from '../components/CutSteps'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
 import { SheetDiagram } from '../components/SheetDiagram'
+import { SheetSizePicker } from '../components/SheetSizePicker'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 
@@ -22,7 +24,11 @@ const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = 
 
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
-  const result = useMemo(() => packJob(job, computeDimensions(job)), [job])
+  // 今の結果と、3×6・4×8 の比較（材料のサイズの選択）。どちらも仕事が変わったときだけ計算し直す
+  const { result, compare } = useMemo(() => {
+    const dims = computeDimensions(job)
+    return { result: packJob(job, dims), compare: compareStandardSizes(job, dims) }
+  }, [job])
   const s = job.settings
   // 部材ごとに切り代を入れた部材（設定の切り代を変えても変わらないことを見せる）
   const own = job.parts.filter((p) => p.quantity > 0 && p.allowance !== null)
@@ -79,7 +85,13 @@ export function KidoriScreen() {
           </div>
           <ul className="kd-mats">
             {result.materials.map((m) => (
-              <MaterialRow key={m.boardId} m={m} auto={s.cutMode === 'auto'} />
+              <MaterialRow
+                key={m.boardId}
+                m={m}
+                auto={s.cutMode === 'auto'}
+                board={job.boards.find((b) => b.id === m.boardId) ?? null}
+                comparison={compare.find((c) => c.boardId === m.boardId) ?? null}
+              />
             ))}
           </ul>
         </div>
@@ -155,7 +167,14 @@ export function KidoriScreen() {
   )
 }
 
-function MaterialRow({ m, auto }: { m: MaterialResult; auto: boolean }) {
+interface MaterialRowProps {
+  m: MaterialResult
+  auto: boolean
+  board: Board | null
+  comparison: MaterialSizeComparison | null
+}
+
+function MaterialRow({ m, auto, board, comparison }: MaterialRowProps) {
   return (
     <li className="kd-mat">
       <div className="kd-mat-name">{boardLabel(m)}</div>
@@ -175,6 +194,7 @@ function MaterialRow({ m, auto }: { m: MaterialResult; auto: boolean }) {
           {auto && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
+      {board && <SheetSizePicker board={board} options={comparison?.options ?? null} current={m} />}
     </li>
   )
 }
