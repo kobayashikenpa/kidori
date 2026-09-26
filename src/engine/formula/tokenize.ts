@@ -183,7 +183,7 @@ export function validatePartName(name: string, otherNames: readonly string[] = [
   const bad = [...name].find((ch) => [...normalizeFormulaText(ch)].some((n) => SYMBOL_SET.has(n) || n === '.'))
   if (bad !== undefined) return `部材名に「${bad}」は使えません（+ - * / ( ) . × ÷ は式で使う記号のため）`
   const brace = [...name].find((ch) => isOpenBrace(ch) || isCloseBrace(ch))
-  if (brace !== undefined) return `部材名に「${brace}」は使えません（{ } は式で材料の厚み・逃げを表すため）`
+  if (brace !== undefined) return `部材名に「${brace}」は使えません（{ } は式で材料の厚み・調整寸法を表すため）`
   const key = normalizePartName(name)
   const same = otherNames.find((n) => normalizePartName(n) === key)
   if (same !== undefined) return `「${same}」という部材はすでにあります`

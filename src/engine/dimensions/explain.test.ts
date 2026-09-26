@@ -61,9 +61,9 @@ describe('explainDimension（寸法表の内訳）', () => {
     job.settings.nige = job.settings.nige.filter((n) => n.id !== 'nige-1')
     const e = explainDimension(job, 'part-tanaita', 'W')!
     expect(e.result).toBeNull()
-    expect(e.pieces[2]).toEqual({ kind: 'ref', ref: 'nige', label: '（削除した逃げ）', value: null })
+    expect(e.pieces[2]).toEqual({ kind: 'ref', ref: 'nige', label: '（削除した調整寸法）', value: null })
     expect(e.errors.map((x) => x.kind)).toEqual(['missingNige'])
-    expect(explanationText(e)).toBe('天地板.W 864 − （削除した逃げ） ?')
+    expect(explanationText(e)).toBe('天地板.W 864 − （削除した調整寸法） ?')
   })
 
   it('参照先が計算できないと、その参照の値は null で、参照先のエラーを伝える', () => {

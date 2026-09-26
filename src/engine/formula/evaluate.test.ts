@@ -179,7 +179,7 @@ describe('材料の厚み・逃げの値', () => {
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.error.kind).toBe('missingNige')
-      expect(r.error.message).toBe('削除した逃げを使っています')
+      expect(r.error.message).toBe('削除した調整寸法を使っています')
     }
   })
 

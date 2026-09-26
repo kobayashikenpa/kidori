@@ -1,4 +1,4 @@
-// 設定の画面：刃厚・耳落とし・切り代・切り方、逃げの一覧、板の一覧、配色
+// 設定の画面：刃厚・耳落とし・切り代・切り方、調整寸法（逃げ・ほぞなど）の一覧、板の一覧、配色
 import { useState } from 'react'
 import type { Settings } from '../../engine/types'
 import { updateSettings } from '../../store/jobs'
@@ -73,7 +73,7 @@ export function SettingsScreen() {
         </div>
       </div>
 
-      <h3>逃げ</h3>
+      <h3>調整寸法</h3>
       <NigeEditor />
 
       <h3>材料</h3>

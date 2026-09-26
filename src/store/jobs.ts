@@ -283,7 +283,7 @@ export function addNige(job: Job, name: string, value: number, id: string = newI
 
 /** 調整寸法（逃げ）の名前と寸法を変える。式は id で参照しているので、表示と値がついてくる。名前と寸法の両方が同じほかの項目があれば断る */
 export function updateNige(job: Job, nigeId: string, name: string, value: number): OpResult {
-  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
+  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('調整寸法が見つかりません')
   const err = validateNige(job, name, value, nigeId)
   if (err) return fail(err)
   const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, name: name.trim(), value: round1(value) } : n))
@@ -298,7 +298,7 @@ export function nigeUsages(job: Job, nigeId: string): string[] {
 /** 逃げをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る */
 export function removeNiges(job: Job, nigeIds: readonly string[]): OpResult {
   const ids = new Set(nigeIds)
-  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('逃げが見つかりません')
+  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('調整寸法が見つかりません')
   return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => !ids.has(n.id)) } })
 }
 

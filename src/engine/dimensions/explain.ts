@@ -72,7 +72,7 @@ export function explainDimension(
         const n = job.settings.nige.find((x) => x.id === tok.nigeId)
         return n
           ? { kind: 'ref', ref: 'nige', label: nigeName(n), value: n.value }
-          : { kind: 'ref', ref: 'nige', label: '（削除した逃げ）', value: null }
+          : { kind: 'ref', ref: 'nige', label: '（削除した調整寸法）', value: null }
       }
       default:
         return { kind: 'op', text: OP_TEXT[tok.type] }

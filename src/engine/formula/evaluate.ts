@@ -66,7 +66,7 @@ export function evaluate(ast: Expr, lookup: Lookup): EvalResult {
     }
     case 'nige': {
       const v = lookup.nige(ast.nigeId)
-      if (v === null) return { ok: false, error: { kind: 'missingNige', message: '削除した逃げを使っています' } }
+      if (v === null) return { ok: false, error: { kind: 'missingNige', message: '削除した調整寸法を使っています' } }
       return { ok: true, value: v }
     }
     case 'ref': {

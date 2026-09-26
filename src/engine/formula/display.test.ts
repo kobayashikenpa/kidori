@@ -22,9 +22,9 @@ describe('unitLabel（単位の表示名）', () => {
     expect(formulaLabels('(600 + {t:b-4}) / 2', job)).toEqual(['(', '6', '0', '0', '+', 'ラワン4', ')', '÷', '2'])
   })
 
-  it('消した逃げは（削除した逃げ）、消した材料は（削除した材料）', () => {
+  it('消した逃げは（削除した調整寸法）、消した材料は（削除した材料）', () => {
     const job = bookshelfJob()
-    expect(formulaLabels('{n:gone} + {t:gone}', job)).toEqual(['（削除した逃げ）', '+', '（削除した材料）'])
+    expect(formulaLabels('{n:gone} + {t:gone}', job)).toEqual(['（削除した調整寸法）', '+', '（削除した材料）'])
   })
 
   it('逃げの寸法を変えると表示名もついてくる', () => {

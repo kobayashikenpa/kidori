@@ -207,7 +207,7 @@ export function FormulaInput({ axis, value, onChange, job, boardId, parts, finis
           )}
           {job.settings.nige.length > 0 && (
             <div className="pad-group">
-              <span className="pad-title">逃げ</span>
+              <span className="pad-title">調整寸法</span>
               <div className="pad-chips">
                 {job.settings.nige.map((n) => (
                   <button

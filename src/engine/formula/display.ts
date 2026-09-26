@@ -8,7 +8,7 @@ const OP_LABELS: Readonly<Record<string, string>> = { '+': '+', '-': '−', '*':
 
 /**
  * 単位の表示名。* → ×、/ → ÷、- → −、{t:…} → ラワン4、{n:…} → 逃げ1・ほぞ15（名前＋寸法）。
- * 材料・逃げが見つからなければ（削除した材料）／（削除した逃げ）。読めないかたまりはそのまま
+ * 材料・逃げが見つからなければ（削除した材料）／（削除した調整寸法）。読めないかたまりはそのまま
  */
 export function unitLabel(unit: Unit, job: Pick<Job, 'boards' | 'settings'>): string {
   const n = normalizeFormulaText(unit.text)
@@ -30,7 +30,7 @@ export function unitLabel(unit: Unit, job: Pick<Job, 'boards' | 'settings'>): st
     case 'nige': {
       const id = parseBraceText(unit.text)?.id
       const nige = job.settings.nige.find((x) => x.id === id)
-      return nige ? nigeName(nige) : '（削除した逃げ）'
+      return nige ? nigeName(nige) : '（削除した調整寸法）'
     }
     case 'bad':
       return unit.text
