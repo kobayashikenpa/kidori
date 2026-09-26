@@ -127,7 +127,8 @@ export function PartEditor({ part, onClose }: Props) {
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}
           finishedOf={finishedOf}
-          errors={dims.errors.filter((e) => e.axis === axis)}
+          // 厚みが合わないエラーは「厚み」の欄の下に出すので、式の下（2行の枠）には式のエラーだけを出す
+          errors={dims.errors.filter((e) => e.axis === axis && e.kind !== 'thicknessMismatch')}
           open={padAxis === axis}
           onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
         />
