@@ -72,6 +72,11 @@ export interface Board {
   length: number
   /** 木目の方向。初期値 'long'。サブロク・シハチは 'long' 固定 */
   grain: BoardGrain
+  /**
+   * 新しい仕事に最初から入っている材料の印（defaultBoards が付ける）。あとから足した材料には付けない。
+   * 画面の並び順（boards.ts の orderedBoards）に使う。第1.1版までのデータには無い
+   */
+  builtIn?: true
 }
 
 /** 部材の木目：板の面になる2つの軸のどちらか、または「どちらでもよい」 */

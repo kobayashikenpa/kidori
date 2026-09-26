@@ -15,7 +15,7 @@ export function defaultSettings(): Settings {
   return { ...DEFAULT_SETTINGS, nige: defaultNige() }
 }
 
-/** 新しい仕事の材料：メラミン1・ラワン2.5・ラワン4・ラワン5.5（4×8・木目は長手方向。仕様書 5.1）。id は newId('board') */
+/** 新しい仕事の材料：メラミン1・ラワン2.5・ラワン4・ラワン5.5（4×8・木目は長手方向。仕様書 5.1）。id は newId('board')。印 builtIn: true を付ける */
 export function defaultBoards(newId: (prefix: string) => string): Board[] {
   const [width, length] = BOARD_SIZES.shihachi
   const list: [string, number][] = [
@@ -32,6 +32,7 @@ export function defaultBoards(newId: (prefix: string) => string): Board[] {
     width,
     length,
     grain: 'long',
+    builtIn: true,
   }))
 }
 
