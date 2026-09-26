@@ -51,6 +51,15 @@ describe('フラッシュの追加・変更', () => {
     expect(addFlush(flushJob(), draft({ name: '  ' })).ok).toBe(false)
   })
 
+  it('材料の厚みつきの名前（ラワン4 など）と同じ名前は断る（全角・半角の違いだけも）', () => {
+    const r = addFlush(flushJob(), draft({ name: 'ラワン4' }))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.message).toContain('材料')
+    expect(addFlush(flushJob(), draft({ name: 'ラワン４' })).ok).toBe(false)
+    expect(updateFlush(flushJob(), FLUSH_25_ID, draft({ name: 'メラミン1' })).ok).toBe(false)
+    expect(addFlush(flushJob(), draft({ name: 'ラワン5' })).ok).toBe(true)
+  })
+
   it('芯材が 0 以下、表面材が無い・無い材料・枚数が 0 や小数・同じ材料の重ねは断る', () => {
     const job = flushJob()
     expect(addFlush(job, draft({ core: 0 })).ok).toBe(false)

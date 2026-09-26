@@ -1,5 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
@@ -366,6 +366,9 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
   const key = f.name.normalize('NFKC')
   const same = job.flushes.find((x) => x.id !== selfId && x.name.trim().normalize('NFKC') === key)
   if (same) return `「${same.name}」はすでにあります`
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
+  if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
   if (!(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
   if (f.faces.length === 0) return '表面材を1つ以上選んでください'
   const seen = new Set<string>()
