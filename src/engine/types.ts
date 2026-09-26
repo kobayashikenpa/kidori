@@ -320,7 +320,8 @@ export interface PackingResult {
   skipped: { partId: string; name: string; reason: 'dimensionError' | 'thicknessMismatch' | 'noThickness' | 'noBoard' }[]
   /**
    * 木取り済み（寸法表で木取りの「完了」＝ checks.cut）で計算から除いた部材（第1.3版。仕様書 8）。
-   * 部材の並び順。枚数0の行は含めない。材料が無い・寸法のエラーがあっても skipped ではなくこちらに入る
+   * 部材の並び順。枚数0の行は含めない。材料が無い・寸法のエラーがあっても skipped ではなくこちらに入る。
+   * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
 }

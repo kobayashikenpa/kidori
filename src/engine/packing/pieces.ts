@@ -1,6 +1,6 @@
 // 部材を1枚ずつの「片」に展開し、板ごとに分ける。板の木目に部材の木目を合わせて向き（x・y）を決める
 import { round1 } from '../round'
-import type { Board, DimensionResult, Job, PackingResult } from '../types'
+import type { Axis, Board, DimensionResult, Job, PackingResult, Part, PartDimensions, PartGrain } from '../types'
 import { usableSides } from './sheet'
 
 /**
@@ -43,7 +43,7 @@ export interface ExpandResult {
   groups: BoardPieces[]
   /** 計算から除いた部材（枚数0の行は含めない） */
   skipped: PackingResult['skipped']
-  /** 木取り済み（checks.cut）で除いた部材 */
+  /** 木取り済み（checks.cut。フラッシュは表面材ごとの checks.cutByBoard）で除いた部材 */
   done: PackingResult['done']
 }
 
@@ -51,6 +51,31 @@ function fmt(v: number): string {
   return String(round1(v))
 }
 
+/** 部材を切り出す材料と枚数。ふつうの部材は材料1つ、フラッシュの部材は表面材ごと（枚数＝表面材の枚数×部材の枚数） */
+interface Target {
+  boardId: string
+  quantity: number
+  /** 木取り済み（ふつうの部材は checks.cut、フラッシュは checks.cutByBoard[材料]） */
+  done: boolean
+}
+
+function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[] | null {
+  if (part?.flushId !== undefined) {
+    const flush = job.flushes.find((f) => f.id === part.flushId)
+    if (!flush) return null
+    return flush.faces.map((f) => ({
+      boardId: f.boardId,
+      quantity: f.count * d.quantity,
+      done: part.checks.cutByBoard?.[f.boardId] === true,
+    }))
+  }
+  return d.boardId === null ? null : [{ boardId: d.boardId, quantity: d.quantity, done: part?.checks.cut === true }]
+}
+
+/**
+ * 部材を片に展開する。フラッシュの部材（第1.5版）は表面材ごとにその材料の片にする（芯材は入れない）。
+ * 片の id の連番は部材ごとの通し番号（表面材をまたいで続ける）
+ */
 export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
   const partById = new Map(job.parts.map((p) => [p.id, p]))
@@ -60,13 +85,27 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
-    // 木取り済みの部材は、ほかの判定より先に除く（エラーがあっても直さずに済むように。仕様書 8）
-    if (partById.get(d.partId)?.checks.cut === true) {
-      done.push({ partId: d.partId, name: d.name, quantity: d.quantity, boardId: d.boardId })
+    const part = partById.get(d.partId)
+    const targets = targetsOf(job, part, d)
+    if (targets === null && part?.flushId === undefined && part?.checks.cut === true) {
+      // 材料が未設定でも、木取り済みなら除いた一覧に出す（第1.3版のまま）
+      done.push({ partId: d.partId, name: d.name, quantity: d.quantity, boardId: null })
       continue
     }
-    const board = d.boardId ? boardById.get(d.boardId) : undefined
-    if (!board) {
+    // 木取り済みの部材（表面材）は、ほかの判定より先に除く（エラーがあっても直さずに済むように。仕様書 8）
+    const rest: { board: Board; quantity: number }[] = []
+    let missing = false
+    for (const t of targets ?? []) {
+      if (t.done) {
+        done.push({ partId: d.partId, name: d.name, quantity: t.quantity, boardId: t.boardId })
+        continue
+      }
+      const board = boardById.get(t.boardId)
+      if (board) rest.push({ board, quantity: t.quantity })
+      else missing = true
+    }
+    if (targets !== null && targets.length > 0 && targets.every((t) => t.done)) continue
+    if (rest.length === 0 || missing) {
       skipped.push({ partId: d.partId, name: d.name, reason: 'noBoard' })
       continue
     }
@@ -75,7 +114,7 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       continue
     }
     if (d.thicknessMismatch) {
-      // 厚みの寸法が材料の厚みと合わない（仕様書 5.3。エラー）
+      // 厚みの寸法が材料（フラッシュ）の厚みと合わない（仕様書 5.3。エラー）
       skipped.push({ partId: d.partId, name: d.name, reason: 'thicknessMismatch' })
       continue
     }
@@ -87,39 +126,47 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
     const [a0, a1] = d.faceAxes
     const s0 = d.cutSize[a0]
     const s1 = d.cutSize[a1]
-    // face[0] を y に置く向きと、face[1] を y に置く向き
-    const upright: Orientation = { x: s1, y: s0, rotated: false }
-    const turned: Orientation = { x: s0, y: s1, rotated: true }
-    const grain = partById.get(d.partId)?.grain ?? 'any'
-    let candidates: Orientation[]
-    if (grain === a0 || grain === a1) {
-      // 木目の軸を、板の木目の方向（長辺＝y／短辺＝x）に合わせる
-      const grainOnY = board.grain === 'long'
-      candidates = [(grain === a0) === grainOnY ? upright : turned]
-    } else {
-      // どちらでもよい（または面にない軸が残っている）→ 回転してよい
-      candidates = round1(s0) === round1(s1) ? [upright] : [upright, turned]
-    }
-
-    // 横切り優先は長手も端切りする。おまかせは広いほう（縦切り優先）で判定する
-    const sides = usableSides(board, job.settings.trim, job.settings.cutMode === 'horizontal' ? 'horizontal' : 'vertical')
-    const orientations = candidates.filter((o) => round1(o.x) <= round1(sides.short) && round1(o.y) <= round1(sides.long))
-
-    let g = byBoard.get(board.id)
-    if (!g) {
-      g = { board, pieces: [], unplaced: [] }
-      byBoard.set(board.id, g)
-    }
-    if (orientations.length === 0) {
-      g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
-      continue
-    }
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
-    for (let i = 1; i <= d.quantity; i++) {
-      g.pieces.push({ pieceId: `${d.partId}#${i}`, partId: d.partId, name: d.name, sizeLabel, orientations })
+    const grain = part?.grain ?? 'any'
+    let seq = 0
+    for (const { board, quantity } of rest) {
+      const orientations = orientationsOn(board, s0, s1, a0, a1, grain, job)
+      let g = byBoard.get(board.id)
+      if (!g) {
+        g = { board, pieces: [], unplaced: [] }
+        byBoard.set(board.id, g)
+      }
+      if (orientations.length === 0) {
+        g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
+        seq += quantity
+        continue
+      }
+      for (let i = 1; i <= quantity; i++) {
+        seq++
+        g.pieces.push({ pieceId: `${d.partId}#${seq}`, partId: d.partId, name: d.name, sizeLabel, orientations })
+      }
     }
   }
 
   const groups = job.boards.map((b) => byBoard.get(b.id)).filter((g): g is BoardPieces => g !== undefined)
   return { groups, skipped, done }
+}
+
+/** 板に置いてよい向き（木目と、使える範囲に入るか） */
+function orientationsOn(board: Board, s0: number, s1: number, a0: Axis, a1: Axis, grain: PartGrain, job: Job): Orientation[] {
+  // face[0] を y に置く向きと、face[1] を y に置く向き
+  const upright: Orientation = { x: s1, y: s0, rotated: false }
+  const turned: Orientation = { x: s0, y: s1, rotated: true }
+  let candidates: Orientation[]
+  if (grain === a0 || grain === a1) {
+    // 木目の軸を、板の木目の方向（長辺＝y／短辺＝x）に合わせる
+    const grainOnY = board.grain === 'long'
+    candidates = [(grain === a0) === grainOnY ? upright : turned]
+  } else {
+    // どちらでもよい（または面にない軸が残っている）→ 回転してよい
+    candidates = round1(s0) === round1(s1) ? [upright] : [upright, turned]
+  }
+  // 横切り優先は長手も端切りする。おまかせは広いほう（縦切り優先）で判定する
+  const sides = usableSides(board, job.settings.trim, job.settings.cutMode === 'horizontal' ? 'horizontal' : 'vertical')
+  return candidates.filter((o) => round1(o.x) <= round1(sides.short) && round1(o.y) <= round1(sides.long))
 }
