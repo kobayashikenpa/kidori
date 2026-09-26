@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
-import { partsUsingBoardThickness, partsUsingNige, remapBoardIds } from './usages'
+import {
+  partsUsingBoardThickness,
+  partsUsingBoardThicknesses,
+  partsUsingNige,
+  partsUsingNiges,
+  remapBoardIds,
+} from './usages'
 
 describe('partsUsingNige（逃げを式で使っている部材）', () => {
   it('見本の逃げ1mm は［棚板（W）］', () => {
@@ -40,6 +46,47 @@ describe('partsUsingBoardThickness（材料の厚みを式で使っている部�
     const job = bookshelfJob()
     job.parts[2].expr.W = '{n:x} + 1'
     expect(partsUsingBoardThickness(job, 'x')).toEqual([])
+  })
+})
+
+describe('partsUsingNiges（いくつかの逃げのどれかを式で使っている部材）', () => {
+  it('部材ごとに1つ、軸はまとめる（部材の並び順）', () => {
+    const job = bookshelfJob()
+    job.parts[1].expr.D = '全体.D - {n:nige-0.5}'
+    job.parts[3].expr.D = '全体.D - 20 - {n:nige-0.5}'
+    expect(partsUsingNiges(job, ['nige-1', 'nige-0.5'])).toEqual(['側板（D）', '棚板（W・D）'])
+  })
+
+  it('1つの軸で2つ使っていても軸は1回', () => {
+    const job = bookshelfJob()
+    job.parts[3].expr.W = '全体.W - {n:nige-1} - {n:nige-0.5}'
+    expect(partsUsingNiges(job, ['nige-1', 'nige-0.5'])).toEqual(['棚板（W）'])
+  })
+
+  it('id が1つなら partsUsingNige と同じ。空なら空', () => {
+    expect(partsUsingNiges(bookshelfJob(), ['nige-1'])).toEqual(partsUsingNige(bookshelfJob(), 'nige-1'))
+    expect(partsUsingNiges(bookshelfJob(), [])).toEqual([])
+  })
+
+  it('材料の厚みは数えない', () => {
+    const job = bookshelfJob()
+    job.parts[2].expr.W = '{t:nige-1} + 1'
+    expect(partsUsingNiges(job, ['nige-1'])).toEqual(['棚板（W）'])
+  })
+})
+
+describe('partsUsingBoardThicknesses（いくつかの材料のどれかの厚みを式で使っている部材）', () => {
+  it('どれかの厚みを使っている部材名と軸', () => {
+    const job = bookshelfJob()
+    job.parts[2].expr.W = `全体.W - {t:${LUMBER_18_ID}} * 2`
+    job.parts[4].expr.H = '全体.H - {t:other}'
+    expect(partsUsingBoardThicknesses(job, [LUMBER_18_ID, 'other'])).toEqual(['天地板（W）', `${job.parts[4].name}（H）`])
+  })
+
+  it('逃げは数えない', () => {
+    const job = bookshelfJob()
+    job.parts[2].expr.W = '{n:x} + 1'
+    expect(partsUsingBoardThicknesses(job, ['x'])).toEqual([])
   })
 })
 

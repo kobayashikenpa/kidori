@@ -1,15 +1,19 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultBoards, defaultNige, nigeName } from '../engine/defaults'
+import { defaultSheet, nigeName, type BoardSheet } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
-import { partsUsingBoardThickness, partsUsingNige, remapBoardIds } from '../engine/formula/usages'
+import {
+  partsUsingBoardThicknesses,
+  partsUsingNige,
+  partsUsingNiges,
+  remapBoardIds,
+} from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
 import { eq1, round1 } from '../engine/round'
 import {
   AXES,
   BOARD_SIZES,
-  DEFAULT_SETTINGS,
   type Board,
   type BoardSizeKind,
   type Job,
@@ -18,6 +22,7 @@ import {
   type PartChecks,
   type Settings,
 } from '../engine/types'
+import { defaultTemplate, type SettingsTemplate } from './template'
 
 /** 操作の結果。失敗したときは画面にそのまま出せる日本語の理由 */
 export type OpResult = { ok: true; job: Job } | { ok: false; message: string }
@@ -37,14 +42,27 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 
 // ---------- 仕事 ----------
 
-/** 新しい仕事：設定は初期値（逃げ0.5mm・逃げ1mm）、材料は defaultBoards（4×8 の4つ）、部材なし */
-export function createJob(name: string, now: Date = new Date(), id: string = newId('job')): Job {
+/**
+ * 新しい仕事：設定と材料はひな形（最後に使った設定）を写す。初期値のひな形なら 逃げ0.5・1、材料 メラミン1・ラワン2.5・4・5.5。
+ * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。部材なし
+ */
+export function createJob(
+  name: string,
+  template: SettingsTemplate = defaultTemplate(),
+  now: Date = new Date(),
+  id: string = newId('job'),
+): Job {
   const t = now.toISOString()
+  const s = template.settings
   return {
     id,
     name: name.trim() || '名前のない仕事',
-    settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
-    boards: defaultBoards(newId),
+    settings: { ...s, nige: s.nige.map((n) => ({ ...n })) },
+    boards: template.materials.map((m) => {
+      const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
+      if (m.builtIn) b.builtIn = true
+      return b
+    }),
     parts: [],
     createdAt: t,
     updatedAt: t,
@@ -145,17 +163,13 @@ export function boardSizeLabel(board: Pick<Board, 'sizeKind' | 'width' | 'length
   return `自由入力 ${size}`
 }
 
-/** 新しい板の下書き（サブロク・木目は長辺方向） */
+/** 新しい板の下書き（4×8・木目は長手方向。サイズは木取りの画面で選ぶ） */
 export function newBoard(p: Partial<Board> = {}): Board {
-  const [width, length] = BOARD_SIZES.saburoku
   return {
     id: newId('board'),
     material: '',
     thickness: 18,
-    sizeKind: 'saburoku',
-    width,
-    length,
-    grain: 'long',
+    ...defaultSheet(),
     ...p,
   }
 }
@@ -214,20 +228,33 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
   return job.parts.filter((p) => p.boardId === boardId).map((p) => p.name)
 }
 
-/**
- * 板を消す前の確認用：その板から切る部材の名前と、式でその板の厚みを使っている部材（「部材名（軸）」）
- */
-export function boardUsages(job: Job, boardId: string): { cutFrom: string[]; thickness: string[] } {
-  return { cutFrom: partsUsingBoard(job, boardId), thickness: partsUsingBoardThickness(job, boardId) }
-}
-
-/** 板を消す。使っていた部材の板は未設定（null）になる。確認は画面側で partsUsingBoard を使って行う */
-export function removeBoard(job: Job, boardId: string): OpResult {
-  if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
+/** 板をまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材の板は未設定（null）になる */
+export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
+  const ids = new Set(boardIds.filter((id) => job.boards.some((b) => b.id === id)))
+  if (ids.size === 0) return fail('材料が見つかりません')
   return ok({
     ...job,
-    boards: job.boards.filter((b) => b.id !== boardId),
-    parts: job.parts.map((p) => (p.boardId === boardId ? { ...p, boardId: null } : p)),
+    boards: job.boards.filter((b) => !ids.has(b.id)),
+    parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
+  })
+}
+
+/** 板をまとめて消す前の確認用：その板のどれかから切る部材の名前（重ならない）と、式でそのどれかの厚みを使っている部材 */
+export function boardsUsages(job: Job, boardIds: readonly string[]): { cutFrom: string[]; thickness: string[] } {
+  const ids = new Set(boardIds)
+  return {
+    cutFrom: job.parts.filter((p) => p.boardId !== null && ids.has(p.boardId)).map((p) => p.name),
+    thickness: partsUsingBoardThicknesses(job, boardIds),
+  }
+}
+
+/** 材料のサイズを選ぶ（木取りの画面）。3×6・4×8 は寸法が決まり木目は長手方向。自由入力は短辺・長辺・木目。0 以下の寸法は断る */
+export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpResult {
+  return updateBoard(job, boardId, {
+    sizeKind: size.sizeKind,
+    width: size.width,
+    length: size.length,
+    grain: size.grain,
   })
 }
 
@@ -263,10 +290,16 @@ export function nigeUsages(job: Job, nigeId: string): string[] {
   return partsUsingNige(job, nigeId)
 }
 
-/** 逃げを消す。式の {n:…} は残り、その寸法は「削除した逃げを使っています」になる。確認は画面側で nigeUsages を使う */
-export function removeNige(job: Job, nigeId: string): OpResult {
-  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
-  return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => n.id !== nigeId) } })
+/** 逃げをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る */
+export function removeNiges(job: Job, nigeIds: readonly string[]): OpResult {
+  const ids = new Set(nigeIds)
+  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('逃げが見つかりません')
+  return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => !ids.has(n.id)) } })
+}
+
+/** 逃げをまとめて消す前の確認用：式でそのどれかを使っている部材（例：［棚板（W）］） */
+export function nigesUsages(job: Job, nigeIds: readonly string[]): string[] {
+  return partsUsingNiges(job, nigeIds)
 }
 
 // ---------- 部材 ----------

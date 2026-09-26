@@ -13,11 +13,11 @@ function braceIds(expr: string, kind: 'thickness' | 'nige'): string[] {
   return out
 }
 
-/** 式で id を使っている部材を「部材名（軸）」で返す（部材の並び順。軸が複数なら 棚板（W・D）） */
-function partsUsing(job: Pick<Job, 'parts'>, kind: 'thickness' | 'nige', id: string): string[] {
+/** 式で ids のどれかを使っている部材を「部材名（軸）」で返す（部材の並び順・部材ごとに1つ。軸が複数なら 棚板（W・D）） */
+function partsUsing(job: Pick<Job, 'parts'>, kind: 'thickness' | 'nige', ids: ReadonlySet<string>): string[] {
   const out: string[] = []
   for (const p of job.parts) {
-    const axes: Axis[] = AXES.filter((a) => braceIds(p.expr[a], kind).includes(id))
+    const axes: Axis[] = AXES.filter((a) => braceIds(p.expr[a], kind).some((id) => ids.has(id)))
     if (axes.length > 0) out.push(`${p.name}（${axes.join('・')}）`)
   }
   return out
@@ -25,12 +25,22 @@ function partsUsing(job: Pick<Job, 'parts'>, kind: 'thickness' | 'nige', id: str
 
 /** 式でその逃げを使っている部材（例：［棚板（W）］）。逃げを削除する前の確認に使う */
 export function partsUsingNige(job: Pick<Job, 'parts'>, nigeId: string): string[] {
-  return partsUsing(job, 'nige', nigeId)
+  return partsUsing(job, 'nige', new Set([nigeId]))
+}
+
+/** 式でいくつかの逃げのどれかを使っている部材（部材ごとに1つ）。逃げをまとめて削除する前の確認に使う */
+export function partsUsingNiges(job: Pick<Job, 'parts'>, nigeIds: readonly string[]): string[] {
+  return partsUsing(job, 'nige', new Set(nigeIds))
 }
 
 /** 式でその材料の厚みを使っている部材（例：［天地板（W）］）。材料を削除する前の確認に使う */
 export function partsUsingBoardThickness(job: Pick<Job, 'parts'>, boardId: string): string[] {
-  return partsUsing(job, 'thickness', boardId)
+  return partsUsing(job, 'thickness', new Set([boardId]))
+}
+
+/** 式でいくつかの材料のどれかの厚みを使っている部材（部材ごとに1つ）。材料をまとめて削除する前の確認に使う */
+export function partsUsingBoardThicknesses(job: Pick<Job, 'parts'>, boardIds: readonly string[]): string[] {
+  return partsUsing(job, 'thickness', new Set(boardIds))
 }
 
 /** 式の中の材料の厚み {t:古いid} を {t:新しいid} につけ替える（仕事のコピー用）。ほかの部分はそのまま */

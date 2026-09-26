@@ -66,10 +66,23 @@ describe('orderedBoards（材料の並び順）', () => {
       expect(names(orderedBoards({ boards }))).toEqual(['シナ18', 'シナ4', 'メラミン1', 'ラワン2.5', 'ラワン4', 'ラワン5.5'])
     })
 
-    it('大きさや木目が違えば、同じ名前・厚みでも足した材料とみなす', () => {
-      const boards = legacy()
+    it('材料名＋厚みだけで判定する：ラワン 4 のサイズを 3×6 にしても最初からある材料として下に並ぶ（第1.3版）', () => {
+      const boards = [...legacy(), added('シナ', 18)]
       boards[2] = { ...boards[2], sizeKind: 'saburoku', width: 910, length: 1820 }
-      expect(names(orderedBoards({ boards }))).toEqual(['ラワン4', 'メラミン1', 'ラワン2.5', 'ラワン5.5'])
+      expect(names(orderedBoards({ boards }))).toEqual(['シナ18', 'メラミン1', 'ラワン2.5', 'ラワン4', 'ラワン5.5'])
+      expect(isBuiltInBoard(boards[2], { boards })).toBe(true)
+    })
+
+    it('自由入力・木目 短手方向にしても、材料名＋厚みが同じなら最初からある材料（前後の空白は無視）', () => {
+      const boards = legacy()
+      boards[1] = { ...boards[1], material: ' ラワン ', sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }
+      expect(isBuiltInBoard(boards[1], { boards })).toBe(true)
+    })
+
+    it('厚みが違えば（ラワン 3）足した材料', () => {
+      const boards = legacy()
+      boards[2] = { ...boards[2], thickness: 3 }
+      expect(names(orderedBoards({ boards }))).toEqual(['ラワン3', 'メラミン1', 'ラワン2.5', 'ラワン5.5'])
     })
 
     it('isBuiltInBoard：印があればそれに従い、仕事に印のある材料が1つでもあれば、印の無い材料は足した材料', () => {

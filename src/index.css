@@ -447,51 +447,37 @@ select.input {
   flex: 1;
 }
 
-/* ---------- 逃げの一覧 ---------- */
-.nige-item {
+/* ---------- 設定の一覧（逃げ・材料で共通） ---------- */
+.list-item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-.nige-info {
+.list-info {
   flex: 1 1 140px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-wrap: anywhere;
 }
-.nige-info .board-name {
+.list-name {
   font-size: 17px;
   font-weight: 700;
 }
-.nige-actions {
+.list-actions {
   display: flex;
   gap: 6px;
 }
-.nige-add {
+.list-add {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
 }
-.nige-add .unit-input {
+.list-add .unit-input {
   flex: 1;
   min-width: 0;
-}
-
-/* ---------- 板の一覧 ---------- */
-.board-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-}
-.board-item .board-name {
-  font-size: 17px;
-  font-weight: 700;
 }
 
 .expr-result {
@@ -1090,6 +1076,12 @@ select.input {
 .kd-issues.warn h4 {
   color: var(--warn);
 }
+.kd-issues.done {
+  border-left-color: var(--ok);
+}
+.kd-issues.done h4 {
+  color: var(--ok);
+}
 .kd-issues ul {
   margin: 6px 0 0;
   padding-left: 1.2em;
@@ -1370,4 +1362,139 @@ select.input {
   margin-top: 4px;
   padding-left: 1.4em;
   font-size: 16px;
+}
+
+/* 削除の確認：ふつうの行とはっきり見分けられるように、赤の枠と薄い赤の地にする */
+.card.confirm {
+  border: 2px solid var(--err);
+  background: var(--err-soft);
+  /* 見える位置へ動かすとき、上の見出しと下のタブに隠れないようにする */
+  scroll-margin-top: 64px;
+  scroll-margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+/* 設定の一覧：選んで削除 */
+.list-select-start {
+  align-self: flex-end;
+}
+.list-check {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  flex-wrap: nowrap;
+}
+.list-check .check-box {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+.list-check.on {
+  border-color: var(--err);
+}
+.list-check.on .check-box {
+  background: var(--err);
+  border-color: var(--err);
+  color: var(--surface);
+}
+/* 選ぶあいだは、削除のボタンを画面の下（タブの上）に残す */
+.list-bulk {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px);
+  z-index: 4;
+  box-shadow: var(--shadow);
+}
+
+/* ---------- 材料のサイズの選択（木取りの画面） ---------- */
+.sz {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.sz-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sz-opts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.sz-opt {
+  appearance: none;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  min-height: 96px;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  min-width: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  font: inherit;
+}
+.sz-opt[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.sz-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.sz-opt[aria-pressed='true'] .sz-name::before {
+  content: '✓ ';
+  color: var(--accent);
+}
+.sz-n {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.sz-y {
+  font-size: 13px;
+}
+.sz-muted {
+  color: var(--muted);
+  margin-top: 6px;
+}
+.sz-tags {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.sz-tag {
+  font-size: 10.5px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border-radius: 99px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sz-tag.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.sz-tag.err {
+  background: var(--err-soft);
+  color: var(--err);
+}
+.sz-form {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

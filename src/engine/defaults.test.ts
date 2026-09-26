@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardTokenLabel, defaultBoards, defaultNige, defaultSettings, nigeName } from './defaults'
+import { boardTokenLabel, defaultBoards, defaultNige, defaultSettings, defaultSheet, nigeName } from './defaults'
 import { DEFAULT_SETTINGS } from './types'
 
 describe('defaultNige（新しい仕事の逃げ）', () => {
@@ -75,5 +75,19 @@ describe('defaultSettings（新しい仕事の設定）', () => {
   })
   it('呼ぶたびに別の逃げの配列', () => {
     expect(defaultSettings().nige).not.toBe(defaultSettings().nige)
+  })
+})
+
+describe('defaultSheet（新しく足す材料のサイズ。第1.3版）', () => {
+  it('4×8（1220×2440）・木目は長手方向', () => {
+    expect(defaultSheet()).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
+  })
+
+  it('呼ぶたびに別のオブジェクト', () => {
+    const a = defaultSheet()
+    const b = defaultSheet()
+    expect(a).not.toBe(b)
+    a.width = 1
+    expect(defaultSheet().width).toBe(1220)
   })
 })

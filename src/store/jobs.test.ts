@@ -7,7 +7,7 @@ import {
   addBoard,
   addNige,
   addPart,
-  boardUsages,
+  boardsUsages,
   boardLabel,
   copyJob,
   copyName,
@@ -16,12 +16,14 @@ import {
   newBoard,
   newPart,
   nigeUsages,
+  nigesUsages,
   partsReferencing,
   partsUsingBoard,
-  removeBoard,
-  removeNige,
+  removeBoards,
+  removeNiges,
   removePart,
   renameJob,
+  setBoardSize,
   setPartChecks,
   updateBoard,
   updateNige,
@@ -37,7 +39,7 @@ function unwrap(r: OpResult): Job {
 
 describe('createJob', () => {
   it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は4つ、部材はない', () => {
-    const job = createJob('食器棚', new Date('2026-09-01T00:00:00Z'), 'job-1')
+    const job = createJob('食器棚', undefined, new Date('2026-09-01T00:00:00Z'), 'job-1')
     expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
@@ -135,20 +137,20 @@ describe('板', () => {
   })
 
   it('板を削除すると、使っていた部材の板が未設定になる', () => {
-    const job = unwrap(removeBoard(bookshelfJob(), LUMBER_18_ID))
+    const job = unwrap(removeBoards(bookshelfJob(), [LUMBER_18_ID]))
     expect(job.boards.map((b) => b.id)).toEqual([VENEER_4_ID])
     const unset = job.parts.filter((p) => p.boardId === null).map((p) => p.name)
     expect(unset).toEqual(['全体', '側板', '天地板', '棚板'])
     expect(job.parts.find((p) => p.name === '背板')!.boardId).toBe(VENEER_4_ID)
   })
 
-  it('見本の板2つを新しい仕事に登録できる', () => {
+  it('見本の板2つを新しい仕事に登録できる（新しく足す材料は 4×8。第1.3版）', () => {
     let job = createJob('本棚')
     job = { ...job, boards: [] }
     job = unwrap(addBoard(job, newBoard({ material: 'シナランバー', thickness: 18 })))
     job = unwrap(addBoard(job, newBoard({ material: 'シナベニヤ', thickness: 4 })))
     expect(job.boards.map(boardLabel)).toEqual(['シナランバー 18mm', 'シナベニヤ 4mm'])
-    expect(job.boards[0]).toMatchObject({ width: 910, length: 1820, grain: 'long' })
+    expect(job.boards[0]).toMatchObject({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
 
   it('材料名＋厚みが同じ板は登録できない', () => {
@@ -256,8 +258,8 @@ describe('仕事の名前・コピー・削除', () => {
   })
 
   it('仕事を消す。開いていた仕事を消すと、何も開いていない状態になる', () => {
-    const a = createJob('a', new Date(), 'a')
-    const b = createJob('b', new Date(), 'b')
+    const a = createJob('a', undefined, new Date(), 'a')
+    const b = createJob('b', undefined, new Date(), 'b')
     expect(deleteJob([a, b], 'a', 'a')).toEqual({ jobs: [b], currentJobId: null })
     expect(deleteJob([a, b], 'b', 'a')).toEqual({ jobs: [b], currentJobId: 'b' })
     expect(deleteJob([a, b], null, 'x')).toEqual({ jobs: [a, b], currentJobId: null })
@@ -297,7 +299,7 @@ describe('逃げ', () => {
   })
 
   it('逃げを消すと、使っていた寸法は missingNige になる', () => {
-    const job = unwrap(removeNige(bookshelfJob(), 'nige-1'))
+    const job = unwrap(removeNiges(bookshelfJob(), ['nige-1']))
     expect(job.settings.nige.map((n) => n.id)).toEqual(['nige-0.5'])
     const errs = computeDimensions(job).errors
     expect(errs.some((e) => e.kind === 'missingNige')).toBe(true)
@@ -316,7 +318,7 @@ describe('材料の厚みを式で使うとき', () => {
   it('削除の確認用に、その板から切る部材と、式で厚みを使っている部材を返す', () => {
     const job = jobWithThickness()
     const rawan4 = job.boards.find((b) => b.thickness === 4)!
-    expect(boardUsages(job, rawan4.id)).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
+    expect(boardsUsages(job, [rawan4.id])).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
   })
 
   it('コピー先の式は新しい板の id を指し、同じ寸法になる', () => {
@@ -344,5 +346,51 @@ describe('メモと加工のチェック', () => {
     const next = unwrap(updatePart(job, side.id, { memo: '切り出したあとに穴あけ' }))
     expect(next.parts.find((p) => p.id === side.id)!.memo).toBe('切り出したあとに穴あけ')
     expect(side.memo).toBe('')
+  })
+})
+
+describe('逃げ・材料の一括削除と、材料のサイズの選択（第1.3版 S-09）', () => {
+  it('見本で 逃げ0.5・逃げ1 をまとめて消すと逃げが空になり、確認用に［棚板（W）］が返る', () => {
+    const job = bookshelfJob()
+    expect(nigesUsages(job, ['nige-0.5', 'nige-1'])).toEqual(['棚板（W）'])
+    const next = unwrap(removeNiges(job, ['nige-0.5', 'nige-1']))
+    expect(next.settings.nige).toEqual([])
+    expect(job.settings.nige).toHaveLength(2)
+  })
+
+  it('部材が複数の逃げを別の軸で使っていても、部材ごとに1つにまとめる', () => {
+    let job = bookshelfJob()
+    const tana = job.parts.find((p) => p.name === '棚板')!
+    job = unwrap(updatePart(job, tana.id, { expr: { ...tana.expr, D: '全体.D - 20 - {n:nige-0.5}' } }))
+    expect(nigesUsages(job, ['nige-0.5', 'nige-1'])).toEqual(['棚板（W・D）'])
+  })
+
+  it('シナランバー 18・シナベニヤ 4 をまとめて消すと4部材の材料が未設定になり、確認用に部材名が重ならずに返る', () => {
+    const job = bookshelfJob()
+    const u = boardsUsages(job, [LUMBER_18_ID, VENEER_4_ID])
+    expect(u.cutFrom).toEqual(['側板', '天地板', '棚板', '背板'])
+    expect(u.thickness).toEqual([])
+    const next = unwrap(removeBoards(job, [LUMBER_18_ID, VENEER_4_ID]))
+    expect(next.boards).toEqual([])
+    expect(next.parts.filter((p) => p.quantity > 0).every((p) => p.boardId === null)).toBe(true)
+  })
+
+  it('無い id が混ざっていても残りは消える。全部無ければ断る', () => {
+    const job = bookshelfJob()
+    expect(unwrap(removeNiges(job, ['nothing', 'nige-1'])).settings.nige.map((n) => n.id)).toEqual(['nige-0.5'])
+    expect(unwrap(removeBoards(job, ['nothing', VENEER_4_ID])).boards.map((b) => b.id)).toEqual([LUMBER_18_ID])
+    expect(removeNiges(job, ['nothing']).ok).toBe(false)
+    expect(removeBoards(job, ['nothing']).ok).toBe(false)
+  })
+
+  it('setBoardSize：4×8 は 1220×2440 長手方向、自由入力 1000×2000 短手方向も選べ、0 以下の寸法は断る', () => {
+    const job = bookshelfJob()
+    const a = unwrap(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'shihachi', width: 1, length: 1, grain: 'short' }))
+    expect(a.boards[0]).toMatchObject({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
+    const b = unwrap(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }))
+    expect(b.boards[0]).toMatchObject({ sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' })
+    expect(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 2000, grain: 'long' }).ok).toBe(false)
+    expect(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: -1, grain: 'long' }).ok).toBe(false)
+    expect(setBoardSize(job, 'nothing', { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }).ok).toBe(false)
   })
 })

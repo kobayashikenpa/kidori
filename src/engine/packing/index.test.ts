@@ -220,7 +220,7 @@ describe('packJob（木取り計算の入口）', () => {
   it('部材が1枚もなければ材料なし・全体の歩留まり 0', () => {
     const job = bookshelfJob()
     job.parts = []
-    expect(run(job)).toEqual({ materials: [], totalYieldRate: 0, skipped: [] })
+    expect(run(job)).toEqual({ materials: [], totalYieldRate: 0, skipped: [], done: [] })
   })
 
   it('部材120枚（10種類）のおまかせが1秒以内に終わり、すべて配置される', () => {
@@ -257,5 +257,46 @@ describe('packJob（木取り計算の入口）', () => {
     const r = packJob(job, computeDimensions(job))
     expect(performance.now() - t).toBeLessThan(300)
     expect(r.materials[0].sheets.reduce((n, s) => n + s.placements.length, 0)).toBe(150)
+  })
+})
+
+describe('木取り済み（checks.cut）の部材を除く（第1.3版）', () => {
+  it('見本・縦切り優先で棚板を完了：ランバー 2 枚（側板×2／天地板×2）、done に棚板4枚', () => {
+    const job = bookshelfJob()
+    job.parts.find((p) => p.name === '棚板')!.checks.cut = true
+    const r = run(job)
+    const lumber = r.materials[0]
+    expect(lumber.sheetCount).toBe(2)
+    expect(lumber.sheets.map((s) => s.placements.map((p) => p.name))).toEqual([
+      ['側板', '側板'],
+      ['天地板', '天地板'],
+    ])
+    expect(r.done).toEqual([{ partId: 'part-tanaita', name: '棚板', quantity: 4, boardId: LUMBER_18_ID }])
+    expect(r.skipped).toEqual([])
+  })
+
+  it('背板を完了にすると materials にシナベニヤ 4 が無い', () => {
+    const job = bookshelfJob()
+    job.parts.find((p) => p.name === '背板')!.checks.cut = true
+    expect(run(job).materials.map((m) => m.boardId)).toEqual([LUMBER_18_ID])
+  })
+
+  it('仕上がりの完了だけでは結果が変わらない', () => {
+    const job = bookshelfJob()
+    for (const p of job.parts) p.checks.finished = true
+    expect(run(job)).toEqual(run(bookshelfJob()))
+  })
+
+  it('すべて完了なら materials は空・全体の歩留まりは 0', () => {
+    const job = bookshelfJob()
+    for (const p of job.parts) p.checks.cut = true
+    const r = run(job)
+    expect(r.materials).toEqual([])
+    expect(r.totalYieldRate).toBe(0)
+    expect(r.done.map((d) => d.name)).toEqual(['側板', '天地板', '棚板', '背板'])
+  })
+
+  it('完了が無ければ done は空', () => {
+    expect(run(bookshelfJob()).done).toEqual([])
   })
 })

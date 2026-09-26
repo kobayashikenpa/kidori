@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -6,6 +6,7 @@
 
 > **第1.1版の変更は 6章にまとめている。** 1〜5章と 6章が食い違うところは 6章が正（例：部材ごとの逃げ `Part.clearance` は第1.1版でなくなる）。
 > **第1.2版の変更は 7章にまとめている。** 6章までと食い違うところは 7章が正。
+> **第1.3版の変更は 8章にまとめている。** 7章までと食い違うところは 8章が正。
 
 ## 1. 全体の構成
 
@@ -302,7 +303,7 @@ export interface PackingResult {
 - `jobs.ts` の操作（純粋関数）
   - `createJob(name)`：初期設定・板なし・部材なしの仕事
   - `addPart / updatePart / removePart`：名前の重複は拒否。名前を変えたとき、ほかの部材の式の参照もつけ替える（暫定）
-  - `addBoard / updateBoard / removeBoard`：材料名＋厚みの重複は拒否。`partsUsingBoard(job, boardId)` で使っている部材名を返し、画面で確認してから削除。削除したら該当部材の `boardId` は null
+  - `addBoard / updateBoard / removeBoards`：材料名＋厚みの重複は拒否。`partsUsingBoard(job, boardId)` で使っている部材名を返し、画面で確認してから削除。削除したら該当部材の `boardId` は null
 - id は `crypto.randomUUID()`
 
 ## 5. 画面（`src/ui`）
@@ -446,6 +447,7 @@ export type DimensionErrorKind =
 - 削除する前に、使っている部材を示して確認する（仕様書 4・5.1）。一覧は `usages.ts` の関数で作る
   - `partsUsingNige(job, nigeId)`：式に `{n:id}` がある部材名と軸（例：`棚板（W）`）
   - `partsUsingBoardThickness(job, boardId)`：式に `{t:id}` がある部材名と軸
+  - `partsUsingNiges(job, nigeIds)`・`partsUsingBoardThicknesses(job, boardIds)`：まとめて削除する前の確認用。id のどれかを使っている部材を部材ごとに1つ（軸はまとめる）
   - 材料の削除の確認には、`partsUsingBoard`（その材料から切る部材）と `partsUsingBoardThickness` の両方を出す
 
 **仕事のコピー**：`copyJob` は板の id を新しくするので、式の `{t:古いid}` を `{t:新しいid}` につけ替える（`remapBoardIds(expr, map)`）。逃げの id は設定ごとそのまま写すので、つけ替えない
@@ -572,3 +574,165 @@ export interface SavingHint {
   - 印がひとつも無い仕事（第1.1版までに作った仕事）では、最初からある4つ（`defaultBoards`）と材料名・厚み・大きさの種類・短辺・長辺・木目がすべて同じ材料を最初からある材料とみなす。保存データは書き換えない（読むたびに判定する）
   - 割り切り：第1.2版以降の仕事で最初からある4つをすべて消したあと、同じ内容の材料を足し直すと、その材料は「最初からある材料」とみなされて下に並ぶ
 - 木取りの結果（`packJob` の材料の並び）や お知らせの並びは、今までどおり保存の並び（変えない）
+
+## 8. 第1.3版の変更（iPhone での3回目の要望）
+
+仕様書 4（設定の引き継ぎ・設定画面の一覧）・5.1・5.4・8・9（材料のサイズの選択）の変更に対応する。1〜7章と食い違うところは 8章が正。
+方針は「データの形はなるべく変えない」。保存データ（`kidori.jobs.v2`）の形は変えず、版も上げない（8.2）。
+
+### 8.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts               PackingResult.done を足す
+  defaults.ts            DEFAULT_SHEET（4×8）・defaultSheet()
+  boards.ts              isBuiltInBoard の以前のデータの判定を「材料名＋厚み」だけにする
+  packing/pieces.ts      木取り済み（checks.cut）の部材を除き、done に入れる
+  packing/sizes.ts       compareStandardSizes：材料ごとに 3×6 と 4×8 で木取りした枚数・歩留まり
+src/store/
+  template.ts            最後に使った設定（ひな形）：templateOf・defaultTemplate・sameTemplate
+  sample.ts              sampleFromTemplate（見本の仕事をひな形の設定で作る）
+  jobs.ts                createJob(name, template)、newBoard の初期サイズ 4×8、setBoardSize、removeNiges・removeBoards
+  storage.ts             ひな形の読み書き（キー kidori.lastSettings.v1）
+  reducer.ts / JobStore.tsx  StoreState.template、設定が変わったらひな形を更新して保存
+src/ui/
+  components/SettingsList.tsx  逃げ・材料の共通の一覧（名前・編集・削除、上に追加、一括削除）
+  components/SheetSizePicker.tsx  木取りの画面の材料のサイズの選択
+  components/BoardEditor.tsx   材料名・厚みだけにする（サイズ・木目の欄を外す）
+  components/FormulaInput.tsx  厚みのボタンは選んだ材料だけ
+  screens/KidoriScreen.tsx     サイズの選択・木取り済みの部材の一覧
+  screens/JobsScreen.tsx       新しい仕事・見本をひな形から作る
+```
+
+### 8.2 材料のサイズを持つ場所 — 決定（planner）
+
+- **サイズは今までどおり `Board` の `sizeKind`・`width`・`length`・`grain` に持つ。** 材料は仕事ごとなので、`job.boards` の各材料のサイズが「この仕事で、この材料に選んだサイズ」になる（仕様書 9「選んだサイズは仕事に保存する」）
+  - 別の表（`Job.sheetSizes` など）を作らないのは、材料の削除・仕事のコピー（id のつけ替え）・保存の検査でずれが起きないようにするため。`copyJob`・`removeBoards`・`sanitizeBoard` は今のまま使える
+  - 以前のデータのサイズ（例：見本の 3×6、以前の材料の 4×8、自由入力）は、そのまま「その仕事で選んだサイズ」になる。**保存データの移し替えは要らず、`kidori.jobs.v2` の版も上げない**（形が変わらないので、上げると壊す危険だけが増える）
+- 「材料＝材料名＋厚み」は画面と引き継ぎの側で守る
+  - 設定の画面（`BoardEditor`）は材料名と厚みだけを入れる。サイズと木目の方向は木取りの画面（`SheetSizePicker`）で選ぶ
+  - 新しく足す材料のサイズは 4×8（`defaultSheet()`：`shihachi`・1220×2440・`grain: 'long'`）。`newBoard` の初期値を 3×6 から 4×8 に変える
+  - 最後に使った設定（8.3）には材料名・厚みだけを入れ、サイズは入れない。新しい仕事の材料は 4×8 から始まる
+- サイズを選ぶ操作：`setBoardSize(job, boardId, size: { sizeKind; width; length; grain })`（中身は `updateBoard` と同じ検査。3×6・4×8 は寸法が決まり木目は長手方向）
+- `isBuiltInBoard` の、印の無い以前のデータの判定（7.4）は **材料名＋厚みだけ** で比べる（サイズを木取りの画面で変えても、最初からある材料のまま下に並ぶように）
+
+### 8.3 最後に使った設定（ひな形）— 決定（planner）
+
+仕様書 4「設定の引き継ぎ」。仕事ごとの設定はそのまま持ち、アプリ全体で「最後に使った設定」を1つだけ別に覚える。
+
+```ts
+// src/store/template.ts
+export interface MaterialSpec {
+  material: string
+  thickness: number
+  builtIn?: true      // 最初から入っている材料の印（並び順のため。7.4）
+}
+export interface SettingsTemplate {
+  settings: Settings  // 刃厚・端切り・切り代・切り方・逃げ（id ごと）
+  materials: MaterialSpec[] // 保存の並び（job.boards の並び）
+}
+```
+
+- `defaultTemplate()`：`defaultSettings()`（刃厚3・端切り5・切り代10・縦切り優先・逃げ0.5・1）と、材料 メラミン1・ラワン2.5・4・5.5（すべて `builtIn: true`）。仕様書 4 の「初めて使うとき」
+- `templateOf(job)`：仕事の設定と材料（材料名・厚み・印）を写したもの（深いコピー）。印は `isBuiltInBoard(board, job)` で決めて付ける（印の無い以前の仕事でも並び順が保たれる）。サイズは入れない
+- `sameTemplate(a, b)`：中身が同じか（JSON で比べてよい）
+- `createJob(name, template = defaultTemplate(), now, id)`：設定は `template.settings` の深いコピー（逃げの id もそのまま。`copyJob` と同じ）、材料は `template.materials` を並びのまま、id を `newId('board')`、サイズは `defaultSheet()` にして作る
+- **ひな形を更新するとき**：reducer の `applyOp` で、操作の前後で `templateOf` が変わったら（`!sameTemplate`）、`state.template = templateOf(後の仕事)` にする。操作の種類で分けないので、刃厚・端切り・切り代・切り方・逃げの追加／変更／削除・材料の追加／変更／削除のどれでも漏れない。サイズの選択・部材の変更・仕事の名前の変更では `templateOf` が変わらないので更新しない
+  - 仕事の追加（新しい仕事・見本・コピー）と仕事の削除ではひな形を変えない（見本が足した材料は「設定を変えた」ではないため）
+- 一度写したあとは、仕事とひな形は別のデータ（深いコピー）。ひな形が変わっても、ほかの仕事は変わらない
+
+**保存（`storage.ts`）**
+- キー `kidori.lastSettings.v1` に `{ version: 1, template }`。仕事の保存と同じく 300ms まとめて書く（`JobStore` の保存の effect に入れる）。`canSave` が false のときは書かない
+- 読み込み：`loadTemplate(storage, jobs): SettingsTemplate`。例外は投げない
+  1. キーがあり読めれば、それを検査・修復して使う（設定は `sanitizeSettings` と同じ検査、材料は材料名が空・厚みが 0 以下・材料名＋厚みの重複を外す）
+  2. キーが無いとき：仕事が1つもなければ `defaultTemplate()`。仕事があれば（第1.2版から上げたとき）**更新日が一番新しい仕事の `templateOf`**（暫定。未決事項 23）
+  3. 読めない（壊れた JSON など）ときは `defaultTemplate()` にする。退避はしない（仕事のデータではなく、次に設定を変えれば上書きされるため）
+
+### 8.4 見本（本棚 W900）をひな形から作る — 決定（planner）
+
+`sampleFromTemplate(template, now): Job`（`src/store/sample.ts`）。`bookshelfJob()`（engine の見本。テストで使う）は変えない。
+1. `createJob('本棚 W900', template, now, 'job-bookshelf-w900')` で作る（見本の id は今のまま固定。仕事の画面の「見本があるか」の判定に使う）
+2. 見本の材料 シナランバー 18・シナベニヤ 4 について、同じ材料名（前後の空白を除き NFKC でそろえて比べる）＋厚み（`eq1`）の材料があればそれを使い、無ければ材料の最後に足す（印なし＝足した材料として上に並ぶ）
+3. 見本の部材は `bookshelfJob().parts` を写し、`boardId` を 2 の材料の id につけ替える
+4. 見本の材料のサイズ：**3×6（サブロク）にする**（暫定。未決事項 24）。見本で期待する値（tasks.md の表：ランバー 3枚など）は 3×6 の値のため。すでにあった材料を使うときも、この仕事の中ではその材料を 3×6 にする
+5. 逃げ：棚板の式は `{n:nige-1}` を使う。ひな形の逃げに **寸法 1 の逃げがあればその id につけ替え、無ければ 逃げ1 を足す**（id `nige-1`。すでに別の逃げが `nige-1` を使っていれば `newId('nige')`）（暫定。未決事項 25）
+- 設定の数値（刃厚・端切り・切り代・切り方）はひな形のまま。見本で期待する値は、ひな形が初期値のときの値
+
+### 8.5 木取り済みの部材を除く（`packing/pieces.ts`）— 決定（planner）
+
+仕様書 8：寸法表で木取りの「完了」（`part.checks.cut`）をチェックした部材は、木取りの計算から除く。
+
+```ts
+export interface PackingResult {
+  materials: MaterialResult[]
+  totalYieldRate: number
+  skipped: …（今のまま）
+  /** 木取り済み（checks.cut）で計算から除いた部材（部材の並び順。枚数0の行は含めない） */
+  done: { partId: string; name: string; quantity: number; boardId: string | null }[]
+}
+```
+
+- `expandPieces` で、枚数1以上の部材のうち `checks.cut === true` のものは **ほかの判定より先に** `done` に入れて片にしない（材料が無い・寸法のエラーがあっても `skipped` には入れない。除いているので、直さなくても木取りに影響しないため）
+- 仕上がりの「完了」（`checks.finished`）は木取りに関係しない
+- お知らせ（`findSavingHints`）とサイズの比較（8.6）は `packJob` を使うので、木取り済みの部材は自然に除かれる
+- 部材がすべて木取り済みなら `materials` は空
+
+### 8.6 材料のサイズの比較（`packing/sizes.ts`）— 決定（planner）
+
+仕様書 9「材料のサイズの選択」：材料ごとに 3×6 と 4×8 の両方で木取りし、必要な枚数と歩留まりを並べる。
+
+```ts
+export type StandardSize = 'saburoku' | 'shihachi'
+export interface SizeSummary {
+  kind: StandardSize
+  width: number; length: number
+  sheetCount: number
+  yieldRate: number        // その材料の歩留まり
+  unplacedCount: number    // 入らない部材の数
+}
+export interface MaterialSizeComparison {
+  boardId: string
+  options: [SizeSummary, SizeSummary] // 3×6、4×8 の順
+  fewer: StandardSize | null           // 枚数が少ない方
+  higher: StandardSize | null          // 歩留まりが高い方
+}
+export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialSizeComparison[]
+export function pickBetterSize(options: [SizeSummary, SizeSummary]): { fewer; higher }
+```
+
+- `fewer`・`higher`（画面の「枚数が少ない」「歩留まりが高い」の印）：入らない部材が出るサイズ・枚数 0 のサイズがあれば比べず、どちらも null。枚数が同じなら `fewer` は null。歩留まりは % の小数第1位で比べ、同じなら `higher` は null。画面は判定せず、この結果を出すだけ
+
+- 作り方：仕事の材料をすべて 3×6（木目 長手方向）にした仕事と、すべて 4×8 にした仕事を作り、それぞれ `packJob` を1回ずつ呼ぶ（**材料の数によらず `packJob` 2回**）。材料ごとの結果を `boardId` で拾う。元の仕事は書き換えない
+- 並びと対象：`packJob(job, dims).materials` と同じ材料・同じ並び（片か入らない部材のある材料だけ。部材の無い材料は出さない）（暫定。未決事項 26）
+- 切り方・刃厚・端切り・切り代は今の設定のまま（おまかせならおまかせで比べる）
+- 自由入力は比べない。自由入力を選んでいるときは、画面は今の結果（`packJob`）の枚数・歩留まりを自由入力の欄に出す
+- 速さ：画面で1回の変更につき 今の結果1回 ＋ 比較2回 ＋ お知らせ（最大16回）。部材150枚・おまかせで比較だけで 1秒以内（テストで確かめる）。お知らせの中では比較をしない
+
+### 8.7 画面の変更 — 決定（planner）
+
+| 画面 | 変更 |
+|---|---|
+| 仕事 | 新しい仕事は `createJob(name, state.template)`、見本は `sampleFromTemplate(state.template)` で作る |
+| 設定 | 説明に「新しい仕事には、最後に変えた設定が引き継がれます」を足す。逃げと材料は `SettingsList` で同じ見た目・操作にする（8.8）。材料の編集は材料名と厚みだけ |
+| 部材の編集（式の入力） | 材料の厚みのボタンは、その部材で選んでいる材料（編集中の下書きの `boardId`）の1つだけ。材料を選んでいなければ厚みのボタンは出さない。式の中にほかの材料の厚みがあっても、表示と計算は今のまま |
+| 木取り | 材料ごとに、サイズの選択（3×6・4×8 の枚数と歩留まりを並べ、押して選ぶ。自由入力を選ぶと短辺・長辺・木目の方向の欄）。選ぶと `setBoardSize` で仕事に保存する。「木取り済み（計算から除いています）」の一覧（部材名・材料・枚数）を、計算できない部材の一覧と分けて出す |
+
+### 8.8 設定の一覧（逃げ・材料）の共通部品 — 決定（planner）
+
+`SettingsList<T>`（`src/ui/components/SettingsList.tsx`）
+- 上に追加の入力（逃げ：寸法だけ。材料：材料名と厚み。厚みは空欄から始め、入れないと追加できない＝U-26 のまま）
+- その下に1行ずつ：名前（逃げ1／シナランバー 18mm）と「使っている部材」、「編集」「削除」のボタン（高さ 44px 以上）
+  - 編集：その行がその場で編集の形になる（逃げは寸法、材料は材料名・厚み）
+  - 削除：その行がその場で確認の形になる。使っている部材があれば部材名を示す（逃げ：`nigeUsages`・`nigesUsages`、材料：`boardsUsages`。1つだけ消すときも `removeNiges`・`removeBoards` に id 1つで渡す）
+- 「選んで削除」ボタンで選ぶモードにする。各行にチェック（44px 以上）、「選んだ◯件を削除」「やめる」。押すと、選んだものを使っている部材をまとめて示して確認し、`removeNiges(job, ids)`／`removeBoards(job, ids)` で1回の操作で消す（1回の保存・1回のひな形の更新）
+- 部品は「行の中身・追加の入力・編集の入力」を受け取るだけにし、逃げ・材料の操作（store の関数）は呼ぶ側で渡す
+
+### 8.9 逃げの削除が効かない不具合（調査の見立て）
+
+オーナーの報告：設定で、追加した逃げの「削除」を押しても消えない。
+- コードを読んだ範囲では、`removeNige`（store/jobs.ts）・reducer の `applyOp`・`NigeEditor` の「削除 → 確認 → 削除する」の流れに、消えない理由になる誤りは見つからなかった。初期の逃げ（id `nige-0.5`・`nige-1`）と足した逃げ（id `nige-<uuid>`）で処理は同じ
+- 見立て（確かめる順）
+  1. **確認が目に入っていない**：「削除」は すぐ消さず、その行を同じ場所で確認の形（同じ名前が出る）に替えるだけ。足した直後は追加の欄に注目が残り iPhone のキーボードが出たままなので、「削除」を押すとキーボードが閉じて画面が動き、確認の形が画面の外に出たり、何も変わらないように見える。キーボードが閉じるときの最初のひと押しが「削除」に届いていないこともありうる
+  2. 追加の欄が画面の下にあり、確認の形の「削除する」がキーボードの陰に隠れる
+  3. 上の2つでなければ、保存の側（再読み込みで戻る）を疑う：`canSave` が false（保存を止めている）で、消しても再読み込みで元に戻っている
+- 直し方の方針：開発サーバー（幅375px）と iPhone で再現してから直す。追加したら追加の欄の注目を外す（キーボードを閉じる）、確認の形を見える位置へスクロールし見た目をはっきり変える。store の側にも「足した逃げを消すと一覧から消え、保存して読み込んでも戻らない」テストを足す。第1.3版の共通の一覧（8.8）でも同じ直し方を使う
