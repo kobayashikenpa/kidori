@@ -87,7 +87,11 @@ export function migrateClearanceChecked(
       ...rest,
       expr: { ...p.expr },
       memo: typeof p.memo === 'string' ? p.memo : '',
-      checks: { finished: p.checks?.finished === true, cut: p.checks?.cut === true },
+      checks: {
+        finished: p.checks?.finished === true,
+        cut: p.checks?.cut === true,
+        ...(p.checks?.cutByBoard ? { cutByBoard: { ...p.checks.cutByBoard } } : {}),
+      },
     }
   })
   const base: Job = { ...job, settings: { ...job.settings, nige }, parts }

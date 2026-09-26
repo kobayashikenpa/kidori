@@ -91,8 +91,13 @@ export type PartGrain = Axis | 'any'
 export interface PartChecks {
   /** 仕上がり寸法の加工が終わった */
   finished: boolean
-  /** 木取り寸法の加工（切り出し）が終わった */
+  /** 木取り寸法の加工（切り出し）が終わった。フラッシュの部材では使わない（cutByBoard） */
   cut: boolean
+  /**
+   * フラッシュの部材の、表面材（材料の id）ごとの木取りの完了（第1.5版）。true の表面材は木取りから除く。
+   * 以前のデータ・フラッシュでない部材には無い
+   */
+  cutByBoard?: Record<string, boolean>
 }
 
 /** 部材 */
@@ -100,8 +105,10 @@ export interface Part {
   id: string
   /** 仕事の中で重複不可。式の参照に使う */
   name: string
-  /** 使う板（材料名＋厚み）。枚数0の行（全体など）は null でよい */
+  /** 使う板（材料名＋厚み）。枚数0の行（全体など）は null でよい。フラッシュを選んだ部材は null */
   boardId: string | null
+  /** 材料のかわりに選んだフラッシュの id（第1.5版）。無ければ材料（boardId）を使う */
+  flushId?: string
   /** W・H・D の入力（数値または式の文字列） */
   expr: Record<Axis, string>
   /** 手で選んだ厚みの寸法。null は自動判定 */
@@ -117,12 +124,36 @@ export interface Part {
   allowance: number | null
 }
 
+/** フラッシュの表面材：登録済みの材料と、1部材あたりの枚数 */
+export interface FlushFace {
+  boardId: string
+  /** 1以上の整数 */
+  count: number
+}
+
+/**
+ * フラッシュ（第1.5版。仕様書 4）：芯材の両面に表面材を貼って厚みを作る部材の登録。
+ * 厚み＝芯材＋表面材の厚み×枚数（flush.ts の flushThickness）
+ */
+export interface Flush {
+  /** 仕事の中で重複しない。部材の flushId・式の {t:id} から参照する */
+  id: string
+  /** 名前（例：フラッシュ25）。空でなく、ほかのフラッシュと重ならない */
+  name: string
+  /** 芯材の厚み（mm。0 より大きい） */
+  core: number
+  /** 表面材（同じ材料を重ねない。1つ以上） */
+  faces: FlushFace[]
+}
+
 /** 仕事 */
 export interface Job {
   id: string
   name: string
   settings: Settings
   boards: Board[]
+  /** フラッシュ（第1.5版）。登録順＝画面の並び順。以前のデータは読み込むときに [] */
+  flushes: Flush[]
   /** 並び順＝画面の並び順 */
   parts: Part[]
   /** ISO 文字列 */
@@ -289,7 +320,8 @@ export interface PackingResult {
   skipped: { partId: string; name: string; reason: 'dimensionError' | 'thicknessMismatch' | 'noThickness' | 'noBoard' }[]
   /**
    * 木取り済み（寸法表で木取りの「完了」＝ checks.cut）で計算から除いた部材（第1.3版。仕様書 8）。
-   * 部材の並び順。枚数0の行は含めない。材料が無い・寸法のエラーがあっても skipped ではなくこちらに入る
+   * 部材の並び順。枚数0の行は含めない。材料が無い・寸法のエラーがあっても skipped ではなくこちらに入る。
+   * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
 }

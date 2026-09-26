@@ -10,12 +10,13 @@ import {
   type Board,
   type BoardSizeKind,
   type CutMode,
+  type Flush,
   type Job,
   type Nige,
   type PartGrain,
 } from '../engine/types'
 import { newId } from './jobs'
-import { defaultTemplate, templateOf, type MaterialSpec, type SettingsTemplate } from './template'
+import { defaultTemplate, templateOf, type FlushSpec, type MaterialSpec, type SettingsTemplate } from './template'
 
 /** 最後に使った設定（ひな形）のキー（{ version: 1, template }） */
 export const TEMPLATE_KEY = 'kidori.lastSettings.v1'
@@ -189,6 +190,67 @@ function sanitizeBoard(v: unknown, fx: Fixes): Board | null {
   }
 }
 
+const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
+
+/**
+ * フラッシュ（第1.5版）。無ければ []（第1.4版までのデータ。直した数に数えない）。
+ * id が空・前と同じ、名前が空・前と同じ（全角半角をそろえて比べる）、芯材が 0 以下のフラッシュは外す。
+ * 無い材料・前と同じ材料・枚数が1以上の整数でない表面材は外す
+ */
+function sanitizeFlushes(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Flush[] {
+  if (v === undefined) return []
+  if (!Array.isArray(v)) {
+    fx.count++
+    return []
+  }
+  const out: Flush[] = []
+  for (const x of v) {
+    const name = isRecord(x) && typeof x.name === 'string' ? x.name.trim() : ''
+    const key = name.normalize('NFKC')
+    if (
+      !isRecord(x) ||
+      !isId(x.id) ||
+      !name ||
+      !isPositive(x.core) ||
+      out.some((f) => f.id === x.id || f.name.normalize('NFKC') === key)
+    ) {
+      fx.count++
+      continue
+    }
+    const faces: Flush['faces'] = []
+    if (!Array.isArray(x.faces)) fx.count++
+    for (const f of Array.isArray(x.faces) ? x.faces : []) {
+      if (!isRecord(f) || typeof f.boardId !== 'string' || !boardIds.has(f.boardId) || !isCount(f.count)) {
+        fx.count++
+        continue
+      }
+      const boardId = f.boardId
+      if (faces.some((y) => y.boardId === boardId)) {
+        fx.count++
+        continue
+      }
+      faces.push({ boardId, count: f.count })
+    }
+    out.push({ id: x.id, name, core: x.core, faces })
+  }
+  return out
+}
+
+/** 表面材ごとの完了（第1.5版）。無ければ undefined。真偽値の項目だけ残す */
+function sanitizeCutByBoard(v: unknown, fx: Fixes): Record<string, boolean> | undefined {
+  if (v === undefined) return undefined
+  if (!isRecord(v)) {
+    fx.count++
+    return undefined
+  }
+  const out: Record<string, boolean> = {}
+  for (const [k, x] of Object.entries(v)) {
+    if (typeof x === 'boolean') out[k] = x
+    else fx.count++
+  }
+  return out
+}
+
 function sanitizeExpr(v: unknown, fx: Fixes): Record<Axis, string> {
   const src = isRecord(v) ? v : {}
   if (!isRecord(v)) fx.count++
@@ -201,14 +263,28 @@ function sanitizeExpr(v: unknown, fx: Fixes): Record<Axis, string> {
 }
 
 /** 部材。id・名前が読めない部材は外す（null）。ほかの値は初期値に直す */
-function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): LegacyPart | null {
+function sanitizePart(
+  v: unknown,
+  boardIds: ReadonlySet<string>,
+  flushIds: ReadonlySet<string>,
+  fx: Fixes,
+): LegacyPart | null {
   if (!isRecord(v) || !isId(v.id) || typeof v.name !== 'string') return null
-  const boardId =
+  // フラッシュ（第1.5版）。無いフラッシュを指していれば外す
+  const flushId =
+    v.flushId === undefined ? undefined : typeof v.flushId === 'string' && flushIds.has(v.flushId) ? v.flushId : (fx.count++, undefined)
+  let boardId =
     v.boardId === null || v.boardId === undefined
       ? null
       : typeof v.boardId === 'string' && boardIds.has(v.boardId)
         ? v.boardId
         : (fx.count++, null)
+  if (flushId !== undefined && boardId !== null) {
+    // フラッシュを選んだ部材は材料を持たない
+    fx.count++
+    boardId = null
+  }
+  const cutByBoard = flushId === undefined ? undefined : sanitizeCutByBoard(isRecord(v.checks) ? v.checks.cutByBoard : undefined, fx)
   const v2 = fx.version === 2
   const memo = typeof v.memo === 'string' ? v.memo : (v2 && fx.count++, '')
   const checkOk = isRecord(v.checks) && typeof v.checks.finished === 'boolean' && typeof v.checks.cut === 'boolean'
@@ -218,6 +294,7 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Leg
     id: v.id,
     name: v.name.trim(),
     boardId,
+    ...(flushId !== undefined ? { flushId } : {}),
     expr: sanitizeExpr(v.expr, fx),
     thicknessAxis: v.thicknessAxis === null ? null : pick(v.thicknessAxis, isAxis, null, fx),
     quantity: pick(v.quantity, (x): x is number => Number.isInteger(x) && (x as number) >= 0, 1, fx),
@@ -226,6 +303,7 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Leg
     checks: {
       finished: isRecord(v.checks) && v.checks.finished === true,
       cut: isRecord(v.checks) && v.checks.cut === true,
+      ...(cutByBoard ? { cutByBoard } : {}),
     },
     allowance: v.allowance === null || v.allowance === undefined ? null : pick(v.allowance, isNonNegative, null, fx),
     ...(clearance ? { clearance } : {}),
@@ -248,10 +326,12 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   }
 
   const boardIds = new Set(boards.map((b) => b.id))
+  const flushes = sanitizeFlushes(v.flushes, boardIds, fx)
+  const flushIds = new Set(flushes.map((f) => f.id))
   const parts: LegacyPart[] = []
   if (!Array.isArray(v.parts)) fx.count++
   for (const raw of Array.isArray(v.parts) ? v.parts : []) {
-    const p = sanitizePart(raw, boardIds, fx)
+    const p = sanitizePart(raw, boardIds, flushIds, fx)
     // 読めない部材・使えない名前・名前や id が前の部材と同じ部材は外す
     const bad =
       !p ||
@@ -271,6 +351,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     name,
     settings: sanitizeSettings(v.settings, fx),
     boards,
+    flushes,
     parts,
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
@@ -456,6 +537,24 @@ function sanitizeMaterials(v: unknown): MaterialSpec[] {
   return out
 }
 
+/** ひな形のフラッシュ（第1.5版）。無ければ []。名前が空・重なる、芯材が 0 以下のものは外し、読めない表面材は外す */
+function sanitizeFlushSpecs(v: unknown): FlushSpec[] {
+  if (!Array.isArray(v)) return []
+  const out: FlushSpec[] = []
+  for (const f of v) {
+    if (!isRecord(f) || typeof f.name !== 'string' || !isPositive(f.core)) continue
+    const name = f.name.trim()
+    if (!name || out.some((x) => x.name.normalize('NFKC') === name.normalize('NFKC'))) continue
+    const faces: FlushSpec['faces'] = []
+    for (const x of Array.isArray(f.faces) ? f.faces : []) {
+      if (!isRecord(x) || typeof x.material !== 'string' || !x.material.trim() || !isPositive(x.thickness) || !isCount(x.count)) continue
+      faces.push({ material: x.material.trim(), thickness: x.thickness, count: x.count })
+    }
+    out.push({ name, core: f.core, faces })
+  }
+  return out
+}
+
 /**
  * 最後に使った設定を読む。例外は投げない。
  * キーが無ければ：仕事が無ければ初期値、仕事があれば更新日が一番新しい仕事の設定。読めなければ初期値
@@ -480,6 +579,7 @@ export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job
     return {
       settings: { ...settings, nige: settings.nige ?? defaultNige() },
       materials: sanitizeMaterials(data.template.materials),
+      flushes: sanitizeFlushSpecs(data.template.flushes),
     }
   } catch {
     return defaultTemplate()

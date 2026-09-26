@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
+import { flushBreakdown, flushBreakdownText, flushThickness, partThicknessSource } from '../../engine/flush'
 import { computeFinished } from '../../engine/dimensions/finished'
 import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
@@ -41,7 +42,9 @@ export function PartEditor({ part, onClose }: Props) {
   // ボタンの並びを開いている欄（1つだけ）
   const [padAxis, setPadAxis] = useState<Axis | null>(null)
   const faces = dims.faceAxes
-  const board = job.boards.find((b) => b.id === draft.boardId) ?? null
+  // 厚みの判定に使う厚み：材料の厚み、またはフラッシュの合計の厚み（engine の partThicknessSource）
+  const board = partThicknessSource(job, draft)
+  const flush = draft.flushId !== undefined ? flushBreakdown(job, draft.flushId) : null
   const cutting = draft.quantity > 0
   // 厚みの寸法：ふだんは「厚み：W（自動）」と表示だけ。決めきれない・手で選んでいる・同じ寸法が無いときだけ選ぶ欄（仕様書 5.3）
   const choice = useMemo(
@@ -110,16 +113,32 @@ export function PartEditor({ part, onClose }: Props) {
           <select
             id="part-board"
             className="input"
-            value={draft.boardId ?? ''}
-            onChange={(e) => patch({ boardId: e.target.value || null })}
+            value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v.startsWith('flush:')) patch({ flushId: v.slice(6), boardId: null })
+              else patch({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
+            }}
           >
             <option value="">（材料が未設定）</option>
-            {orderedBoards(job).map((b) => (
-              <option key={b.id} value={b.id}>
-                {boardLabel(b)}
-              </option>
-            ))}
+            <optgroup label="材料">
+              {orderedBoards(job).map((b) => (
+                <option key={b.id} value={`board:${b.id}`}>
+                  {boardLabel(b)}
+                </option>
+              ))}
+            </optgroup>
+            {job.flushes.length > 0 && (
+              <optgroup label="フラッシュ">
+                {job.flushes.map((f) => (
+                  <option key={f.id} value={`flush:${f.id}`}>
+                    {f.name}（厚み {fmt(flushThickness(f, job.boards))}mm）
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {flush && <span className="hint">厚み {flushBreakdownText(flush)}（表面材ごとに木取りします。芯材は入れません）</span>}
           {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
         </div>
       )}
@@ -130,7 +149,7 @@ export function PartEditor({ part, onClose }: Props) {
           axis={axis}
           value={draft.expr[axis]}
           job={job}
-          boardId={draft.boardId}
+          thicknessId={draft.flushId ?? draft.boardId}
           onChange={(v) => patch({ expr: { ...draft.expr, [axis]: v } })}
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}

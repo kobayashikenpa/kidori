@@ -1,5 +1,6 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -16,6 +17,7 @@ import {
   BOARD_SIZES,
   type Board,
   type BoardSizeKind,
+  type Flush,
   type Job,
   type Nige,
   type Part,
@@ -44,7 +46,7 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 
 /**
  * 新しい仕事：設定と材料はひな形（最後に使った設定）を写す。初期値のひな形なら 逃げ0.5・1、材料 メラミン1・ラワン2.5・4・5.5。
- * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。部材なし
+ * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。フラッシュは id を新しくし、表面材は新しい材料を指す。部材なし
  */
 export function createJob(
   name: string,
@@ -54,15 +56,27 @@ export function createJob(
 ): Job {
   const t = now.toISOString()
   const s = template.settings
+  const boards = template.materials.map((m) => {
+    const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
+    if (m.builtIn) b.builtIn = true
+    return b
+  })
+  // フラッシュの表面材は、材料名＋厚みが同じ材料の id に直す（見つからない表面材は外す）
+  const flushes: Flush[] = template.flushes.map((f) => ({
+    id: newId('flush'),
+    name: f.name,
+    core: f.core,
+    faces: f.faces.flatMap((x) => {
+      const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
+      return b ? [{ boardId: b.id, count: x.count }] : []
+    }),
+  }))
   return {
     id,
     name: name.trim() || '名前のない仕事',
     settings: { ...s, nige: s.nige.map((n) => ({ ...n })) },
-    boards: template.materials.map((m) => {
-      const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
-      if (m.builtIn) b.builtIn = true
-      return b
-    }),
+    boards,
+    flushes,
     parts: [],
     createdAt: t,
     updatedAt: t,
@@ -89,7 +103,8 @@ export function copyName(name: string, existingNames: readonly string[]): string
 
 /**
  * 仕事をコピーする（似た家具を作るとき用）。仕事・板・部材の id は新しくし、部材が使う板は新しい板の id につけ替える。
- * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板の id につけ替える。逃げの id は設定ごと写すのでそのまま。
+ * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板（フラッシュ）の id につけ替える。逃げの id は設定ごと写すのでそのまま。
+ * フラッシュの id・表面材・部材の flushId・表面材ごとの完了もつけ替える。
  * 元の仕事は書き換えない
  */
 export function copyJob(
@@ -105,22 +120,39 @@ export function copyJob(
     boardIds.set(b.id, nid)
     return { ...b, id: nid }
   })
-  const parts = job.parts.map((p) => ({
-    ...p,
-    id: newId('part'),
-    boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
-    expr: {
-      W: remapBoardIds(p.expr.W, boardIds),
-      H: remapBoardIds(p.expr.H, boardIds),
-      D: remapBoardIds(p.expr.D, boardIds),
-    },
-    checks: { ...p.checks },
-  }))
+  const flushIds = new Map<string, string>()
+  const flushes = job.flushes.map((f) => {
+    const nid = newId('flush')
+    flushIds.set(f.id, nid)
+    return { ...f, id: nid, faces: f.faces.map((x) => ({ boardId: boardIds.get(x.boardId) ?? x.boardId, count: x.count })) }
+  })
+  // 式の {t:…} は材料とフラッシュのどちらも指す
+  const thicknessIds = new Map([...boardIds, ...flushIds])
+  const parts = job.parts.map((p) => {
+    const part: Part = {
+      ...p,
+      id: newId('part'),
+      boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
+      expr: {
+        W: remapBoardIds(p.expr.W, thicknessIds),
+        H: remapBoardIds(p.expr.H, thicknessIds),
+        D: remapBoardIds(p.expr.D, thicknessIds),
+      },
+      checks: { ...p.checks },
+    }
+    if (p.flushId !== undefined) part.flushId = flushIds.get(p.flushId) ?? p.flushId
+    const done = p.checks.cutByBoard
+    if (done) {
+      part.checks.cutByBoard = Object.fromEntries(Object.entries(done).map(([k, v]) => [boardIds.get(k) ?? k, v]))
+    }
+    return part
+  })
   return {
     id,
     name: copyName(job.name, existingNames),
     settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     boards,
+    flushes,
     parts,
     createdAt: t,
     updatedAt: t,
@@ -202,6 +234,10 @@ function validateBoard(job: Job, board: Board): string | null {
     (b) => b.id !== board.id && sameMaterial(b.material, board.material) && eq1(b.thickness, board.thickness),
   )
   if (dup) return `「${boardLabel(dup)}」はすでにあります（材料と厚みが同じものは2つ作れません）`
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  const key = boardTokenLabel(board).normalize('NFKC')
+  const flush = job.flushes.find((f) => f.name.trim().normalize('NFKC') === key)
+  if (flush) return `「${boardTokenLabel(board)}」はフラッシュと同じ名前です。材料名か厚みを変えてください`
   return null
 }
 
@@ -235,16 +271,27 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   return ok({
     ...job,
     boards: job.boards.filter((b) => !ids.has(b.id)),
+    // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）
+    flushes: job.flushes.map((f) =>
+      f.faces.some((x) => ids.has(x.boardId)) ? { ...f, faces: f.faces.filter((x) => !ids.has(x.boardId)) } : f,
+    ),
     parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
   })
 }
 
-/** 板をまとめて消す前の確認用：その板のどれかから切る部材の名前（重ならない）と、式でそのどれかの厚みを使っている部材 */
-export function boardsUsages(job: Job, boardIds: readonly string[]): { cutFrom: string[]; thickness: string[] } {
+/**
+ * 板をまとめて消す前の確認用：その板のどれかから切る部材の名前（重ならない）、式でそのどれかの厚みを使っている部材、
+ * 表面材にそのどれかを使っているフラッシュの名前（第1.5版）
+ */
+export function boardsUsages(
+  job: Job,
+  boardIds: readonly string[],
+): { cutFrom: string[]; thickness: string[]; flushes: string[] } {
   const ids = new Set(boardIds)
   return {
     cutFrom: job.parts.filter((p) => p.boardId !== null && ids.has(p.boardId)).map((p) => p.name),
     thickness: partsUsingBoardThicknesses(job, boardIds),
+    flushes: flushesUsingBoards(job, boardIds),
   }
 }
 
@@ -309,6 +356,92 @@ export function nigesUsages(job: Job, nigeIds: readonly string[]): string[] {
   return partsUsingNiges(job, nigeIds)
 }
 
+// ---------- フラッシュ（第1.5版） ----------
+
+/** フラッシュの入力（id 以外） */
+export type FlushDraft = Omit<Flush, 'id'>
+
+/**
+ * フラッシュの検査。名前が空でなく、ほかのフラッシュと重ならない（前後の空白・全角半角をそろえて比べる）、
+ * 芯材が 0 より大きい、表面材が1つ以上で、どれも登録済みの材料・枚数は1以上の整数・同じ材料を重ねない
+ */
+function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string | null {
+  if (!f.name) return '名前を入れてください'
+  const key = f.name.normalize('NFKC')
+  const same = job.flushes.find((x) => x.id !== selfId && x.name.trim().normalize('NFKC') === key)
+  if (same) return `「${same.name}」はすでにあります`
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
+  if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
+  if (!(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
+  if (f.faces.length === 0) return '表面材を1つ以上選んでください'
+  const seen = new Set<string>()
+  for (const face of f.faces) {
+    const b = job.boards.find((x) => x.id === face.boardId)
+    if (!b) return '表面材の材料が見つかりません'
+    if (seen.has(b.id)) return `表面材の「${boardLabel(b)}」が重なっています（枚数でまとめてください）`
+    seen.add(b.id)
+    if (!(Number.isInteger(face.count) && face.count >= 1)) return '表面材の枚数は 1 以上の整数を入れてください'
+  }
+  return null
+}
+
+function cleanFlush(f: FlushDraft): FlushDraft {
+  return { name: f.name.trim(), core: f.core, faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+}
+
+/** フラッシュを足す（一覧の最後）。名前が重なる・値がおかしければ断る */
+export function addFlush(job: Job, draft: FlushDraft, id: string = newId('flush')): OpResult {
+  const f = cleanFlush(draft)
+  const err = validateFlush(job, f, null)
+  if (err) return fail(err)
+  return ok({ ...job, flushes: [...job.flushes, { id, ...f }] })
+}
+
+/** フラッシュを変える。部材・式は id で参照しているので、厚みがついてくる */
+export function updateFlush(job: Job, flushId: string, draft: FlushDraft): OpResult {
+  if (!job.flushes.some((f) => f.id === flushId)) return fail('フラッシュが見つかりません')
+  const f = cleanFlush(draft)
+  const err = validateFlush(job, f, flushId)
+  if (err) return fail(err)
+  return ok({ ...job, flushes: job.flushes.map((x) => (x.id === flushId ? { id: flushId, ...f } : x)) })
+}
+
+/** 部材からフラッシュの選択と表面材ごとの完了を外す（材料は未設定になる） */
+function withoutFlush(p: Part): Part {
+  const { flushId: _flushId, ...rest } = p
+  const { cutByBoard: _cutByBoard, ...checks } = p.checks
+  return { ...rest, boardId: null, checks }
+}
+
+/** フラッシュをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材は材料が未設定になる */
+export function removeFlushes(job: Job, flushIds: readonly string[]): OpResult {
+  const ids = new Set(flushIds.filter((id) => job.flushes.some((f) => f.id === id)))
+  if (ids.size === 0) return fail('フラッシュが見つかりません')
+  return ok({
+    ...job,
+    flushes: job.flushes.filter((f) => !ids.has(f.id)),
+    parts: job.parts.map((p) => (p.flushId !== undefined && ids.has(p.flushId) ? withoutFlush(p) : p)),
+  })
+}
+
+/** フラッシュをまとめて消す前の確認用：材料の欄で選んでいる部材の名前と、式でその厚みを使っている部材（「部材名（軸）」） */
+export function flushesUsages(job: Job, flushIds: readonly string[]): { parts: string[]; thickness: string[] } {
+  return { parts: partsUsingFlushes(job, flushIds), thickness: partsUsingBoardThicknesses(job, flushIds) }
+}
+
+/** フラッシュの部材の、表面材ごとの木取りの完了を変える。フラッシュの部材でない・表面材でない材料は断る */
+export function setFlushCutCheck(job: Job, partId: string, boardId: string, done: boolean): OpResult {
+  const part = job.parts.find((p) => p.id === partId)
+  if (!part) return fail('部材が見つかりません')
+  const flush = job.flushes.find((f) => f.id === part.flushId)
+  if (!flush || !flush.faces.some((x) => x.boardId === boardId)) return fail('フラッシュの表面材が見つかりません')
+  const cutByBoard = { ...part.checks.cutByBoard }
+  if (done) cutByBoard[boardId] = true
+  else delete cutByBoard[boardId]
+  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, cutByBoard } } : p)) })
+}
+
 // ---------- 部材 ----------
 
 /** 新しい部材の下書き */
@@ -328,7 +461,26 @@ export function newPart(p: Partial<Part> = {}): Part {
   }
 }
 
-function validatePartFields(part: Part): string | null {
+/**
+ * 材料とフラッシュをそろえる：flushId があれば boardId は null・checks.cut は false。材料なら cutByBoard を消す。flushId が undefined ならキーごと消す
+ * （材料に戻すときは updatePart に flushId: undefined を渡す）
+ */
+function normalizeMaterial(part: Part): Part {
+  // フラッシュの部材は checks.cut を使わない（完了は表面材ごとの cutByBoard）。材料の部材は cutByBoard を持たない
+  if (part.flushId !== undefined) return { ...part, boardId: null, checks: { ...part.checks, cut: false } }
+  let p = part
+  if (p.checks.cutByBoard !== undefined) {
+    const { cutByBoard: _cutByBoard, ...checks } = p.checks
+    p = { ...p, checks }
+  }
+  if (!('flushId' in p)) return p
+  const { flushId: _flushId, ...rest } = p
+  return rest
+}
+
+function validatePartFields(job: Job, part: Part): string | null {
+  if (part.flushId !== undefined && !job.flushes.some((f) => f.id === part.flushId)) return 'フラッシュが見つかりません'
+
   if (!(Number.isInteger(part.quantity) && part.quantity >= 0)) return '枚数は 0 以上の整数を入れてください'
   if (part.allowance !== null && !(Number.isFinite(part.allowance) && part.allowance >= 0)) {
     return '切り代は 0 以上の数を入れてください（空欄なら仕事の初期値）'
@@ -344,8 +496,8 @@ export function addPart(job: Job, part: Part): OpResult {
     job.parts.map((p) => p.name),
   )
   if (invalid) return fail(invalid)
-  const p = { ...part, name }
-  const err = validatePartFields(p)
+  const p = normalizeMaterial({ ...part, name })
+  const err = validatePartFields(job, p)
   if (err) return fail(err)
   return ok({ ...job, parts: [...job.parts, p] })
 }
@@ -357,8 +509,8 @@ export function addPart(job: Job, part: Part): OpResult {
 export function updatePart(job: Job, partId: string, patch: Partial<Omit<Part, 'id'>>): OpResult {
   const cur = job.parts.find((p) => p.id === partId)
   if (!cur) return fail('部材が見つかりません')
-  const next: Part = { ...cur, ...patch, id: partId, name: (patch.name ?? cur.name).trim() }
-  const err = validatePartFields(next)
+  const next: Part = normalizeMaterial({ ...cur, ...patch, id: partId, name: (patch.name ?? cur.name).trim() })
+  const err = validatePartFields(job, next)
   if (err) return fail(err)
   // 先に中身を入れ替え、そのあと名前を変える（式の参照のつけ替えは新しい式にも効く）
   const replaced = job.parts.map((p) => (p.id === partId ? { ...next, name: cur.name } : p))

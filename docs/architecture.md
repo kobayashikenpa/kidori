@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版・第1.3版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -769,3 +769,52 @@ thicknessChoice(part, board, finished): { autoAxis; candidates; ambiguous; showS
 - `autoAxis`：自動で選ぶ軸（手で選んだ軸は見ない。W→H→D で材料の厚みと同じ最初の軸）。`candidates`：材料の厚みと同じ値の軸。`ambiguous`：候補が2つ以上
 - `showSelector`：`ambiguous`、手で選んだ軸がある、厚みと同じ寸法が無い（不一致のエラーで「厚みの寸法を選んでください」と出るため）のどれか（暫定）。枚数0の行・材料が未設定なら false
 - 画面は `showSelector` が false なら「厚み：W（自動）」と表示だけにする
+
+## 10. 第1.5版の変更（フラッシュ 第1段階）
+
+仕様書 4（フラッシュ）に対応する。保存データの版は上げない。
+
+### 10.1 データの形 — 決定（進行役）
+
+```ts
+interface FlushFace { boardId: string; count: number }            // 表面材（登録済みの材料）と 1部材あたりの枚数（1以上の整数）
+interface Flush { id: string; name: string; core: number; faces: FlushFace[] }
+Job.flushes: Flush[]                 // 登録順＝画面の並び順
+Part.flushId?: string                // 材料のかわりにフラッシュを選んだ部材。このとき boardId は null
+PartChecks.cutByBoard?: Record<boardId, boolean>   // フラッシュの部材の、表面材ごとの木取りの完了
+```
+
+- フラッシュは材料（`boards`）の id を指すので、設定（`settings`）ではなく材料と同じ階層（`job.flushes`）に置く。画面では設定画面に出す
+- 部材は `boardId` をそのまま残し、`flushId` を足す（無ければ今までどおり）。`addPart`・`updatePart` は `flushId` があれば `boardId` を null にそろえる
+- 芯材の厚みは 0 より大きい。表面材は1つ以上・同じ材料を重ねない・枚数は1以上の整数。名前は空でなく、ほかのフラッシュと重ならない（前後の空白・全角半角をそろえて比べる）
+- フラッシュの部材の `checks.cut` は使わない（完了は表面材ごとの `cutByBoard`）
+
+### 10.2 厚み（`engine/flush.ts`）
+
+```ts
+flushThickness(flush, boards): number                   // 芯材＋Σ 表面材の厚み×枚数（見つからない材料は数えない）
+thicknessOfId(job, id): number | null                    // 材料の厚み、またはフラッシュの合計の厚み
+thicknessRefLabel(job, id): string | null                // 式の表示名：材料は ラワン4、フラッシュは名前（フラッシュ25）
+partThicknessSource(job, part): { thickness } | null     // 部材の厚みの判定に使う厚み（材料またはフラッシュ）
+flushBreakdown(job, flushId): FlushBreakdown | null      // 芯材・表面材ごと・合計
+flushBreakdownText(b): string                            // 「芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25」
+flushesUsingBoards(job, boardIds): string[]              // 材料を削除する前の確認用（フラッシュの名前）
+partsUsingFlushes(job, flushIds): string[]               // その材料欄でフラッシュを選んでいる部材
+```
+
+- 式の厚みは、新しい書き方を作らず `{t:id}` のまま、id がフラッシュならその合計の厚みにする。表示名はフラッシュの名前。削除したフラッシュは、削除した材料と同じエラー（missingBoard）
+- 厚みの判定（`computeDimensions`）・不一致のエラーは `partThicknessSource` の厚みを使う。画面の `thicknessChoice` にも同じものを渡す
+
+### 10.3 木取り（`packing/pieces.ts`）
+
+- フラッシュの部材は、表面材ごとに 表面材の枚数×部材の枚数 の片にし、その材料の板で木取りする。木取り寸法・木目は部材のまま、向きはそれぞれの材料の木目で決める。芯材は入れない
+- 片の id は `${partId}#${連番}`。連番は表面材をまたいで続ける（メラミン1 が #1〜#4、ラワン4 が #5〜#8）
+- `cutByBoard[boardId]` が true の表面材は、ほかの判定より先に除き、`done` に `{ partId, name, quantity: 枚数×部材の枚数, boardId: 表面材 }` で出す。残りの表面材があれば、そのうえで寸法のエラー・厚みの不一致を見る（部材ごとに1つ `skipped`）
+- 表面材が1つも残っていない（材料を削除した）フラッシュの部材は `skipped` の `noBoard`
+
+### 10.4 保存・引き継ぎ・コピー（`src/store`）
+
+- 読み込み：`flushes` が無ければ `[]`（直した数に数えない）。読めないフラッシュ・無い材料の表面材は外す。無いフラッシュを指す部材は `flushId` を外す（直した数に数える）。`cutByBoard` は真偽値のものだけ残す
+- ひな形：`SettingsTemplate.flushes?: FlushSpec[]`。表面材は材料の id ではなく「材料名＋厚み」で持ち、新しい仕事を作るときに同じ材料名＋厚みの材料の id に直す。見本も同じ（ひな形から作るため）
+- 仕事のコピー：フラッシュの id・表面材の材料の id・部材の `flushId`・`cutByBoard` のキー・式の `{t:…}` をつけ替える
+- 操作：`addFlush(job, draft, id?)`・`updateFlush(job, id, draft)`・`removeFlushes(job, ids)`（使っていた部材は材料が未設定になる）・`flushesUsages(job, ids)`・`setFlushCutCheck(job, partId, boardId, done)`。`removeBoards` は削除した材料をフラッシュの表面材から外し、`boardsUsages` は `flushes`（使っているフラッシュの名前）も返す

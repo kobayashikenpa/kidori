@@ -14,6 +14,8 @@ interface Props<T extends { id: string }> {
   label: (item: T) => string
   /** 行に出す「使っている部材」の文 */
   usage: (item: T) => string
+  /** 行に出す注意（無ければ null） */
+  warning?: (item: T) => string | null
   /** 上に置く追加の入力 */
   add: ReactNode
   /** 編集の形（done で一覧の形に戻す） */
@@ -32,6 +34,7 @@ export function SettingsList<T extends { id: string }>({
   items,
   label,
   usage,
+  warning,
   add,
   renderEdit,
   removeWarning,
@@ -174,6 +177,7 @@ export function SettingsList<T extends { id: string }>({
               <span className="lead" style={{ margin: 0 }}>
                 {usage(item)}
               </span>
+              {warning?.(item) && <span className="msg warn">{warning(item)}</span>}
             </div>
             <div className="list-actions">
               <button

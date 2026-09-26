@@ -2,7 +2,8 @@
 // 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・材料の厚み・逃げ・数字・演算子のボタンだけで式を作る。
 // 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4・逃げ1 と見せる（「mm」は付けない）
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { boardTokenLabel, nigeName } from '../../engine/defaults'
+import { nigeName } from '../../engine/defaults'
+import { thicknessRefLabel } from '../../engine/flush'
 import { formulaLabels } from '../../engine/formula/display'
 import { formulaUnits } from '../../engine/formula/units'
 import { AXES, type Axis, type DimensionError, type Job, type Part } from '../../engine/types'
@@ -52,9 +53,9 @@ interface Props {
   value: string
   onChange: (v: string) => void
   /** 表示名（ラワン4・逃げ1 など）を作るための材料と設定 */
-  job: Pick<Job, 'boards' | 'settings'>
-  /** 編集中の部材で選んでいる材料の id。厚みのボタンはこの材料の1つだけ出す（null なら出さない） */
-  boardId: string | null
+  job: Pick<Job, 'boards' | 'flushes' | 'settings'>
+  /** 編集中の部材で選んでいる材料またはフラッシュの id。厚みのボタンはこの1つだけ出す（null なら出さない） */
+  thicknessId: string | null
   /** 参照ボタンに出す部材（編集中の部材自身は除く） */
   parts: Part[]
   /** 参照ボタンに添える、部材ごとの仕上がり寸法 */
@@ -76,12 +77,12 @@ const CHIP_CLASS: Partial<Record<string, string>> = {
   bad: 'chip-bad',
 }
 
-export function FormulaInput({ axis, value, onChange, job, boardId, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
+export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
   const id = `expr-${axis}`
   const units = formulaUnits(value)
   const labels = formulaLabels(value, job)
-  // 厚みのボタンは、この部材で選んでいる材料だけ（式にある別の材料の厚みは、表示と計算はそのまま）
-  const selectedBoard = job.boards.find((b) => b.id === boardId) ?? null
+  // 厚みのボタンは、この部材で選んでいる材料（またはフラッシュ）だけ（式にある別の材料の厚みは、表示と計算はそのまま）
+  const thickLabel = thicknessId === null ? null : thicknessRefLabel(job, thicknessId)
   // カーソル＝単位の番号（0〜単位の数）
   const [cursorRaw, setCursor] = useState(units.length)
   const cursor = Math.min(cursorRaw, units.length)
@@ -187,21 +188,18 @@ export function FormulaInput({ axis, value, onChange, job, boardId, parts, finis
               })}
             </div>
           )}
-          {selectedBoard && (
+          {thicknessId !== null && thickLabel !== null && (
             <div className="pad-group">
               <span className="pad-title">材料の厚み</span>
               <div className="pad-chips">
-                {[selectedBoard].map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    className="pad-chip chip-thick"
-                    onPointerDown={keep}
-                    onClick={() => put(`{t:${b.id}}`)}
-                  >
-                    {boardTokenLabel(b)}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  className="pad-chip chip-thick"
+                  onPointerDown={keep}
+                  onClick={() => put(`{t:${thicknessId}}`)}
+                >
+                  {thickLabel}
+                </button>
               </div>
             </div>
           )}

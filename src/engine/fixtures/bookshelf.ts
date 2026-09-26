@@ -66,6 +66,7 @@ export function bookshelfJob(): Job {
     name: '本棚 W900',
     settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
     boards,
+    flushes: [],
     parts,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',

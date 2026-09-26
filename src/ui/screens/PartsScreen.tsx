@@ -26,6 +26,7 @@ export function PartsScreen() {
             key={p.id}
             part={p}
             board={job.boards.find((b) => b.id === p.boardId) ?? null}
+            flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
             dims={byId.get(p.id)!}
             onOpen={() => setEditing(p)}
           />
@@ -48,12 +49,14 @@ export function PartsScreen() {
 interface CardProps {
   part: Part
   board: Board | null
+  /** フラッシュを選んだ部材ならその名前 */
+  flushName: string | null
   dims: PartDimensions
   onOpen: () => void
 }
 
-function PartCard({ part, board, dims: d, onOpen }: CardProps) {
-  const noBoard = part.quantity >= 1 && !board
+function PartCard({ part, board, flushName, dims: d, onOpen }: CardProps) {
+  const noBoard = part.quantity >= 1 && !board && !flushName
   // 厚みの寸法の不一致（第1.2版からエラー）と、式のエラーを分けて出す
   const thickErr = d.errors.some((e) => e.kind === 'thicknessMismatch')
   const exprErr = d.errors.some((e) => e.kind !== 'thicknessMismatch')
@@ -65,6 +68,7 @@ function PartCard({ part, board, dims: d, onOpen }: CardProps) {
       </span>
       <span className="tags">
         {part.quantity > 0 && board && <span className="chip">{boardLabel(board)}</span>}
+        {part.quantity > 0 && flushName && <span className="chip">{flushName}</span>}
         {noBoard && <span className="chip warn">材料が未設定</span>}
         {thickErr && <span className="chip err">厚みが合わない</span>}
         {exprErr && <span className="chip err">式のエラー</span>}

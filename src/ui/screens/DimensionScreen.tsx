@@ -3,8 +3,9 @@
 // 「カード」「表（試作）」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
+import { flushBreakdown } from '../../engine/flush'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
-import { boardLabel, setPartChecks } from '../../store/jobs'
+import { boardLabel, setFlushCutCheck, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { DimensionTable } from '../components/DimensionTable'
 import { Segmented } from '../components/Segmented'
@@ -40,9 +41,13 @@ export function DimensionScreen() {
       {view === 'table' ? (
         <>
           <p className="lead" style={{ margin: '8px 0' }}>
-            青の数字（仕上がり寸法）を押すと内訳が開きます。完了のチェックはカードで付けます（完了した寸法はグレー）。
+            青の数字（仕上がり寸法）を押すと内訳が開きます。完了は、ふつうの部材はカードで、フラッシュの表面材はこの表で付けます（完了したものはグレー）。
           </p>
-          <DimensionTable job={job} dims={dims.parts} />
+          <DimensionTable
+            job={job}
+            dims={dims.parts}
+            onFlushCheck={(partId, boardId, done) => run((j) => setFlushCutCheck(j, partId, boardId, done))}
+          />
         </>
       ) : (
         <div className="stack" style={{ marginTop: 10 }}>
@@ -52,6 +57,8 @@ export function DimensionScreen() {
               part={p}
               dims={dims.parts[i]}
               board={job.boards.find((b) => b.id === p.boardId) ?? null}
+            flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
+              flushFaceIds={p.flushId !== undefined ? (flushBreakdown(job, p.flushId)?.faces.map((f) => f.boardId) ?? []) : null}
               onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
             />
           ))}
@@ -65,13 +72,22 @@ interface CardProps {
   part: Part
   dims: PartDimensions
   board: Board | null
+  /** フラッシュを選んだ部材ならその名前 */
+  flushName: string | null
+  /** フラッシュの部材なら表面材の材料の id（完了は表面材ごと。表で付ける） */
+  flushFaceIds: string[] | null
   onCheck: (patch: Partial<PartChecks>) => void
 }
 
-function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
+function DimensionCard({ part, dims: d, board, flushName, flushFaceIds, onCheck }: CardProps) {
   const cutting = part.quantity > 0
   const finDone = cutting && part.checks.finished
-  const cutDone = cutting && part.checks.cut
+  // フラッシュの部材は、表面材が全部完了のときだけ ② を完了（グレー）にする（表と同じ）
+  const cutDone =
+    cutting &&
+    (flushFaceIds
+      ? flushFaceIds.length > 0 && flushFaceIds.every((id) => part.checks.cutByBoard?.[id] === true)
+      : part.checks.cut)
   // 式のエラーがあると仕上がり寸法も出せない。厚みが合わないだけなら仕上がり寸法は出せるので、② 木取り寸法だけ出さない
   const exprErrors = d.errors.filter((e) => e.kind !== 'thicknessMismatch')
   const mismatchErrors = d.errors.filter((e) => e.kind === 'thicknessMismatch')
@@ -84,7 +100,13 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
       </header>
       {cutting && (
         <div className="tags">
-          {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">材料が未設定</span>}
+          {board ? (
+            <span className="chip">{boardLabel(board)}</span>
+          ) : flushName ? (
+            <span className="chip">{flushName}</span>
+          ) : (
+            <span className="chip warn">材料が未設定</span>
+          )}
           {d.errors.some((e) => e.kind === 'thicknessMismatch') && <span className="chip err">厚みが合わない</span>}
         </div>
       )}
@@ -149,7 +171,11 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
                 <h4>
                   ② 木取り寸法
                 </h4>
-                <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+                {flushFaceIds ? (
+                  <span className="band-note">表面材ごとの完了は「表」で付けます</span>
+                ) : (
+                  <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+                )}
               </div>
               {d.cutSize && d.faceAxes ? (
                 <>
@@ -165,7 +191,7 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
                 </>
               ) : (
                 <p className="band-note">
-                  {board ? '厚みが決まらないため出せません（部材の画面で選んでください）' : '材料を選ぶと出ます'}
+                  {board || flushName ? '厚みが決まらないため出せません（部材の画面で選んでください）' : '材料を選ぶと出ます'}
                 </p>
               )}
             </section>
