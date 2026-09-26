@@ -1,4 +1,4 @@
-// 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・逃げ・切り代
+// 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
@@ -175,6 +175,21 @@ export function PartEditor({ part, onClose }: Props) {
           </div>
         </>
       )}
+
+      <div className="field">
+        <label className="label" htmlFor="part-memo">
+          メモ（任意）
+        </label>
+        <textarea
+          id="part-memo"
+          className="input memo-input"
+          rows={3}
+          value={draft.memo}
+          placeholder="例：切り出したあとに穴あけ"
+          onChange={(e) => patch({ memo: e.target.value })}
+        />
+        <span className="hint">寸法表にも出ます</span>
+      </div>
 
       {error && <p className="msg err">{error}</p>}
       <div className="sheet-foot">
