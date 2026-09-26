@@ -848,6 +848,82 @@ select.input {
 .band.cut h4 {
   color: var(--cut);
 }
+/* 段の見出しと加工のチェック */
+.band-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+}
+.band-head h4 {
+  margin: 0;
+}
+.check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.check-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--muted);
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.check-btn[aria-checked='true'] .check-box {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: var(--surface);
+}
+.done-mark {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--surface);
+  font-size: 12px;
+}
+/* チェックした段：数字も見出しもグレーにする */
+.band.done {
+  border-color: var(--muted);
+  background: var(--bg);
+}
+.band.done h4,
+.band.done .band-dim .v,
+.band.done .cut-size {
+  color: var(--muted);
+}
+.part-memo {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.part-memo-label {
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
 .band-dims {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
