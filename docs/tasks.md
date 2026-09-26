@@ -218,7 +218,7 @@
 - やること：architecture.md 6.4。`Part.clearance` を型から消し、`finished.ts` の逃げと厚みの判定まわりの処理を消して単純にする。見本の棚板を W = `天地板.W - {n:nige-1}` に書き換える。逃げを前提にしたテストは、式で引く形に書き直すか消す。store・ui の `clearance` を使う箇所は外す（部材の編集の逃げの欄も外す）
 - 完了の条件：見本で 棚板 仕上がり 863×18×380・木取り 873×390、ほかの部材の値も上の「見本で期待する値」の表のとおり。縦切り優先でシナランバー 18 が 3枚・シナベニヤ 4 が 1枚、歩留まりも表のとおり。`src` の中に `clearance` が残っていない（移し替えの E-23 を除く）。`npm run check` が通る
 
-### [ ] E-22 式の単位・表示名・使っている部材・id のつけ替え
+### [x] E-22 式の単位・表示名・使っている部材・id のつけ替え
 - 担当：engine-dev ／ 依存：E-19 ／ 仕様書：4（逃げ）, 5.1, 5.4
 - やること：architecture.md 6.3。`formula/units.ts` の `formulaUnits(expr)`（部材の参照・厚み・逃げは1つの単位、数字は1字ずつ、空白は単位にしない）。`formula/display.ts` の `unitLabel(unit, job)`。`formula/usages.ts` の `partsUsingNige(job, id)`・`partsUsingBoardThickness(job, id)`・`remapBoardIds(expr, map)`
 - 完了の条件：`全体.W - {n:nige-1} * 12` の単位が［全体.W, -, 逃げ, *, 1, 2］の6つになる。表示名が `全体.W`・`−`・`逃げ1mm`・`×`・`1`・`2`、消した逃げは `（削除した逃げ）`、厚みは `ラワン4mm` になる。見本で `partsUsingNige(job, 'nige-1')` が［棚板（W）］、`partsUsingNige(job, 'nige-0.5')` が空。`remapBoardIds` で `{t:a}` が `{t:b}` になり、ほかの部分が変わらないテストが通る
