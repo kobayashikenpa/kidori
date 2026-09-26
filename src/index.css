@@ -692,6 +692,27 @@ select.input {
     animation: none;
   }
 }
+/* ボタンの並びを開いているあいだのエラーの場所：高さを決めておき、長い文は3行で打ち切る */
+.expr-status {
+  box-sizing: border-box;
+  height: calc(3 * 1.35em + 12px);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.expr-status-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.expr-status-text.ok {
+  color: var(--muted);
+}
 .pad {
   background: var(--surface);
   border: 1px solid var(--line);

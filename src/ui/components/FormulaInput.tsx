@@ -70,6 +70,7 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
   }
 
   const spoken = labels.length > 0 ? labels.join(' ') : '空'
+  const errorText = errors.map((e) => e.message).join('。')
 
   return (
     <div className="field">
@@ -101,10 +102,23 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
         })}
         {open && cursor === units.length && <span className="caret" aria-hidden="true" />}
       </button>
-      {errors.length > 0 && (
-        <p className="msg err" id={`${id}-err`} role="alert">
-          {errors.map((e) => e.message).join('。')}
-        </p>
+      {open ? (
+        // ボタンの並びを開いているあいだは、エラーの場所の高さを決めておく（エラーが出ても消えてもボタンの位置がずれない）
+        <div className={`expr-status${errors.length > 0 ? ' msg err' : ''}`} id={`${id}-err`} role={errors.length > 0 ? 'alert' : undefined}>
+          {errors.length > 0 ? (
+            <span className="expr-status-text">{errorText}</span>
+          ) : (
+            <span className="expr-status-text ok num">
+              {finished !== null ? `＝ 仕上がり ${fmt(finished)}` : units.length === 0 ? '数値か式を入れてください' : ''}
+            </span>
+          )}
+        </div>
+      ) : (
+        errors.length > 0 && (
+          <p className="msg err" id={`${id}-err`} role="alert">
+            {errorText}
+          </p>
+        )
       )}
 
       {open && (
