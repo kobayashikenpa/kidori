@@ -751,11 +751,13 @@ export function pickBetterSize(options: [SizeSummary, SizeSummary]): { fewer; hi
 ### 9.2 寸法表の内訳（`dimensions/explain.ts`）
 
 ```ts
-explainDimension(job, partId, axis): DimensionExplanation
+explainDimension(job, partId, axis, finished?): DimensionExplanation | null   // finished は computeFinished(job)（省略可）
+explanationText(e): string   // 「全体.W 900 − 側板.W 18 × 2 = 864」
 ```
 
 - 式を左から順に、記号・数・参照（部材の寸法・材料の厚み・調整寸法。表示名と値）の並びにして、計算結果と一緒に返す。例：天地板.W → `全体.W 900 − 側板.W 18 × 2 = 864`
-- 値は `computeDimensions` と同じ計算（仕上がり寸法）。式や参照先にエラーがあれば `result` は null で、その寸法のエラーを返す
+- 値は `computeDimensions` と同じ計算（仕上がり寸法）。式や参照先にエラーがあれば `result` は null で、その寸法のエラーを返す。読めない式は項なし
+- 表示の数：式に書いた数・調整寸法はそのまま、参照した寸法・材料の厚み・結果は小数第1位まで
 
 ### 9.3 厚みの寸法の自動表示（`dimensions/thickness.ts`）
 
