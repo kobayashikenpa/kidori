@@ -1786,3 +1786,79 @@ h3 > .help {
   color: var(--muted);
   margin: -8px 0;
 }
+
+/* ---------- 数字キー（仕様書 9.1） ---------- */
+.keypad-box {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.keypad-box.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.keypad-placeholder {
+  color: var(--muted);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.keypad-fresh {
+  background: var(--fin-soft);
+  border-radius: 3px;
+}
+.numpad {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.numpad-in {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.numpad-show {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 4px;
+  min-width: 0;
+}
+.numpad-name {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.numpad-val {
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.numpad-val.bad {
+  color: var(--err);
+}
+.numpad-keys .pad-key {
+  min-height: 48px;
+}
+.pad-key.span3 {
+  grid-column: span 3;
+}
+.numpad-done {
+  grid-column: 4;
+  grid-row: 3 / span 2;
+}

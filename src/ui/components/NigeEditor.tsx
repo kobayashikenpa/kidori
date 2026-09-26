@@ -8,6 +8,7 @@ import { addNige, nigesUsages, nigeUsages, removeNiges, updateNige } from '../..
 import { useCurrentJob } from '../../store/useJobStore'
 import { parseNum } from '../format'
 import { closeKeyboard } from '../keyboard'
+import { KeypadField } from './KeypadField'
 import { SettingsList } from './SettingsList'
 
 /** 入力欄の名前と寸法を読む。読めなければ理由 */
@@ -96,22 +97,17 @@ function NigeForm({ nige, done }: { nige: Nige | null; done: () => void }) {
           <label className="label" htmlFor={`${pre}-value`}>
             寸法
           </label>
-          <span className="unit-input">
-            <input
-              id={`${pre}-value`}
-              className={`input num${error && name.trim() !== '' ? ' bad' : ''}`}
-              inputMode="decimal"
-              enterKeyHint="done"
-              placeholder="例：1"
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value)
-                setError(null)
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
-            />
-            <span className="unit">mm</span>
-          </span>
+          <KeypadField
+            id={`${pre}-value`}
+            ariaLabel="寸法"
+            bad={!!error && name.trim() !== ''}
+            placeholder="例：1"
+            text={text}
+            onText={(t) => {
+              setText(t)
+              setError(null)
+            }}
+          />
         </div>
       </div>
       {error && (

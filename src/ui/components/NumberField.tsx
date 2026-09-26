@@ -1,6 +1,8 @@
-// 数の入力欄。打っている途中の文字はそのまま持ち、読める数になったら知らせる
+// 数の入力欄（アプリの数字キーで入れる、仕様書 9.1）。打っている途中の文字はそのまま持ち、読める数になったら知らせる
 import { useState } from 'react'
+import { exactText } from '../../engine/round'
 import { fmt, parseNum } from '../format'
+import { KeypadField } from './KeypadField'
 
 interface Props {
   value: number | null
@@ -26,30 +28,26 @@ export function NumberField({ value, onChange, allowEmpty, integer, unit = 'mm',
       : Number.isNaN(parsed) || parsed < 0 || (integer === true && !Number.isInteger(parsed))
 
   return (
-    <span className="unit-input">
-      <input
-        id={id}
-        aria-label={ariaLabel}
-        className={`input num${bad ? ' bad' : ''}`}
-        inputMode={integer ? 'numeric' : 'decimal'}
-        enterKeyHint="done"
-        value={shown}
-        placeholder={placeholder}
-        onFocus={() => setEditing(value === null ? '' : fmt(value))}
-        onBlur={() => setEditing(null)}
-        onChange={(e) => {
-          const text = e.target.value
-          setEditing(text)
-          const v = parseNum(text)
-          if (v === null) {
-            if (allowEmpty) onChange(null)
-            return
-          }
-          if (Number.isNaN(v) || v < 0 || (integer && !Number.isInteger(v))) return
-          onChange(v)
-        }}
-      />
-      {unit && <span className="unit">{unit}</span>}
-    </span>
+    <KeypadField
+      id={id}
+      ariaLabel={ariaLabel}
+      text={shown}
+      integer={integer}
+      bad={bad}
+      unit={unit}
+      placeholder={placeholder}
+      onOpen={() => setEditing(value === null ? '' : exactText(value))}
+      onClose={() => setEditing(null)}
+      onText={(text) => {
+        setEditing(text)
+        const v = parseNum(text)
+        if (v === null) {
+          if (allowEmpty) onChange(null)
+          return
+        }
+        if (Number.isNaN(v) || v < 0 || (integer && !Number.isInteger(v))) return
+        onChange(v)
+      }}
+    />
   )
 }

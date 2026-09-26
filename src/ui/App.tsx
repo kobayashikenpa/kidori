@@ -1,11 +1,12 @@
 // 画面の切り替え（下の5つのタブ）。仕事を開いていないときは「仕事」以外を押せない
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useJobStore } from '../store/useJobStore'
 import { DimensionScreen } from './screens/DimensionScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { KidoriScreen } from './screens/KidoriScreen'
 import { PartsScreen } from './screens/PartsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { installTextFieldScroll } from './scroll'
 
 type TabId = 'jobs' | 'parts' | 'dims' | 'kidori' | 'settings'
 
@@ -22,6 +23,9 @@ export default function App() {
   const [picked, setPicked] = useState<TabId>(job ? 'parts' : 'jobs')
   // 仕事を開いていなければ、いつも「仕事」を出す
   const tab: TabId = job ? picked : 'jobs'
+
+  // 文字の入力欄（名前・メモなど）を押したら、キーボードに隠れない位置へ動かす（仕様書 9.1）
+  useEffect(() => installTextFieldScroll(), [])
 
   const select = (id: TabId) => {
     setPicked(id)
