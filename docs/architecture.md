@@ -397,7 +397,7 @@ export type DimensionErrorKind =
 - `PartDimensions.input` は残すが、第1.1版では `finished` と同じ値になる（逃げを引く処理がなくなるため）
 - 初期値（`defaults.ts`）— 決定（planner）
   - `defaultNige()`：毎回新しい配列 `[{ id: 'nige-0.5', value: 0.5 }, { id: 'nige-1', value: 1 }]`。id は仕事の中で重複しなければよいので固定の文字列にする。あとから足す逃げの id は `newId('nige')`
-  - `defaultBoards(newId)`：メラミン 1、ラワン 2.5、ラワン 4、ラワン 5.5（すべて 3×6 910×1820、木目 長手方向）。id は `newId('board')`。**新しい仕事（`createJob`）では store の `initialBoards()` が大きさを 4×8（1220×2440）に変えて使う（オーナーの決定）**
+  - `defaultBoards(newId)`：メラミン 1、ラワン 2.5、ラワン 4、ラワン 5.5（すべて 4×8 1220×2440、木目 長手方向。仕様書 5.1）。id は `newId('board')`。新しい仕事（`createJob`）はこれをそのまま使う
   - `nigeName(value)` → `逃げ0.5mm`・`逃げ1mm`（数値は小数第1位まで、末尾の .0 は付けない）
   - `boardTokenLabel(board)` → `ラワン4mm`（材料名＋厚み＋mm、間に空白なし。仕様書 5.4 の例に合わせる）
 - 見本（本棚 W900）：板は今のまま2つ（シナランバー 18・シナベニヤ 4）、逃げは `defaultNige()`。棚板は `clearance: { W: 1 }` をやめて **W = `天地板.W - {n:nige-1}`**（表示は `天地板.W − 逃げ1mm`）。仕上がり 863 は変わらない — 決定（planner）

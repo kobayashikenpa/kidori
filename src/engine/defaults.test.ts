@@ -45,9 +45,9 @@ describe('defaultBoards（新しい仕事の材料）', () => {
       ['ラワン', 5.5],
     ])
   })
-  it('すべて 3×6（910×1820）・木目は長手方向', () => {
+  it('すべて 4×8（1220×2440）・木目は長手方向（仕様書 5.1）', () => {
     for (const x of defaultBoards(newId)) {
-      expect([x.sizeKind, x.width, x.length, x.grain]).toEqual(['saburoku', 910, 1820, 'long'])
+      expect([x.sizeKind, x.width, x.length, x.grain]).toEqual(['shihachi', 1220, 2440, 'long'])
     }
   })
   it('id は newId("board") で作り、すべて別々', () => {

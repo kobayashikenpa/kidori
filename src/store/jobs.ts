@@ -37,23 +37,14 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 
 // ---------- 仕事 ----------
 
-/**
- * 新しい仕事の材料：メラミン1・ラワン2.5・4・5.5。オーナーの決定で 4×8（1220×2440）・木目は長手方向。
- * 材料名と厚みは engine の defaultBoards のものを使い、大きさだけ 4×8 にする
- */
-export function initialBoards(): Board[] {
-  const [width, length] = BOARD_SIZES.shihachi
-  return defaultBoards(newId).map((b) => ({ ...b, sizeKind: 'shihachi', width, length, grain: 'long' }))
-}
-
-/** 新しい仕事：設定は初期値（逃げ0.5mm・逃げ1mm）、材料は initialBoards（4×8 の4つ）、部材なし */
+/** 新しい仕事：設定は初期値（逃げ0.5mm・逃げ1mm）、材料は defaultBoards（4×8 の4つ）、部材なし */
 export function createJob(name: string, now: Date = new Date(), id: string = newId('job')): Job {
   const t = now.toISOString()
   return {
     id,
     name: name.trim() || '名前のない仕事',
     settings: { ...DEFAULT_SETTINGS, nige: defaultNige() },
-    boards: initialBoards(),
+    boards: defaultBoards(newId),
     parts: [],
     createdAt: t,
     updatedAt: t,

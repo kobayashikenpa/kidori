@@ -201,7 +201,7 @@
 ### [x] E-18 データ型と初期値（逃げ・メモ・加工のチェック・初期の材料）
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：4（逃げ）, 5.1, 5.2, 9（加工のチェック）
 - やること：architecture.md 6.2。`Nige` 型、`Settings.nige`、`Part.memo`・`Part.checks`、`DimensionErrorKind` に `missingBoard`・`missingNige` を足す。`src/engine/defaults.ts` に `defaultNige()`・`defaultBoards(newId)`・`nigeName(value)`・`boardTokenLabel(board)` を作る。見本に `nige: defaultNige()`・`memo: ''`・`checks` を入れる（`clearance` はこの作業では残す）
-- 完了の条件：`defaultNige()` が 0.5 と 1 の2つで、名前が「逃げ0.5mm」「逃げ1mm」になる。呼ぶたびに別の配列になる。`defaultBoards` が メラミン 1・ラワン 2.5・ラワン 4・ラワン 5.5 の4つ（すべて 910×1820・木目 長手方向・id が別々）。`boardTokenLabel` が「ラワン4mm」を返すテストが通る
+- 完了の条件：`defaultNige()` が 0.5 と 1 の2つで、名前が「逃げ0.5mm」「逃げ1mm」になる。呼ぶたびに別の配列になる。`defaultBoards` が メラミン 1・ラワン 2.5・ラワン 4・ラワン 5.5 の4つ（すべて 4×8 1220×2440・木目 長手方向・id が別々）。`boardTokenLabel` が「ラワン4mm」を返すテストが通る
 
 ### [x] E-19 式の字句：材料の厚み・逃げ
 - 担当：engine-dev ／ 依存：E-18 ／ 仕様書：5.4, 6
