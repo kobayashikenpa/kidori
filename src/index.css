@@ -1076,12 +1076,6 @@ select.input {
 .kd-issues.warn h4 {
   color: var(--warn);
 }
-.kd-issues.done {
-  border-left-color: var(--ok);
-}
-.kd-issues.done h4 {
-  color: var(--ok);
-}
 .kd-issues ul {
   margin: 6px 0 0;
   padding-left: 1.2em;
@@ -1316,47 +1310,6 @@ select.input {
 }
 .fold > :last-child:not(summary) {
   margin-bottom: 10px;
-}
-.cut-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cut-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-.cut-no {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cut-item.trim .cut-no {
-  background: var(--dg-trim);
-  color: #fff;
-}
-.cut-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-.cut-label {
-  overflow-wrap: anywhere;
-  line-height: 1.4;
 }
 .scrap-list {
   margin-top: 4px;
@@ -1746,4 +1699,71 @@ select.input {
 }
 .dim-table thead th.c-cut {
   white-space: nowrap;
+}
+/* 切り出しチェック（木取り画面・材料ごと） */
+.cl {
+  margin-bottom: 10px;
+}
+.cl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cl-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cut);
+}
+.cl-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+.cl-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.cl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cut-soft);
+  color: var(--cut);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.cl-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cl-size {
+  flex: none;
+  white-space: nowrap;
+}
+.cl-qty {
+  font-weight: 400;
+}
+.cl-row.done {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 400;
+}
+.cl-row.done .cl-name {
+  text-decoration: line-through;
+}
+.cl-row.done .check-box {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: var(--surface);
 }
