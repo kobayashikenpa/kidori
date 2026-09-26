@@ -1668,6 +1668,78 @@ select.input {
   border-color: var(--muted);
   color: var(--surface);
 }
+/* 部材名（押すと完了のチェックの行を開く） */
+.dim-table tbody th.c-name {
+  padding: 0;
+}
+.dim-name {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  word-break: break-all;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dim-name.on {
+  outline: 2px solid var(--muted);
+  outline-offset: -2px;
+}
+.dim-checks td {
+  text-align: left;
+  padding: 4px 6px 6px;
+}
+.dim-checks-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.dim-check {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dim-check.fin {
+  background: var(--fin-soft);
+  color: var(--fin);
+}
+.dim-check.cut {
+  background: var(--cut-soft);
+  color: var(--cut);
+}
+.dim-check.done {
+  background: var(--bg);
+  color: var(--muted);
+}
+.dim-check.done .check-box {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: var(--surface);
+}
+.dim-checks-row .dim-note {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .dim-table thead th.c-group {
   text-align: center;
   padding-bottom: 0;

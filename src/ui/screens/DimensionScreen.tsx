@@ -41,12 +41,13 @@ export function DimensionScreen() {
       {view === 'table' ? (
         <>
           <p className="lead" style={{ margin: '8px 0' }}>
-            青の数字（仕上がり寸法）を押すと内訳が開きます。完了は、ふつうの部材はカードで、フラッシュの表面材はこの表で付けます（完了したものはグレー）。
+            部材名を押すと完了を付けられます（完了したものはグレー）。青の数字を押すと内訳が開きます。
           </p>
           <DimensionTable
             job={job}
             dims={dims.parts}
             onFlushCheck={(partId, boardId, done) => run((j) => setFlushCutCheck(j, partId, boardId, done))}
+            onCheck={(partId, patch) => run((j) => setPartChecks(j, partId, patch))}
           />
         </>
       ) : (
