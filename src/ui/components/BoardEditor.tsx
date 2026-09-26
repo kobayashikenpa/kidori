@@ -22,13 +22,18 @@ interface Props {
 export function BoardEditor({ board, onClose }: Props) {
   const { job, run } = useCurrentJob()
   const [draft, setDraft] = useState<Board>(() => board ?? newBoard({ material: '' }))
+  // 厚みは新しい材料では空欄から始める（入れないと追加できない。仕様書 5.1）
+  const [thickness, setThickness] = useState<number | null>(board ? board.thickness : null)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   // 削除の確認用：この材料から切る部材と、式でこの材料の厚みを使っている部材（部材名と軸）
   const usages = board ? boardUsages(job, board.id) : { cutFrom: [], thickness: [] }
   const users = usages.cutFrom
 
-  const patch = (p: Partial<Board>) => setDraft((d) => ({ ...d, ...p }))
+  const patch = (p: Partial<Board>) => {
+    setDraft((d) => ({ ...d, ...p }))
+    setError(null)
+  }
 
   const setKind = (kind: BoardSizeKind) => {
     if (kind === 'custom') patch({ sizeKind: kind })
@@ -36,7 +41,12 @@ export function BoardEditor({ board, onClose }: Props) {
   }
 
   const save = () => {
-    const r = run((j) => (board ? updateBoard(j, board.id, draft) : addBoard(j, draft)))
+    if (thickness === null) {
+      setError('厚みを入れてください（例：18）')
+      return
+    }
+    const next = { ...draft, thickness }
+    const r = run((j) => (board ? updateBoard(j, board.id, next) : addBoard(j, next)))
     if (r.ok) onClose()
     else setError(r.message)
   }
@@ -66,7 +76,17 @@ export function BoardEditor({ board, onClose }: Props) {
         <label className="label" htmlFor="board-thickness">
           厚み
         </label>
-        <NumberField id="board-thickness" value={draft.thickness} onChange={(v) => v !== null && patch({ thickness: v })} />
+        <NumberField
+          id="board-thickness"
+          allowEmpty
+          placeholder="例：18（必ず入れる）"
+          value={thickness}
+          onChange={(v) => {
+            setThickness(v)
+            setError(null)
+          }}
+        />
+        {thickness === null && <span className="msg warn">厚みを入れてください。入れないと{board ? '保存' : '追加'}できません</span>}
         <span className="hint">材料と厚みの組み合わせで区別します（同じ組み合わせは2つ作れません）</span>
       </div>
       <div className="field">
@@ -111,7 +131,7 @@ export function BoardEditor({ board, onClose }: Props) {
       {error && <p className="msg err">{error}</p>}
 
       <div className="sheet-foot">
-        <button type="button" className="btn primary" onClick={save}>
+        <button type="button" className="btn primary" aria-disabled={thickness === null} onClick={save}>
           {board ? '保存する' : '追加する'}
         </button>
       </div>
