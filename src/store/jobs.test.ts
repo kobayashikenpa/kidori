@@ -303,6 +303,26 @@ describe('逃げ', () => {
     expect(updateNige(job, 'nige-1', '', 1).ok).toBe(false)
   })
 
+  it('表示名（名前＋寸法）がほかと同じになるものは足せない・変えられない（逃げ1 と 5 → 逃げ15、逃げ と 15 → 逃げ15）', () => {
+    const job = unwrap(addNige(createJob('a'), '逃げ', 15, 'n-15'))
+    const add = addNige(job, '逃げ1', 5)
+    expect(add.ok).toBe(false)
+    if (!add.ok) expect(add.message).toBe('逃げ15 はすでにあります')
+    // 全角の「１」でも同じ表示名とみなす
+    expect(addNige(job, '逃げ１', 5).ok).toBe(false)
+    // 逆向き：先に「逃げ1」5 があって「逃げ」15 を足す
+    const job2 = unwrap(addNige(createJob('a'), '逃げ1', 5, 'n-x'))
+    expect(addNige(job2, '逃げ', 15).ok).toBe(false)
+    // 変更でも同じ
+    const upd = updateNige(job, 'nige-1', '逃げ1', 5)
+    expect(upd.ok).toBe(false)
+    if (!upd.ok) expect(upd.message).toBe('逃げ15 はすでにあります')
+    // 自分自身と同じ表示名への変更（名前の分け方を変えるだけ）はよい
+    expect(unwrap(updateNige(job, 'n-15', '逃げ1', 5)).settings.nige.at(-1)).toEqual({ id: 'n-15', name: '逃げ1', value: 5 })
+    // 表示名が違えば足せる（逃げ1 と 6 → 逃げ16）
+    expect(addNige(job, '逃げ1', 6).ok).toBe(true)
+  })
+
   it('寸法を変えると式の値がついてくる。ほかの逃げと同じ寸法には変えられない', () => {
     const job = bookshelfJob()
     expect(updateNige(job, 'nige-1', '逃げ', 0.5).ok).toBe(false)

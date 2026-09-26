@@ -262,7 +262,7 @@ export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpRes
 
 /**
  * 調整寸法（逃げ）の検査。名前が空でなく、寸法が 0 より大きく、
- * ほかの調整寸法と名前も寸法（小数第1位で比較）も同じでないこと
+ * ほかの調整寸法と名前も寸法（小数第1位で比較）も同じでなく、表示名（名前＋寸法）も重ならないこと
  */
 function validateNige(job: Job, name: string, value: number, selfId: string | null): string | null {
   if (!name.trim()) return '名前を入れてください'
@@ -270,6 +270,10 @@ function validateNige(job: Job, name: string, value: number, selfId: string | nu
   const key = nigeNameKey(name)
   const dup = job.settings.nige.find((n) => n.id !== selfId && nigeNameKey(n.name) === key && eq1(n.value, value))
   if (dup) return `${nigeName(dup)} はすでにあります`
+  // 表示名（名前＋寸法）が重なるもの（例：「逃げ1」5 と「逃げ」15 はどちらも 逃げ15）も断る。仕様書 4
+  const label = nigeNameKey(nigeName({ name: name.trim(), value }))
+  const same = job.settings.nige.find((n) => n.id !== selfId && nigeNameKey(nigeName(n)) === label)
+  if (same) return `${nigeName(same)} はすでにあります`
   return null
 }
 
