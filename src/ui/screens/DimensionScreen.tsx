@@ -46,6 +46,9 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
   const cutting = part.quantity > 0
   const finDone = cutting && part.checks.finished
   const cutDone = cutting && part.checks.cut
+  // 式のエラーがあると仕上がり寸法も出せない。厚みが合わないだけなら仕上がり寸法は出せるので、② 木取り寸法だけ出さない
+  const exprErrors = d.errors.filter((e) => e.kind !== 'thicknessMismatch')
+  const mismatchErrors = d.errors.filter((e) => e.kind === 'thicknessMismatch')
 
   return (
     <article className="card dim-card">
@@ -66,7 +69,7 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
         </p>
       )}
 
-      {d.errors.length > 0 ? (
+      {exprErrors.length > 0 ? (
         <div className="part-errors" role="group" aria-label="寸法のエラー">
           <p className="band-note" style={{ margin: 0 }}>
             {cutting ? '寸法にエラーがあるため、木取りから除いています。部材の画面で直してください' : '寸法にエラーがあります。部材の画面で直してください'}
@@ -101,7 +104,20 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
             </div>
           </section>
 
-          {cutting && (
+          {mismatchErrors.length > 0 && (
+            <div className="part-errors" role="group" aria-label="厚みのエラー">
+              {mismatchErrors.map((e, i) => (
+                <p key={`${e.axis}-${i}`} className="msg err" style={{ margin: 0 }}>
+                  {e.axis}：{e.message}
+                </p>
+              ))}
+              <p className="band-note" style={{ margin: 0 }}>
+                {cutting ? '木取りから除いています。部材の画面で直してください' : '部材の画面で直してください'}
+              </p>
+            </div>
+          )}
+
+          {cutting && mismatchErrors.length === 0 && (
             <section className={`band cut${cutDone ? ' done' : ''}`} aria-label="木取り寸法">
               <div className="band-head">
                 <h4>
