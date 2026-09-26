@@ -223,7 +223,7 @@
 - やること：architecture.md 6.3。`formula/units.ts` の `formulaUnits(expr)`（部材の参照・厚み・逃げは1つの単位、数字は1字ずつ、空白は単位にしない）。`formula/display.ts` の `unitLabel(unit, job)`。`formula/usages.ts` の `partsUsingNige(job, id)`・`partsUsingBoardThickness(job, id)`・`remapBoardIds(expr, map)`
 - 完了の条件：`全体.W - {n:nige-1} * 12` の単位が［全体.W, -, 逃げ, *, 1, 2］の6つになる。表示名が `全体.W`・`−`・`逃げ1mm`・`×`・`1`・`2`、消した逃げは `（削除した逃げ）`、厚みは `ラワン4mm` になる。見本で `partsUsingNige(job, 'nige-1')` が［棚板（W）］、`partsUsingNige(job, 'nige-0.5')` が空。`remapBoardIds` で `{t:a}` が `{t:b}` になり、ほかの部分が変わらないテストが通る
 
-### [ ] E-23 以前の版の部材ごとの逃げを移し替える
+### [x] E-23 以前の版の部材ごとの逃げを移し替える
 - 担当：engine-dev ／ 依存：E-21 ／ 仕様書：10
 - やること：architecture.md 6.5。`src/engine/migrate/clearance.ts` の `migrateClearance(legacyJob, makeId)`
 - 完了の条件：以前の形の見本（棚板 W = `天地板.W`・逃げ W1、設定に逃げなし）を移し替えると、設定の逃げが 0.5・1 の2つになり、棚板 W が `天地板.W - {n:nige-1}` になり、仕上がり 863 のまま。逃げ W2 の部材は 逃げ2mm が足され、式が `(全体.W - 36) - {n:…}` のように括弧つきになる。厚みの寸法の軸に入っていた逃げは式に足さない。移し替えた結果をもう一度移し替えても変わらないテストが通る
