@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import type { Job } from '../engine/types'
 import type { JobOp, OpResult } from './jobs'
-import { currentJob, initialState, storeReducer, type StoreAction, type StoreState } from './reducer'
+import { applyOp, currentJob, initialState, storeReducer, type StoreAction, type StoreState } from './reducer'
 import { browserStorage, loadSaved, saveSaved } from './storage'
 import { JobStoreContext, type JobStoreValue } from './useJobStore'
 
@@ -26,11 +26,10 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
 
   const runOn = useCallback(
     (jobId: string, op: JobOp): OpResult => {
-      const job = latest.current.jobs.find((j) => j.id === jobId)
-      if (!job) return { ok: false, message: '仕事が見つかりません' }
-      const r = op(job)
-      if (r.ok) send({ type: 'applyOp', jobId: job.id, op, now: new Date().toISOString() })
-      return r
+      // 操作はここで1回だけ当て、結果の仕事を渡す（reducer の中で操作をやり直すと、作った id がずれる）
+      const { result, action } = applyOp(latest.current, jobId, op, new Date().toISOString())
+      if (action) send(action)
+      return result
     },
     [send],
   )

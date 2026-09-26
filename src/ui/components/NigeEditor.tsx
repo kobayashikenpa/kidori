@@ -1,5 +1,5 @@
 // 設定の画面の逃げの一覧：寸法を入れるだけで追加（名前は「逃げ＋寸法」）、寸法の変更、削除（使っている部材を示して確認）
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { nigeName } from '../../engine/defaults'
 import type { Nige } from '../../engine/types'
 import { addNige, nigeUsages, removeNige, updateNige } from '../../store/jobs'
@@ -32,6 +32,8 @@ export function NigeEditor() {
     if (r.ok) {
       setAdding('')
       setAddError(null)
+      // 追加の欄から注目を外してキーボードを閉じる（出たままだと、次に押したボタンで画面が動き、確認が見えなくなる）
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     } else setAddError(r.message)
   }
 
@@ -48,9 +50,18 @@ export function NigeEditor() {
     if (r.ok) setEditId(null)
     else setEditError(r.message)
   }
+  const [removeError, setRemoveError] = useState<string | null>(null)
+  // 確認の形に替えたら、見える位置へ動かす（キーボードが閉じて画面が動いても見失わないように）
+  useEffect(() => {
+    if (!removeId) return
+    document.getElementById(`nige-confirm-${removeId}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [removeId])
   const remove = (id: string) => {
-    run((j) => removeNige(j, id))
-    setRemoveId(null)
+    const r = run((j) => removeNige(j, id))
+    if (r.ok) {
+      setRemoveId(null)
+      setRemoveError(null)
+    } else setRemoveError(r.message)
   }
 
   return (
@@ -93,15 +104,33 @@ export function NigeEditor() {
         }
         if (removeId === n.id) {
           return (
-            <div key={n.id} className="card stack" role="alertdialog" aria-label={`${nigeName(n.value)} の削除の確認`}>
+            <div
+              key={n.id}
+              className="card stack confirm"
+              role="alertdialog"
+              aria-label={`${nigeName(n.value)} の削除の確認`}
+              id={`nige-confirm-${n.id}`}
+            >
               {users.length > 0 && (
                 <p className="msg warn" style={{ margin: 0 }}>
                   <b>{users.join('・')}</b> の式がこの逃げを使っています。削除すると、その寸法は「削除した逃げを使っています」のエラーになります。
                 </p>
               )}
               <p style={{ margin: 0 }}>「{nigeName(n.value)}」を削除しますか？</p>
+              {removeError && (
+                <p className="msg err" role="alert" style={{ margin: 0 }}>
+                  削除できませんでした：{removeError}
+                </p>
+              )}
               <div className="sheet-foot">
-                <button type="button" className="btn" onClick={() => setRemoveId(null)}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setRemoveId(null)
+                    setRemoveError(null)
+                  }}
+                >
                   やめる
                 </button>
                 <button type="button" className="btn danger solid" onClick={() => remove(n.id)}>
@@ -128,6 +157,7 @@ export function NigeEditor() {
                 className="btn danger"
                 onClick={() => {
                   setEditId(null)
+                  setRemoveError(null)
                   setRemoveId(n.id)
                 }}
               >

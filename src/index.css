@@ -1371,3 +1371,9 @@ select.input {
   padding-left: 1.4em;
   font-size: 16px;
 }
+
+/* 削除の確認：ふつうの行とはっきり見分けられるように、赤の枠と薄い赤の地にする */
+.card.confirm {
+  border: 2px solid var(--err);
+  background: var(--err-soft);
+}
