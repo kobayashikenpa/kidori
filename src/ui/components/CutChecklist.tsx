@@ -10,7 +10,7 @@ interface Props {
 }
 
 /** 行を見分けるキー（押した行の位置を保つのに使う） */
-export function checklistRowKey(row: Pick<CutChecklistRow, 'kind' | 'partId' | 'boardId'>): string {
+function checklistRowKey(row: Pick<CutChecklistRow, 'kind' | 'partId' | 'boardId'>): string {
   return `${row.kind}:${row.partId}:${row.boardId}`
 }
 
