@@ -1,9 +1,11 @@
-// W・H・D の式の入力欄。欄の下に、登録済みの部材の寸法ボタンと、数字・演算子のボタンを並べる。
-// ボタンだけで式を作れる。キーボードでも打てる
-import { useRef, type PointerEvent } from 'react'
-import { AXES, type Axis, type DimensionError, type Part } from '../../engine/types'
+// W・H・D の式の入力。<input> を使わず式を表示する枠にするので、押しても電話のキーボードは出ない。
+// 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・数字・演算子のボタンだけで式を作る
+import { useState, type PointerEvent } from 'react'
+import { formulaLabels } from '../../engine/formula/display'
+import { formulaUnits } from '../../engine/formula/units'
+import { AXES, type Axis, type DimensionError, type Job, type Part } from '../../engine/types'
 import { fmt } from '../format'
-import { backspace, insertKey, insertRef, type Edit, type PadKey } from '../formulaEdit'
+import { clearAll, deleteBefore, insertAt, moveLeft, moveRight, type Edit, type PadKey } from '../formulaEdit'
 
 const AXIS_NAME: Record<Axis, string> = { W: '幅', H: '高さ', D: '奥行き' }
 
@@ -19,6 +21,8 @@ interface Props {
   axis: Axis
   value: string
   onChange: (v: string) => void
+  /** 表示名（ラワン4mm・逃げ1mm など）を作るための材料と設定 */
+  job: Pick<Job, 'boards' | 'settings'>
   /** 参照ボタンに出す部材（編集中の部材自身は除く） */
   parts: Part[]
   /** 参照ボタンに添える、部材ごとの仕上がり寸法 */
@@ -32,69 +36,67 @@ interface Props {
   onOpenChange: (open: boolean) => void
 }
 
-export function FormulaInput({ axis, value, onChange, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  // 最後のカーソル位置。欄の外のボタンを押したときも、ここに入れる
-  const caret = useRef<number | null>(null)
-  const id = `expr-${axis}`
+/** 式の中で色つきの塊として見せる単位 */
+const CHIP_CLASS: Partial<Record<string, string>> = {
+  partRef: 'chip-ref',
+  thickness: 'chip-thick',
+  nige: 'chip-nige',
+  bad: 'chip-bad',
+}
 
-  const remember = () => {
-    const el = inputRef.current
-    if (el && document.activeElement === el) caret.current = el.selectionStart
-  }
+export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
+  const id = `expr-${axis}`
+  const units = formulaUnits(value)
+  const labels = formulaLabels(value, job)
+  // カーソル＝単位の番号（0〜単位の数）
+  const [cursorRaw, setCursor] = useState(units.length)
+  const cursor = Math.min(cursorRaw, units.length)
 
   const apply = (edit: (text: string, at: number) => Edit) => {
-    const at = Math.min(caret.current ?? value.length, value.length)
-    const e = edit(value, at)
-    caret.current = e.caret
-    onChange(e.text)
-    const el = inputRef.current
-    if (el && document.activeElement === el) {
-      requestAnimationFrame(() => el.setSelectionRange(e.caret, e.caret))
-    }
+    const e = edit(value, cursor)
+    setCursor(e.cursor)
+    if (e.text !== value) onChange(e.text)
+  }
+  const put = (piece: string) => apply((t, at) => insertAt(t, at, piece))
+
+  // ボタンを押しても枠から注目が外れないようにする（画面が跳ねないように）
+  const keep = (e: PointerEvent) => e.preventDefault()
+
+  const openAtEnd = () => {
+    setCursor(units.length)
+    onOpenChange(true)
   }
 
-  // ボタンを押してもキーボードが出ない・入力欄のフォーカスが外れないようにする
-  const keep = (e: PointerEvent) => e.preventDefault()
+  const spoken = labels.length > 0 ? labels.join(' ') : '空'
 
   return (
     <div className="field">
-      <label className="label" htmlFor={id}>
+      <span className="label" aria-hidden="true">
         {axis}（{AXIS_NAME[axis]}）
         {finished !== null && <span className="expr-result num"> 仕上がり {fmt(finished)}</span>}
-      </label>
-      <div className="expr-row">
-        <input
-          ref={inputRef}
-          id={id}
-          className={`input num${errors.length > 0 ? ' bad' : ''}`}
-          aria-invalid={errors.length > 0}
-          aria-describedby={errors.length > 0 ? `${id}-err` : undefined}
-          value={value}
-          placeholder="数値または式"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          onFocus={() => onOpenChange(true)}
-          onChange={(e) => {
-            caret.current = e.target.selectionStart
-            onChange(e.target.value)
-          }}
-          onSelect={remember}
-          onKeyUp={remember}
-          onClick={remember}
-        />
-        <button
-          type="button"
-          className="btn pad-toggle"
-          aria-expanded={open}
-          aria-controls={`${id}-pad`}
-          onClick={() => onOpenChange(!open)}
-        >
-          ボタン
-        </button>
-      </div>
+      </span>
+      <button
+        type="button"
+        className={`expr-box${open ? ' active' : ''}${errors.length > 0 ? ' bad' : ''}`}
+        aria-describedby={errors.length > 0 ? `${id}-err` : undefined}
+        aria-expanded={open}
+        aria-controls={`${id}-pad`}
+        aria-label={`${axis} の式：${spoken}。押すとボタンで入力できます`}
+        onClick={openAtEnd}
+      >
+        {units.length === 0 && !open && <span className="expr-placeholder">押して数値または式を入力</span>}
+        {units.map((u, i) => {
+          const gap = i > 0 && u.start > units[i - 1].end
+          const chip = CHIP_CLASS[u.kind]
+          return (
+            <span key={`${u.start}-${u.text}`} className="expr-unit-wrap">
+              {open && cursor === i && <span className="caret" aria-hidden="true" />}
+              <span className={`expr-unit num${gap ? ' gap' : ''}${chip ? ` chip ${chip}` : ''}`}>{labels[i]}</span>
+            </span>
+          )
+        })}
+        {open && cursor === units.length && <span className="caret" aria-hidden="true" />}
+      </button>
       {errors.length > 0 && (
         <p className="msg err" id={`${id}-err`} role="alert">
           {errors.map((e) => e.message).join('。')}
@@ -113,7 +115,7 @@ export function FormulaInput({ axis, value, onChange, parts, finishedOf, finishe
                     type="button"
                     className="pad-ref"
                     onPointerDown={keep}
-                    onClick={() => apply((t, at) => insertRef(t, at, `${p.name}.${a}`))}
+                    onClick={() => put(`${p.name}.${a}`)}
                   >
                     <span className="ref-name">
                       {p.name}.{a}
@@ -126,31 +128,38 @@ export function FormulaInput({ axis, value, onChange, parts, finishedOf, finishe
           )}
           <div className="pad-keys">
             {KEYS.map(([label, key]) => (
-              <button
-                key={label}
-                type="button"
-                className="pad-key num"
-                onPointerDown={keep}
-                onClick={() => apply((t, at) => insertKey(t, at, key))}
-              >
+              <button key={label} type="button" className="pad-key num" onPointerDown={keep} onClick={() => put(key)}>
                 {label}
               </button>
             ))}
-            <button type="button" className="pad-key num" onPointerDown={keep} onClick={() => apply((t, at) => insertKey(t, at, ')'))}>
+            <button type="button" className="pad-key num" onPointerDown={keep} onClick={() => put(')')}>
               )
-            </button>
-            <button type="button" className="pad-key" onPointerDown={keep} onClick={() => apply(backspace)}>
-              1字消す
             </button>
             <button
               type="button"
               className="pad-key"
+              aria-label="カーソルを左へ"
               onPointerDown={keep}
-              onClick={() => apply(() => ({ text: '', caret: 0 }))}
+              onClick={() => setCursor(moveLeft(value, cursor))}
             >
+              ◀
+            </button>
+            <button
+              type="button"
+              className="pad-key"
+              aria-label="カーソルを右へ"
+              onPointerDown={keep}
+              onClick={() => setCursor(moveRight(value, cursor))}
+            >
+              ▶
+            </button>
+            <button type="button" className="pad-key" onPointerDown={keep} onClick={() => apply(deleteBefore)}>
+              1字消す
+            </button>
+            <button type="button" className="pad-key span2" onPointerDown={keep} onClick={() => apply(clearAll)}>
               全部消す
             </button>
-            <button type="button" className="pad-key done" onPointerDown={keep} onClick={() => onOpenChange(false)}>
+            <button type="button" className="pad-key done span2" onPointerDown={keep} onClick={() => onOpenChange(false)}>
               完了
             </button>
           </div>

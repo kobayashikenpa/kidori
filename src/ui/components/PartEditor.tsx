@@ -110,6 +110,7 @@ export function PartEditor({ part, onClose }: Props) {
           key={axis}
           axis={axis}
           value={draft.expr[axis]}
+          job={job}
           onChange={(v) => patch({ expr: { ...draft.expr, [axis]: v } })}
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}

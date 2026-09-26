@@ -20,6 +20,7 @@
   --err: #b3261e;
   --err-soft: #f8dedb;
   --ok: #2e7a4d;
+  --ok-soft: #dcefe2;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   --sans: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'BIZ UDPGothic', 'Noto Sans JP', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, 'Roboto Mono', monospace;
@@ -47,6 +48,7 @@
     --err: #f28b82;
     --err-soft: #3e1f1c;
     --ok: #7cc897;
+    --ok-soft: #1c3526;
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
   }
 }
@@ -71,6 +73,7 @@
   --err: #f28b82;
   --err-soft: #3e1f1c;
   --ok: #7cc897;
+  --ok-soft: #1c3526;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
 }
 
@@ -565,22 +568,91 @@ select.input {
 }
 
 /* ---------- 式の入力 ---------- */
-.expr-row {
-  display: flex;
-  gap: 6px;
-}
-.expr-row .input {
-  flex: 1;
-}
-.pad-toggle {
-  flex: none;
+.expr-box {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
   padding: 8px 10px;
-  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 4px;
+  text-align: left;
+  cursor: text;
+  touch-action: manipulation;
 }
-.pad-toggle[aria-expanded='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
+.expr-box.active {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.expr-box.bad {
+  border-color: var(--err);
+}
+.expr-placeholder {
+  color: var(--muted);
+  font-size: 15px;
+}
+.expr-unit-wrap {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.expr-unit {
+  white-space: pre;
+  line-height: 1.6;
+}
+.expr-unit.gap {
+  margin-left: 0.35em;
+}
+.expr-unit.chip {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+  padding: 0 5px;
+  font-weight: 700;
+  font-family: var(--sans);
+  font-size: 15px;
+}
+.chip-ref {
+  background: var(--fin-soft);
+  color: var(--fin);
+}
+.chip-thick {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.chip-nige {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.chip-bad {
+  background: var(--err-soft);
+  color: var(--err);
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.3em;
+  margin: 0 1px;
+  background: var(--accent);
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
 }
 .pad {
   background: var(--surface);
@@ -643,6 +715,9 @@ select.input {
 }
 .pad-key:not(.num) {
   font-size: 14px;
+}
+.pad-key.span2 {
+  grid-column: span 2;
 }
 .pad-key.done {
   background: var(--accent);
