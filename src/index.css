@@ -912,15 +912,6 @@ select.input {
   border-color: var(--muted);
   color: var(--surface);
 }
-.done-mark {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--muted);
-  color: var(--surface);
-  font-size: 12px;
-}
 /* チェックした段：数字も見出しもグレーにする */
 .band.done {
   border-color: var(--muted);
