@@ -1,8 +1,7 @@
 // 設定の画面：刃厚・耳落とし・切り代・切り方、逃げの一覧、板の一覧、配色
 import { useState } from 'react'
-import { orderedBoards } from '../../engine/boards'
-import type { Board, Settings } from '../../engine/types'
-import { boardLabel, boardSizeLabel, partsUsingBoard, updateSettings } from '../../store/jobs'
+import type { Settings } from '../../engine/types'
+import { updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { BoardEditor } from '../components/BoardEditor'
 import { NigeEditor } from '../components/NigeEditor'
@@ -18,7 +17,6 @@ export function SettingsScreen() {
   const { job, run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeChoice>(loadTheme)
-  const [editing, setEditing] = useState<Board | 'new' | null>(null)
   const s = job.settings
 
   const set = (patch: Partial<Settings>) => {
@@ -79,34 +77,7 @@ export function SettingsScreen() {
       <NigeEditor />
 
       <h3>材料</h3>
-      <div className="stack">
-        {job.boards.length === 0 && <p className="lead">材料がまだありません。</p>}
-        {/* 並びは あとから足した材料（足した順）→ 最初から入っている材料（仕様書 5.1） */}
-        {orderedBoards(job).map((b) => {
-          const users = partsUsingBoard(job, b.id)
-          return (
-            <button key={b.id} type="button" className="card board-item" onClick={() => setEditing(b)}>
-              <span className="board-name">{boardLabel(b)}</span>
-              <span className="lead num" style={{ margin: 0 }}>
-                {boardSizeLabel(b)}・木目 {b.grain === 'long' ? '長手方向' : '妻手方向'}
-              </span>
-              <span className="lead" style={{ margin: 0 }}>
-                {users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}
-              </span>
-            </button>
-          )
-        })}
-        <button type="button" className="btn ghost" onClick={() => setEditing('new')}>
-          ＋ 材料を追加
-        </button>
-      </div>
-      {editing && (
-        <BoardEditor
-          key={editing === 'new' ? 'new' : editing.id}
-          board={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      <BoardEditor />
 
       <h3>配色</h3>
       <Segmented<ThemeChoice>

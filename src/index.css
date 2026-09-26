@@ -447,51 +447,37 @@ select.input {
   flex: 1;
 }
 
-/* ---------- 逃げの一覧 ---------- */
-.nige-item {
+/* ---------- 設定の一覧（逃げ・材料で共通） ---------- */
+.list-item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-.nige-info {
+.list-info {
   flex: 1 1 140px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-wrap: anywhere;
 }
-.nige-info .board-name {
+.list-name {
   font-size: 17px;
   font-weight: 700;
 }
-.nige-actions {
+.list-actions {
   display: flex;
   gap: 6px;
 }
-.nige-add {
+.list-add {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
 }
-.nige-add .unit-input {
+.list-add .unit-input {
   flex: 1;
   min-width: 0;
-}
-
-/* ---------- 板の一覧 ---------- */
-.board-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-}
-.board-item .board-name {
-  font-size: 17px;
-  font-weight: 700;
 }
 
 .expr-result {
