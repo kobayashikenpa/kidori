@@ -1,6 +1,6 @@
 // W・H・D の式の入力。<input> を使わず式を表示する枠にするので、押しても電話のキーボードは出ない。
 // 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・材料の厚み・逃げ・数字・演算子のボタンだけで式を作る。
-// 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4mm・逃げ1mm と見せる
+// 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4・逃げ1 と見せる（「mm」は付けない）
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { boardTokenLabel, nigeName } from '../../engine/defaults'
 import { formulaLabels } from '../../engine/formula/display'
@@ -51,7 +51,7 @@ interface Props {
   axis: Axis
   value: string
   onChange: (v: string) => void
-  /** 表示名（ラワン4mm・逃げ1mm など）を作るための材料と設定 */
+  /** 表示名（ラワン4・逃げ1 など）を作るための材料と設定 */
   job: Pick<Job, 'boards' | 'settings'>
   /** 参照ボタンに出す部材（編集中の部材自身は除く） */
   parts: Part[]
