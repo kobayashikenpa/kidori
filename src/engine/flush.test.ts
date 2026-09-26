@@ -3,6 +3,9 @@ import { computeDimensions } from './dimensions'
 import { explainDimension, explanationText } from './dimensions/explain'
 import { FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID } from './fixtures/flush'
 import {
+  autoFlushName,
+  defaultFlushFaces,
+  isAutoFlushName,
   flushBreakdown,
   flushBreakdownText,
   flushesEmptiedByBoards,
@@ -14,7 +17,8 @@ import {
   thicknessRefLabel,
 } from './flush'
 import { formulaLabels } from './formula/display'
-import type { Job } from './types'
+import { defaultBoards } from './defaults'
+import type { Board, Job } from './types'
 
 function dims(job: Job) {
   return Object.fromEntries(computeDimensions(job).parts.map((p) => [p.name, p]))
@@ -137,5 +141,59 @@ describe('使っているものの一覧', () => {
 
   it('フラッシュを選んでいる部材の名前', () => {
     expect(partsUsingFlushes(flushJob(), [FLUSH_25_ID])).toEqual(['天板'])
+  })
+})
+
+describe('defaultFlushFaces（新しく登録するフラッシュの表面材の初期値）', () => {
+  let n = 0
+  const boards = (): Board[] => defaultBoards((p) => `${p}-${++n}`)
+  const idOf = (bs: Board[], m: string, t: number) => bs.find((b) => b.material === m && b.thickness === t)!.id
+
+  it('初期の材料：メラミン1 ×2・ラワン4 ×2（この順）', () => {
+    const bs = boards()
+    expect(defaultFlushFaces({ boards: bs })).toEqual([
+      { boardId: idOf(bs, 'メラミン', 1), count: 2 },
+      { boardId: idOf(bs, 'ラワン', 4), count: 2 },
+    ])
+  })
+
+  it('ラワン4 が無ければ メラミン1 だけ。どちらも無ければ空', () => {
+    const bs = boards().filter((b) => b.thickness !== 4)
+    expect(defaultFlushFaces({ boards: bs })).toEqual([{ boardId: idOf(bs, 'メラミン', 1), count: 2 }])
+    expect(defaultFlushFaces({ boards: bs.filter((b) => b.thickness !== 1) })).toEqual([])
+  })
+
+  it('材料名は前後の空白・全角半角をそろえて比べる。厚みは小数第1位で比べる（ラワン 4.0 は同じ、ラワン 4.5 は別）', () => {
+    const bs = boards().map((b) =>
+      b.material === 'メラミン' ? { ...b, material: ' メラミン ' } : b.thickness === 4 ? { ...b, thickness: 4.5 } : b,
+    )
+    expect(defaultFlushFaces({ boards: bs })).toEqual([{ boardId: bs[0].id, count: 2 }])
+    const bs2 = boards().map((b) => (b.thickness === 4 ? { ...b, thickness: 4.0000001 } : b))
+    expect(defaultFlushFaces({ boards: bs2 })).toHaveLength(2)
+  })
+})
+
+describe('autoFlushName（自動の名前）・isAutoFlushName', () => {
+  it('フラッシュ＋合計の厚み。小数は丸めずに出す（誤差だけ消す）', () => {
+    expect(autoFlushName(25)).toBe('フラッシュ25')
+    expect(autoFlushName(25.5)).toBe('フラッシュ25.5')
+    expect(autoFlushName(15 + 0.1 + 0.2)).toBe('フラッシュ15.3')
+    expect(autoFlushName(24.25)).toBe('フラッシュ24.25')
+  })
+
+  it('ほかのフラッシュと重なるときは -2・-3 … を付ける（空白・全角半角をそろえて比べる）', () => {
+    expect(autoFlushName(25, ['フラッシュ28'])).toBe('フラッシュ25')
+    expect(autoFlushName(25, [' フラッシュ２５ '])).toBe('フラッシュ25-2')
+    expect(autoFlushName(25, ['フラッシュ25', 'フラッシュ25-2'])).toBe('フラッシュ25-3')
+  })
+
+  it('自動の名前の形か（編集のときに、名前を芯材・表面材についていかせるかの判定）', () => {
+    expect(isAutoFlushName('フラッシュ25')).toBe(true)
+    expect(isAutoFlushName('フラッシュ25.5')).toBe(true)
+    expect(isAutoFlushName('フラッシュ25-2')).toBe(true)
+    expect(isAutoFlushName(' フラッシュ２５ ')).toBe(true)
+    expect(isAutoFlushName('天板用')).toBe(false)
+    expect(isAutoFlushName('フラッシュ')).toBe(false)
+    expect(isAutoFlushName('フラッシュ25 白')).toBe(false)
   })
 })

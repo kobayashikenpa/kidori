@@ -8,6 +8,7 @@ import { addNige, nigesUsages, nigeUsages, removeNiges, updateNige } from '../..
 import { useCurrentJob } from '../../store/useJobStore'
 import { parseNum } from '../format'
 import { closeKeyboard } from '../keyboard'
+import { KeypadField } from './KeypadField'
 import { SettingsList } from './SettingsList'
 
 /** 入力欄の名前と寸法を読む。読めなければ理由 */
@@ -23,9 +24,6 @@ export function NigeEditor() {
   const { job, run } = useCurrentJob()
   return (
     <div className="stack">
-      <p className="lead" style={{ margin: 0 }}>
-        逃げ・ほぞなど、仕上がり寸法を伸ばしたり短くしたりする寸法です。式の中で足したり引いたりして使います（例：天地板.W − 逃げ1、棚板.D + ほぞ15）。名前や寸法を変えると、使っている式もついてきます。
-      </p>
       <SettingsList<Nige>
         kind="調整寸法"
         idPrefix="nige"
@@ -99,22 +97,19 @@ function NigeForm({ nige, done }: { nige: Nige | null; done: () => void }) {
           <label className="label" htmlFor={`${pre}-value`}>
             寸法
           </label>
-          <span className="unit-input">
-            <input
-              id={`${pre}-value`}
-              className={`input num${error && name.trim() !== '' ? ' bad' : ''}`}
-              inputMode="decimal"
-              enterKeyHint="done"
-              placeholder="例：1"
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value)
-                setError(null)
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
-            />
-            <span className="unit">mm</span>
-          </span>
+          <KeypadField
+            id={`${pre}-value`}
+            ariaLabel="寸法"
+            bad={!!error && name.trim() !== ''}
+            placeholder="例：1"
+            text={text}
+            // 「決定」で登録する（前の Enter と同じ）。名前が空なら登録せず、名前の欄を入れてもらう
+            onDone={() => name.trim() !== '' && text !== '' && save()}
+            onText={(t) => {
+              setText(t)
+              setError(null)
+            }}
+          />
         </div>
       </div>
       {error && (

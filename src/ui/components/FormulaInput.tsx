@@ -8,35 +8,9 @@ import { formulaLabels } from '../../engine/formula/display'
 import { formulaUnits } from '../../engine/formula/units'
 import { AXES, type Axis, type DimensionError, type Job, type Part } from '../../engine/types'
 import { fmt } from '../format'
+import { claimOpen } from '../exclusive'
+import { scrollIntoComfort } from '../scroll'
 import { clearAll, deleteBefore, insertAt, moveLeft, moveRight, type Edit, type PadKey } from '../formulaEdit'
-
-/** 式の欄とボタンの並びが見えるように、いちばん近いスクロールする枠（部材の編集シート）を動かす。
- * 全部が収まるなら動かす量をいちばん少なく、収まらないなら式の欄を枠の上端に合わせる。
- * 下端は、枠の下の余白（iPhone のホームバーの分 safe-area を含む）と、Safari の見えている範囲（visualViewport）を考える */
-function scrollIntoComfort(field: HTMLElement, pad: HTMLElement) {
-  let box: HTMLElement | null = field.parentElement
-  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement
-  const scroller = box ?? document.scrollingElement
-  if (!(scroller instanceof HTMLElement)) return
-  const r = scroller === document.scrollingElement ? new DOMRect(0, 0, window.innerWidth, window.innerHeight) : scroller.getBoundingClientRect()
-  const vv = window.visualViewport
-  const viewTop = Math.max(r.top, vv ? vv.offsetTop : 0)
-  const viewBottom = Math.min(r.bottom, vv ? vv.offsetTop + vv.height : window.innerHeight)
-  const margin = 8
-  const bottomMargin = Math.max(margin, Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0)
-  const top = field.getBoundingClientRect().top
-  const bottom = pad.getBoundingClientRect().bottom
-  // いまのスクロール位置からの差
-  const needDown = bottom - (viewBottom - bottomMargin) // 正ならこれだけ下へ動かすとボタンの並びの下端が見える
-  const maxDown = top - (viewTop + margin) // これより下へ動かすと式の欄の上端が隠れる
-  let delta = 0
-  if (bottom - top > viewBottom - bottomMargin - (viewTop + margin)) delta = maxDown
-  else if (needDown > 0) delta = needDown
-  else if (maxDown < 0) delta = maxDown
-  if (Math.abs(delta) < 1) return
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-  scroller.scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' })
-}
 
 const AXIS_NAME: Record<Axis, string> = { W: '幅', H: '高さ', D: '奥行き' }
 
@@ -96,6 +70,16 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
       if (fieldRef.current && padRef.current) scrollIntoComfort(fieldRef.current, padRef.current)
     })
     return () => cancelAnimationFrame(frame)
+  }, [open])
+
+  // 数字キーなど、ほかのボタンの並びとは同時に開かない
+  const closeRef = useRef(onOpenChange)
+  useEffect(() => {
+    closeRef.current = onOpenChange
+  })
+  useEffect(() => {
+    if (!open) return
+    return claimOpen('pad', () => closeRef.current(false))
   }, [open])
 
   const apply = (edit: (text: string, at: number) => Edit) => {

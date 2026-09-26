@@ -11,6 +11,7 @@ import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart 
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
 import { FormulaInput } from './FormulaInput'
+import { Help } from './Help'
 import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
@@ -78,40 +79,40 @@ export function PartEditor({ part, onClose }: Props) {
   return (
     <Sheet title={part ? `部材の編集：${part.name}` : '部材を追加'} onClose={onClose}>
       <div className="field">
-        <label className="label" htmlFor="part-name">
-          名前
-        </label>
+        <Help className="label" title="名前">
+          式の中で「{draft.name.trim() || '名前'}.W」のように使います。同じ名前は付けられません
+        </Help>
         <input
           id="part-name"
+          aria-label="名前"
           className="input"
           value={draft.name}
           placeholder="例：側板"
           onChange={(e) => patch({ name: e.target.value })}
         />
-        <span className="hint">式の中で「{draft.name.trim() || '名前'}.W」のように使います。同じ名前は付けられません</span>
       </div>
 
       <div className="field">
-        <label className="label" htmlFor="part-qty">
-          枚数
-        </label>
+        <Help className="label" title="枚数">
+          枚数0は切り出さない、寸法だけの行です（例：全体）
+        </Help>
         <NumberField
-          id="part-qty"
+          ariaLabel="枚数"
           integer
           unit="枚"
           value={draft.quantity}
           onChange={(v) => v !== null && patch({ quantity: v })}
         />
-        {!cutting && <span className="hint">枚数0は切り出さない、寸法だけの行です（例：全体）</span>}
       </div>
 
       {cutting && (
         <div className="field">
-          <label className="label" htmlFor="part-board">
-            材料
-          </label>
+          <Help className="label" title="材料">
+            材料名と厚みで選びます。フラッシュを選ぶと、表面材ごとに木取りします（芯材は木取りに入れません）
+          </Help>
           <select
             id="part-board"
+            aria-label="材料"
             className="input"
             value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
             onChange={(e) => {
@@ -138,7 +139,7 @@ export function PartEditor({ part, onClose }: Props) {
               </optgroup>
             )}
           </select>
-          {flush && <span className="hint">厚み {flushBreakdownText(flush)}（表面材ごとに木取りします。芯材は入れません）</span>}
+          {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
           {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
         </div>
       )}
@@ -164,7 +165,11 @@ export function PartEditor({ part, onClose }: Props) {
       {cutting && (
         <>
           <div className="field">
-            {choice.showSelector && <span className="label">厚み</span>}
+            {choice.showSelector && (
+              <Help className="label" title="厚み">
+                W・H・D のうち、材料の厚みにあたる寸法です
+              </Help>
+            )}
             {!choice.showSelector ? (
               <p className="thick-auto" style={{ margin: 0 }}>
                 {board ? `厚み：${choice.autoAxis ?? '—'}（自動）` : '厚み：材料を選ぶと自動で決まります'}
@@ -180,11 +185,11 @@ export function PartEditor({ part, onClose }: Props) {
                 onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
               />
             )}
-            <span className="hint">
-              {choice.showSelector && choice.ambiguous
-                ? `材料の厚みと同じ寸法が ${choice.candidates.join('・')} にあります。どれが厚みか選んでください`
-                : 'W・H・D のうち、材料の厚みにあたる寸法です'}
-            </span>
+            {choice.showSelector && choice.ambiguous && (
+              <span className="hint">
+                材料の厚みと同じ寸法が {choice.candidates.join('・')} にあります。どれが厚みか選んでください
+              </span>
+            )}
             {blockers.length > 0 && (
               <div className="part-errors" role="alert">
                 {blockers.map((m) => (
@@ -219,6 +224,7 @@ export function PartEditor({ part, onClose }: Props) {
             </label>
             <NumberField
               id="part-allowance"
+              ariaLabel="切り代"
               allowEmpty
               placeholder={`空欄＝初期値 ${fmt(job.settings.allowance)}`}
               value={draft.allowance}
@@ -229,18 +235,18 @@ export function PartEditor({ part, onClose }: Props) {
       )}
 
       <div className="field">
-        <label className="label" htmlFor="part-memo">
-          メモ（任意）
-        </label>
+        <Help className="label" title="メモ（任意）">
+          寸法表にも出ます
+        </Help>
         <textarea
           id="part-memo"
+          aria-label="メモ"
           className="input memo-input"
           rows={3}
           value={draft.memo}
           placeholder="例：切り出したあとに穴あけ"
           onChange={(e) => patch({ memo: e.target.value })}
         />
-        <span className="hint">寸法表にも出ます</span>
       </div>
 
       {error && <p className="msg err">{error}</p>}

@@ -1,59 +1,115 @@
-// 見本（本棚 W900）を、最後に使った設定（ひな形）から作る（architecture.md 8.4）
-import { BOARD_SIZES, type Board, type Job } from '../engine/types'
-import { bookshelfJob } from '../engine/fixtures/bookshelf'
-import { eq1 } from '../engine/round'
+// 見本（本棚 W900・天地板がフラッシュ）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
+import { eq1 } from '../engine/round'
+import { BOARD_SIZES, type Board, type Flush, type Job, type Part } from '../engine/types'
 import { createJob, newId } from './jobs'
 import type { SettingsTemplate } from './template'
 
-/** 見本の仕事の id（仕事の画面で「見本があるか」を見るのに使う） */
-export const SAMPLE_JOB_ID = bookshelfJob().id
+/** 見本の仕事の名前 */
+export const SAMPLE_NAME = '本棚 W900'
 
-/** 見本の式で使っている逃げ1 の id */
-const SAMPLE_NIGE_ID = 'nige-1'
+/** 見本のフラッシュの名前（芯材15・メラミン1×2・ラワン4×2） */
+export const SAMPLE_FLUSH_NAME = 'フラッシュ25'
 
-const sameName = (a: string, b: string) => a.trim().normalize('NFKC') === b.trim().normalize('NFKC')
+const key = (s: string) => s.trim().normalize('NFKC')
+
+function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
+  return {
+    id: newId('part'),
+    boardId: null,
+    thicknessAxis: null,
+    quantity: 1,
+    grain: 'any',
+    memo: '',
+    checks: { finished: false, cut: false },
+    allowance: null,
+    ...p,
+  }
+}
 
 /**
- * ひな形から見本を作る。
- * - 設定の数値（刃厚・端切り・切り代・切り方）と材料はひな形のまま
- * - 見本の材料（シナランバー 18・シナベニヤ 4）は、同じ材料名＋厚みがあればそれを使い、無ければ最後に足す。どちらも 3×6 にする
- * - 見本の棚板が使う 逃げ1 は、名前「逃げ」寸法 1 の調整寸法があればそれを使い、無ければ足す
+ * ひな形から見本を作る。追加するたびに新しい仕事（id は新しく）。
+ * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
+ * - 見本で使うものが無ければ足す：材料 シナランバー18・シナベニヤ4（天地板のフラッシュを足すときは メラミン1・ラワン4 も）、
+ *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
+ * - 見本で使う材料は 3×6（未決事項 24）
+ * - 天地板はフラッシュ25、側板・棚板はシナランバー18、背板はシナベニヤ4。厚みは式の厚み（{t:…}）で書く
  */
 export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
-  const base = bookshelfJob()
-  const job = createJob(base.name, template, now, SAMPLE_JOB_ID)
+  const job = createJob(SAMPLE_NAME, template, now)
   const [width, length] = BOARD_SIZES.saburoku
+  const sheet = { sizeKind: 'saburoku', width, length, grain: 'long' } as const
 
-  // 材料：見本の材料の id → この仕事の材料の id
   const boards: Board[] = [...job.boards]
-  const boardIds = new Map<string, string>()
-  for (const sb of base.boards) {
-    const i = boards.findIndex((b) => sameName(b.material, sb.material) && eq1(b.thickness, sb.thickness))
+  /** 材料名＋厚みの材料を使う（無ければ最後に足す）。見本で使うので 3×6 にする */
+  const boardFor = (material: string, thickness: number): string => {
+    const i = boards.findIndex((b) => key(b.material) === key(material) && eq1(b.thickness, thickness))
     if (i >= 0) {
-      boards[i] = { ...boards[i], sizeKind: 'saburoku', width, length, grain: 'long' }
-      boardIds.set(sb.id, boards[i].id)
-    } else {
-      const id = newId('board')
-      boards.push({ id, material: sb.material, thickness: sb.thickness, sizeKind: 'saburoku', width, length, grain: 'long' })
-      boardIds.set(sb.id, id)
+      boards[i] = { ...boards[i], ...sheet }
+      return boards[i].id
     }
+    const id = newId('board')
+    boards.push({ id, material, thickness, ...sheet })
+    return id
+  }
+
+  const lumber = boardFor('シナランバー', 18)
+  const veneer = boardFor('シナベニヤ', 4)
+
+  // フラッシュ25：同じ名前があればそれを使う（表面材の材料も 3×6 にする）。無ければ足す
+  let flushes: Flush[] = job.flushes
+  let flush = flushes.find((f) => key(f.name) === key(SAMPLE_FLUSH_NAME))
+  if (flush) {
+    for (const face of flush.faces) {
+      const i = boards.findIndex((b) => b.id === face.boardId)
+      if (i >= 0) boards[i] = { ...boards[i], ...sheet }
+    }
+  } else {
+    flush = {
+      id: newId('flush'),
+      name: SAMPLE_FLUSH_NAME,
+      core: 15,
+      faces: [
+        { boardId: boardFor('メラミン', 1), count: 2 },
+        { boardId: boardFor('ラワン', 4), count: 2 },
+      ],
+    }
+    flushes = [...flushes, flush]
   }
 
   // 逃げ1：あればその id、無ければ足す
   let nige = job.settings.nige
-  let nigeId = nige.find((n) => n.name === NIGE_DEFAULT_NAME && eq1(n.value, 1))?.id
+  let nigeId = nige.find((n) => key(n.name) === NIGE_DEFAULT_NAME && eq1(n.value, 1))?.id
   if (nigeId === undefined) {
-    nigeId = nige.some((n) => n.id === SAMPLE_NIGE_ID) ? newId('nige') : SAMPLE_NIGE_ID
+    nigeId = newId('nige')
     nige = [...nige, { id: nigeId, name: NIGE_DEFAULT_NAME, value: 1 }]
   }
-  const fixNige = (e: string) => e.split(`{n:${SAMPLE_NIGE_ID}}`).join(`{n:${nigeId}}`)
 
-  const parts = base.parts.map((p) => ({
-    ...p,
-    boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
-    expr: { W: fixNige(p.expr.W), H: fixNige(p.expr.H), D: fixNige(p.expr.D) },
-    checks: { ...p.checks },
-  }))
-  return { ...job, settings: { ...job.settings, nige }, boards, parts }
+  const parts: Part[] = [
+    part({ name: '全体', expr: { W: '900', H: '1800', D: '400' }, quantity: 0 }),
+    part({ name: '側板', boardId: lumber, expr: { W: `{t:${lumber}}`, H: '全体.H', D: '全体.D' }, quantity: 2, grain: 'H' }),
+    part({
+      name: '天地板',
+      flushId: flush.id,
+      expr: { W: '全体.W - 側板.W * 2', H: `{t:${flush.id}}`, D: '全体.D' },
+      quantity: 2,
+      grain: 'W',
+    }),
+    part({
+      name: '棚板',
+      boardId: lumber,
+      expr: { W: `天地板.W - {n:${nigeId}}`, H: `{t:${lumber}}`, D: '全体.D - 20' },
+      quantity: 4,
+      grain: 'W',
+    }),
+    part({
+      name: '背板',
+      boardId: veneer,
+      expr: { W: '全体.W', H: '全体.H', D: `{t:${veneer}}` },
+      quantity: 1,
+      grain: 'H',
+      allowance: 0,
+    }),
+  ]
+  return { ...job, settings: { ...job.settings, nige }, boards, flushes, parts }
 }

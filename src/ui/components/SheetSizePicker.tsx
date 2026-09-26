@@ -138,13 +138,13 @@ function CustomForm({ board, onDone, onCancel, error, setError }: FormProps) {
           <label className="label" htmlFor={`${pre}-w`}>
             短辺（妻手）
           </label>
-          <NumberField id={`${pre}-w`} allowEmpty value={width} onChange={(v) => (setWidth(v), setError(null))} />
+          <NumberField id={`${pre}-w`} ariaLabel="短辺（妻手）" allowEmpty value={width} onChange={(v) => (setWidth(v), setError(null))} />
         </div>
         <div className="field" style={{ flex: 1, minWidth: 0 }}>
           <label className="label" htmlFor={`${pre}-l`}>
             長辺（長手）
           </label>
-          <NumberField id={`${pre}-l`} allowEmpty value={length} onChange={(v) => (setLength(v), setError(null))} />
+          <NumberField id={`${pre}-l`} ariaLabel="長辺（長手）" allowEmpty value={length} onChange={(v) => (setLength(v), setError(null))} />
         </div>
       </div>
       <div className="field">

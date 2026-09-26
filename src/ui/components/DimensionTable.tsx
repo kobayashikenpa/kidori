@@ -1,7 +1,8 @@
 // 寸法表の「表」の見せ方：1部材1行で 部材・枚数・仕上がり寸法 W・H・D・木取り寸法 を並べる。
 // 仕上がり寸法の数字を押すと、その下の行に内訳（式の各項と値）を開く。もう一度押すと閉じる。
-// 部材名を押すと、その下の行に完了のチェック（仕上がり・木取り）を開く。完了した寸法はグレーにする。
-// フラッシュの部材は、木取りの完了を表面材ごとに付ける（下の行にいつも出す）。
+// 部材名を押すと、その下の行に仕上がりの完了のチェックを開く。完了した寸法はグレーにする。
+// 切り出し（木取り）の完了は木取り画面のチェックリストで付ける（ここでは木取り寸法をグレーにするだけ）。
+// フラッシュの部材は、厚みの内訳を下の行に1行で出す。
 // 外すときは、このファイルと ../dimensionView.ts、index.css の「寸法表の表」の段を消し、DimensionScreen の切り替えを外す
 import { Fragment, useMemo, useState } from 'react'
 import { explainDimension, explanationText } from '../../engine/dimensions/explain'
@@ -14,17 +15,15 @@ interface Props {
   job: Job
   /** computeDimensions(job).parts（部材の並び順） */
   dims: readonly PartDimensions[]
-  /** フラッシュの部材の、表面材ごとの木取りの完了を変える（setFlushCutCheck） */
-  onFlushCheck: (partId: string, boardId: string, done: boolean) => void
-  /** 部材の仕上がり・木取りの完了を変える（setPartChecks） */
+  /** 部材の仕上がりの完了を変える（setPartChecks） */
   onCheck: (partId: string, patch: Partial<PartChecks>) => void
 }
 
-export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
+export function DimensionTable({ job, dims, onCheck }: Props) {
   const finished = useMemo(() => computeFinished(job), [job])
   // 開いている内訳（1つだけ）
   const [open, setOpen] = useState<{ partId: string; axis: Axis } | null>(null)
-  // 完了のチェックを開いている部材（1つだけ。内訳とは別に開ける）
+  // 仕上がりの完了のチェックを開いている部材（1つだけ。内訳とは別に開ける）
   const [checksOpen, setChecksOpen] = useState<string | null>(null)
 
   return (
@@ -58,7 +57,7 @@ export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
             const d = dims[i]
             const cutting = p.quantity > 0
             const finDone = cutting && p.checks.finished
-            // フラッシュの部材：厚みの内訳と、表面材ごとの完了（全部の表面材が完了なら木取り寸法もグレー）
+            // フラッシュの部材：厚みの内訳。木取り寸法は、表面材が全部切り出し済みならグレー
             const flush = p.flushId !== undefined ? flushBreakdown(job, p.flushId) : null
             const faceDone = (boardId: string) => p.checks.cutByBoard?.[boardId] === true
             const cutDone =
@@ -76,7 +75,7 @@ export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
                       type="button"
                       className={`dim-name${checksOn ? ' on' : ''}`}
                       aria-expanded={checksOn}
-                      aria-label={`${p.name} の完了のチェック`}
+                      aria-label={`${p.name} の仕上がりの完了`}
                       onClick={() => setChecksOpen(checksOn ? null : p.id)}
                     >
                       {p.name}
@@ -131,17 +130,6 @@ export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
                             checked={finDone}
                             onToggle={() => onCheck(p.id, { finished: !finDone })}
                           />
-                          {flush ? (
-                            <span className="dim-note">木取りの完了は、下の表面材ごとに付けます</span>
-                          ) : (
-                            <TableCheck
-                              kind="cut"
-                              label="木取り"
-                              ariaLabel={`${p.name} の木取り寸法の切り出し 完了`}
-                              checked={cutDone}
-                              onToggle={() => onCheck(p.id, { cut: !cutDone })}
-                            />
-                          )}
                         </span>
                       )}
                     </td>
@@ -153,30 +141,6 @@ export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
                       <span className="dim-flush-head num">
                         {p.name}：厚み {flushBreakdownText(flush)}
                       </span>
-                      {cutting &&
-                        flush.faces.map((f) => {
-                          const on = faceDone(f.boardId)
-                          return (
-                            <button
-                              key={f.boardId}
-                              type="button"
-                              role="checkbox"
-                              aria-checked={on}
-                              aria-label={`${p.name} の ${f.label} ${f.count * p.quantity}枚 の切り出し 完了`}
-                              className={`dim-face${on ? ' done' : ''}`}
-                              onClick={() => onFlushCheck(p.id, f.boardId, !on)}
-                            >
-                              <span className="dim-face-name">{f.label}</span>
-                              <span className="num">×{f.count * p.quantity}枚</span>
-                              <span className="dim-face-check">
-                                <span className="check-box" aria-hidden="true">
-                                  {on ? '✓' : ''}
-                                </span>
-                                完了
-                              </span>
-                            </button>
-                          )
-                        })}
                     </td>
                   </tr>
                 )}
@@ -206,9 +170,9 @@ export function DimensionTable({ job, dims, onFlushCheck, onCheck }: Props) {
   )
 }
 
-/** 表の中の「完了」のチェック（仕上がり＝青、木取り＝橙。完了するとグレー） */
+/** 表の中の仕上がりの「完了」のチェック（青。完了するとグレー） */
 function TableCheck(props: {
-  kind: 'fin' | 'cut'
+  kind: 'fin'
   label: string
   ariaLabel: string
   checked: boolean

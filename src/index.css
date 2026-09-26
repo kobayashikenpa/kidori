@@ -1076,12 +1076,6 @@ select.input {
 .kd-issues.warn h4 {
   color: var(--warn);
 }
-.kd-issues.done {
-  border-left-color: var(--ok);
-}
-.kd-issues.done h4 {
-  color: var(--ok);
-}
 .kd-issues ul {
   margin: 6px 0 0;
   padding-left: 1.2em;
@@ -1316,47 +1310,6 @@ select.input {
 }
 .fold > :last-child:not(summary) {
   margin-bottom: 10px;
-}
-.cut-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cut-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-.cut-no {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cut-item.trim .cut-no {
-  background: var(--dg-trim);
-  color: #fff;
-}
-.cut-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-.cut-label {
-  overflow-wrap: anywhere;
-  line-height: 1.4;
 }
 .scrap-list {
   margin-top: 4px;
@@ -1620,55 +1573,16 @@ select.input {
 }
 .dim-flush td {
   text-align: left;
-  padding: 4px 6px 6px;
+  padding: 2px 6px 4px;
 }
 .dim-flush-head {
   display: block;
   font-size: 12px;
   color: var(--muted);
-  padding: 2px 0 4px;
+  padding: 0;
   word-break: break-word;
 }
-/* フラッシュの表面材ごとの完了（1行ずつ、押しやすい高さ） */
-.dim-face {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 4px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--cut-soft);
-  color: var(--cut);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-.dim-face-name {
-  flex: 1;
-  min-width: 0;
-  word-break: break-all;
-}
-.dim-face-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-.dim-face.done {
-  background: var(--bg);
-  color: var(--muted);
-}
-.dim-face.done .check-box {
-  background: var(--muted);
-  border-color: var(--muted);
-  color: var(--surface);
-}
-/* 部材名（押すと完了のチェックの行を開く） */
+/* 部材名（押すと仕上がりの完了のチェックの行を開く） */
 .dim-table tbody th.c-name {
   padding: 0;
 }
@@ -1723,10 +1637,6 @@ select.input {
   background: var(--fin-soft);
   color: var(--fin);
 }
-.dim-check.cut {
-  background: var(--cut-soft);
-  color: var(--cut);
-}
 .dim-check.done {
   background: var(--bg);
   color: var(--muted);
@@ -1746,4 +1656,209 @@ select.input {
 }
 .dim-table thead th.c-cut {
   white-space: nowrap;
+}
+/* 切り出しチェック（木取り画面・材料ごと） */
+.cl {
+  margin-bottom: 10px;
+}
+.cl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cl-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cut);
+}
+.cl-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+.cl-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.cl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cut-soft);
+  color: var(--cut);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.cl-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cl-size {
+  flex: none;
+  white-space: nowrap;
+}
+.cl-qty {
+  font-weight: 400;
+}
+.cl-row.done {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 400;
+}
+.cl-row.done .cl-name {
+  text-decoration: line-through;
+}
+.cl-row.done .check-box {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: var(--surface);
+}
+
+/* ---------- 見出しを押して出る説明（仕様書 9.1） ---------- */
+.help {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+.help-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  margin: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.field > .help {
+  margin: -12px 0 -10px; /* 押せる高さは 44px のまま、見た目の行間は変えない */
+}
+.help-mark {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--accent);
+  line-height: 1;
+}
+.help-btn[aria-expanded='true'] .help-mark {
+  font-weight: 700;
+}
+.help-bubble {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+h2 > .help,
+h3 > .help {
+  margin: -12px 0;
+}
+.lead.help {
+  color: var(--muted);
+  margin: -8px 0;
+}
+
+/* ---------- 数字キー（仕様書 9.1） ---------- */
+.keypad-box {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.keypad-box.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.keypad-placeholder {
+  color: var(--muted);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.keypad-fresh {
+  background: var(--fin-soft);
+  border-radius: 3px;
+}
+.numpad {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.numpad-in {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.numpad-show {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 4px;
+  min-width: 0;
+}
+.numpad-name {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.numpad-val {
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.numpad-val.bad {
+  color: var(--err);
+}
+.numpad-keys .pad-key {
+  min-height: 48px;
+}
+.pad-key.span3 {
+  grid-column: span 3;
+}
+.numpad-done {
+  grid-column: 4;
+  grid-row: 3 / span 2;
 }
