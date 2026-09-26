@@ -1,5 +1,6 @@
 // 材料のサイズの比較（仕様書 9「材料のサイズの選択」）：材料ごとに 3×6 と 4×8 の両方で木取りし、枚数・歩留まりを並べる
 import { BOARD_SIZES, type DimensionResult, type Job } from '../types'
+import { round1 } from '../round'
 import { packJob } from './index'
 
 export type StandardSize = 'saburoku' | 'shihachi'
@@ -21,6 +22,23 @@ export interface MaterialSizeComparison {
   boardId: string
   /** 3×6、4×8 の順 */
   options: [SizeSummary, SizeSummary]
+  /** 枚数が少ない方。入らない部材が出るサイズ・枚数 0 のサイズがあれば比べない。同じ枚数なら null */
+  fewer: StandardSize | null
+  /** 歩留まりが高い方（小数第1位の % で比べる）。比べない条件は fewer と同じ。同じなら null */
+  higher: StandardSize | null
+}
+
+/** 3×6・4×8 のどちらが枚数が少ないか・歩留まりが高いか（画面の「枚数が少ない」「歩留まりが高い」の印） */
+export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pick<MaterialSizeComparison, 'fewer' | 'higher'> {
+  const [a, b] = options
+  const fits = (o: SizeSummary) => o.unplacedCount === 0 && o.sheetCount > 0
+  if (!fits(a) || !fits(b)) return { fewer: null, higher: null }
+  const ya = round1(a.yieldRate * 100)
+  const yb = round1(b.yieldRate * 100)
+  return {
+    fewer: a.sheetCount === b.sheetCount ? null : a.sheetCount < b.sheetCount ? a.kind : b.kind,
+    higher: ya === yb ? null : ya > yb ? a.kind : b.kind,
+  }
 }
 
 /** 仕事の材料をすべて指定のサイズ（木目は長手方向）にした写し。部材・設定は元の仕事のものを共有する（packJob は書き換えない） */
@@ -51,6 +69,7 @@ export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialS
         unplacedCount: r?.unplaced.length ?? 0,
       }
     })
-    return { boardId: m.boardId, options: [options[0], options[1]] }
+    const pair: [SizeSummary, SizeSummary] = [options[0], options[1]]
+    return { boardId: m.boardId, options: pair, ...pickBetterSize(pair) }
   })
 }

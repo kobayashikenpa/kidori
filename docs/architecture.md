@@ -691,9 +691,14 @@ export interface SizeSummary {
 export interface MaterialSizeComparison {
   boardId: string
   options: [SizeSummary, SizeSummary] // 3×6、4×8 の順
+  fewer: StandardSize | null           // 枚数が少ない方
+  higher: StandardSize | null          // 歩留まりが高い方
 }
 export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialSizeComparison[]
+export function pickBetterSize(options: [SizeSummary, SizeSummary]): { fewer; higher }
 ```
+
+- `fewer`・`higher`（画面の「枚数が少ない」「歩留まりが高い」の印）：入らない部材が出るサイズ・枚数 0 のサイズがあれば比べず、どちらも null。枚数が同じなら `fewer` は null。歩留まりは % の小数第1位で比べ、同じなら `higher` は null。画面は判定せず、この結果を出すだけ
 
 - 作り方：仕事の材料をすべて 3×6（木目 長手方向）にした仕事と、すべて 4×8 にした仕事を作り、それぞれ `packJob` を1回ずつ呼ぶ（**材料の数によらず `packJob` 2回**）。材料ごとの結果を `boardId` で拾う。元の仕事は書き換えない
 - 並びと対象：`packJob(job, dims).materials` と同じ材料・同じ並び（片か入らない部材のある材料だけ。部材の無い材料は出さない）（暫定。未決事項 26）

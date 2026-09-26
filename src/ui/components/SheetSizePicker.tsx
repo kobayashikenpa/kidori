@@ -2,7 +2,7 @@
 // 3×6・4×8 の必要な枚数・歩留まり（engine の compareStandardSizes の結果）を並べ、押して選ぶ。
 // 自由入力は短辺・長辺・木目の方向を入れて「このサイズにする」で決める。選ぶと setBoardSize で仕事に保存する
 import { useState } from 'react'
-import type { SizeSummary, StandardSize } from '../../engine/packing/sizes'
+import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { Board, BoardGrain, MaterialResult } from '../../engine/types'
 import { setBoardSize } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -15,28 +15,20 @@ const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4
 
 interface Props {
   board: Board
-  /** 3×6、4×8 の順（compareStandardSizes の options） */
-  options: [SizeSummary, SizeSummary] | null
+  /** compareStandardSizes の結果（3×6、4×8 の順の options と、枚数が少ない方・歩留まりが高い方） */
+  compare: MaterialSizeComparison | null
   /** 今選んでいるサイズでの結果（自由入力の枚数・歩留まりに使う） */
   current: MaterialResult
 }
 
-export function SheetSizePicker({ board, options, current }: Props) {
+export function SheetSizePicker({ board, compare, current }: Props) {
   const { run } = useCurrentJob()
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isCustom = board.sizeKind === 'custom'
-
-  // 枚数が少ない方・歩留まりが高い方（入らない部材が出るサイズは比べない。同じなら印を付けない）
-  const fits = (options ?? []).filter((o) => o.unplacedCount === 0 && o.sheetCount > 0)
-  const fewer =
-    fits.length === 2 && fits[0].sheetCount !== fits[1].sheetCount
-      ? (fits[0].sheetCount < fits[1].sheetCount ? fits[0] : fits[1]).kind
-      : null
-  const higher =
-    fits.length === 2 && fmt(fits[0].yieldRate * 100) !== fmt(fits[1].yieldRate * 100)
-      ? (fits[0].yieldRate > fits[1].yieldRate ? fits[0] : fits[1]).kind
-      : null
+  const options = compare?.options ?? null
+  const fewer = compare?.fewer ?? null
+  const higher = compare?.higher ?? null
 
   const choose = (o: SizeSummary) => {
     setEditing(false)

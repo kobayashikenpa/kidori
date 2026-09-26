@@ -3,7 +3,7 @@ import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part } from '../types'
 import { packJob } from './index'
-import { compareStandardSizes } from './sizes'
+import { compareStandardSizes, pickBetterSize, type SizeSummary } from './sizes'
 
 const pct = (r: number) => Math.round(r * 1000) / 10
 
@@ -143,5 +143,50 @@ describe('compareStandardSizes（材料のサイズの比較：3×6 と 4×8）'
     expect(performance.now() - t).toBeLessThan(1000)
     expect(r).toHaveLength(1)
     expect(r[0].options[0].sheetCount).toBeGreaterThan(r[0].options[1].sheetCount)
+  })
+})
+
+describe('枚数が少ない方・歩留まりが高い方（fewer・higher）', () => {
+  it('見本：シナランバー 18 は枚数が少ないのが 4×8、歩留まりが高いのが 3×6', () => {
+    const [lumber] = compare(bookshelfJob())
+    expect([lumber.fewer, lumber.higher]).toEqual(['shihachi', 'saburoku'])
+  })
+
+  it('枚数が同じ（シナベニヤ 4 はどちらも 1枚）なら枚数の印は無し、歩留まりは 3×6', () => {
+    const [, veneer] = compare(bookshelfJob())
+    expect([veneer.fewer, veneer.higher]).toEqual([null, 'saburoku'])
+  })
+
+  it('入らない部材が出るサイズがあれば比べない（どちらも印は無し）', () => {
+    const job = bookshelfJob()
+    job.boards = job.boards.filter((b) => b.id === LUMBER_18_ID)
+    job.parts = [part({ id: 'big', name: '大板', expr: { W: '1000', H: '2000', D: '18' } })]
+    const [r] = compare(job)
+    expect([r.fewer, r.higher]).toEqual([null, null])
+  })
+
+  const opt = (kind: SizeSummary['kind'], sheetCount: number, yieldRate: number, unplacedCount = 0): SizeSummary => ({
+    kind,
+    width: kind === 'saburoku' ? 910 : 1220,
+    length: kind === 'saburoku' ? 1820 : 2440,
+    sheetCount,
+    yieldRate,
+    unplacedCount,
+  })
+
+  it('歩留まりが小数第1位（0.1%）で同じなら印は無し', () => {
+    expect(pickBetterSize([opt('saburoku', 3, 0.7171), opt('shihachi', 2, 0.7174)])).toEqual({ fewer: 'shihachi', higher: null })
+  })
+
+  it('歩留まりが 0.1% 違えば高い方に印', () => {
+    expect(pickBetterSize([opt('saburoku', 2, 0.717), opt('shihachi', 2, 0.718)])).toEqual({ fewer: null, higher: 'shihachi' })
+  })
+
+  it('片方に入らない部材があれば、もう片方が良くても印は無し', () => {
+    expect(pickBetterSize([opt('saburoku', 1, 0.9, 1), opt('shihachi', 2, 0.5)])).toEqual({ fewer: null, higher: null })
+  })
+
+  it('枚数が 0 のサイズは比べない', () => {
+    expect(pickBetterSize([opt('saburoku', 0, 0), opt('shihachi', 1, 0.5)])).toEqual({ fewer: null, higher: null })
   })
 })

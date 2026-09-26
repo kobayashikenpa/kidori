@@ -194,7 +194,7 @@ function MaterialRow({ m, auto, board, comparison }: MaterialRowProps) {
           {auto && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
-      {board && <SheetSizePicker board={board} options={comparison?.options ?? null} current={m} />}
+      {board && <SheetSizePicker board={board} compare={comparison} current={m} />}
     </li>
   )
 }
