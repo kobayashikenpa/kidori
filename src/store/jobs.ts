@@ -458,13 +458,19 @@ export function newPart(p: Partial<Part> = {}): Part {
 }
 
 /**
- * 材料とフラッシュをそろえる：flushId があれば boardId は null。flushId が undefined ならキーごと消す
+ * 材料とフラッシュをそろえる：flushId があれば boardId は null・checks.cut は false。材料なら cutByBoard を消す。flushId が undefined ならキーごと消す
  * （材料に戻すときは updatePart に flushId: undefined を渡す）
  */
 function normalizeMaterial(part: Part): Part {
-  if (part.flushId !== undefined) return { ...part, boardId: null }
-  if (!('flushId' in part)) return part
-  const { flushId: _flushId, ...rest } = part
+  // フラッシュの部材は checks.cut を使わない（完了は表面材ごとの cutByBoard）。材料の部材は cutByBoard を持たない
+  if (part.flushId !== undefined) return { ...part, boardId: null, checks: { ...part.checks, cut: false } }
+  let p = part
+  if (p.checks.cutByBoard !== undefined) {
+    const { cutByBoard: _cutByBoard, ...checks } = p.checks
+    p = { ...p, checks }
+  }
+  if (!('flushId' in p)) return p
+  const { flushId: _flushId, ...rest } = p
   return rest
 }
 

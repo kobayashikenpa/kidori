@@ -3,6 +3,7 @@
 // 「カード」「表（試作）」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
+import { flushBreakdown } from '../../engine/flush'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
 import { boardLabel, setFlushCutCheck, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -57,6 +58,7 @@ export function DimensionScreen() {
               dims={dims.parts[i]}
               board={job.boards.find((b) => b.id === p.boardId) ?? null}
             flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
+              flushFaceIds={p.flushId !== undefined ? (flushBreakdown(job, p.flushId)?.faces.map((f) => f.boardId) ?? []) : null}
               onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
             />
           ))}
@@ -72,13 +74,20 @@ interface CardProps {
   board: Board | null
   /** フラッシュを選んだ部材ならその名前 */
   flushName: string | null
+  /** フラッシュの部材なら表面材の材料の id（完了は表面材ごと。表で付ける） */
+  flushFaceIds: string[] | null
   onCheck: (patch: Partial<PartChecks>) => void
 }
 
-function DimensionCard({ part, dims: d, board, flushName, onCheck }: CardProps) {
+function DimensionCard({ part, dims: d, board, flushName, flushFaceIds, onCheck }: CardProps) {
   const cutting = part.quantity > 0
   const finDone = cutting && part.checks.finished
-  const cutDone = cutting && part.checks.cut
+  // フラッシュの部材は、表面材が全部完了のときだけ ② を完了（グレー）にする（表と同じ）
+  const cutDone =
+    cutting &&
+    (flushFaceIds
+      ? flushFaceIds.length > 0 && flushFaceIds.every((id) => part.checks.cutByBoard?.[id] === true)
+      : part.checks.cut)
   // 式のエラーがあると仕上がり寸法も出せない。厚みが合わないだけなら仕上がり寸法は出せるので、② 木取り寸法だけ出さない
   const exprErrors = d.errors.filter((e) => e.kind !== 'thicknessMismatch')
   const mismatchErrors = d.errors.filter((e) => e.kind === 'thicknessMismatch')
@@ -162,7 +171,11 @@ function DimensionCard({ part, dims: d, board, flushName, onCheck }: CardProps) 
                 <h4>
                   ② 木取り寸法
                 </h4>
-                <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+                {flushFaceIds ? (
+                  <span className="band-note">表面材ごとの完了は「表」で付けます</span>
+                ) : (
+                  <CheckButton ariaLabel="木取り寸法の切り出し 完了" checked={cutDone} onToggle={() => onCheck({ cut: !cutDone })} />
+                )}
               </div>
               {d.cutSize && d.faceAxes ? (
                 <>

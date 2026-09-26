@@ -115,6 +115,18 @@ describe('材料の削除とフラッシュ', () => {
 })
 
 describe('部材の材料とフラッシュ', () => {
+  it('フラッシュに替えると checks.cut は外れ、材料に戻すと表面材ごとの完了（cutByBoard）が消える', () => {
+    const base = flushJob()
+    base.parts[0] = { ...base.parts[0], flushId: undefined, boardId: LAUAN_4_ID, checks: { finished: false, cut: true } }
+    const toFlush = unwrap(updatePart(base, 'part-tenban', { flushId: FLUSH_25_ID }))
+    expect(toFlush.parts[0].checks.cut).toBe(false)
+    const checked = unwrap(setFlushCutCheck(toFlush, 'part-tenban', MELAMINE_1_ID, true))
+    expect(checked.parts[0].checks.cutByBoard).toEqual({ [MELAMINE_1_ID]: true })
+    const back = unwrap(updatePart(checked, 'part-tenban', { flushId: undefined, boardId: LAUAN_4_ID }))
+    expect('cutByBoard' in back.parts[0].checks).toBe(false)
+    expect('flushId' in back.parts[0]).toBe(false)
+  })
+
   it('フラッシュを選んだ部材は boardId が null にそろう', () => {
     const job = unwrap(addPart(flushJob(), newPart({ name: '地板', boardId: LAUAN_4_ID, flushId: FLUSH_25_ID })))
     expect(job.parts[1].boardId).toBeNull()
