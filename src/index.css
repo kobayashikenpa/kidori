@@ -1368,4 +1368,40 @@ select.input {
 .card.confirm {
   border: 2px solid var(--err);
   background: var(--err-soft);
+  /* 見える位置へ動かすとき、上の見出しと下のタブに隠れないようにする */
+  scroll-margin-top: 64px;
+  scroll-margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+/* 設定の一覧：選んで削除 */
+.list-select-start {
+  align-self: flex-end;
+}
+.list-check {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  flex-wrap: nowrap;
+}
+.list-check .check-box {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+.list-check.on {
+  border-color: var(--err);
+}
+.list-check.on .check-box {
+  background: var(--err);
+  border-color: var(--err);
+  color: var(--surface);
+}
+/* 選ぶあいだは、削除のボタンを画面の下（タブの上）に残す */
+.list-bulk {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px);
+  z-index: 4;
+  box-shadow: var(--shadow);
 }
