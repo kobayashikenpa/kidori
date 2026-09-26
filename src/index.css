@@ -692,10 +692,10 @@ select.input {
     animation: none;
   }
 }
-/* ボタンの並びを開いているあいだのエラーの場所：高さを決めておき、長い文は3行で打ち切る */
+/* ボタンの並びを開いているあいだのエラーの場所：高さを決めておき、長い文は2行で打ち切る */
 .expr-status {
   box-sizing: border-box;
-  height: calc(3 * 1.35em + 12px);
+  height: calc(2 * 1.35em + 12px);
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 13px;
@@ -706,8 +706,8 @@ select.input {
 .expr-status-text {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
 }
 .expr-status-text.ok {
@@ -726,7 +726,8 @@ select.input {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  max-height: 40vh;
+  /* 数字のボタンまで画面に入るよう低めにする（多いときは中でスクロール） */
+  max-height: 26vh;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
