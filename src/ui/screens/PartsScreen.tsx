@@ -54,6 +54,9 @@ interface CardProps {
 
 function PartCard({ part, board, dims: d, onOpen }: CardProps) {
   const noBoard = part.quantity >= 1 && !board
+  // 厚みの寸法の不一致（第1.2版からエラー）と、式のエラーを分けて出す
+  const thickErr = d.errors.some((e) => e.kind === 'thicknessMismatch')
+  const exprErr = d.errors.some((e) => e.kind !== 'thicknessMismatch')
   return (
     <button type="button" className="card part-card" onClick={onOpen}>
       <span className="part-head">
@@ -63,8 +66,8 @@ function PartCard({ part, board, dims: d, onOpen }: CardProps) {
       <span className="tags">
         {part.quantity > 0 && board && <span className="chip">{boardLabel(board)}</span>}
         {noBoard && <span className="chip warn">材料が未設定</span>}
-        {d.thicknessMismatch && <span className="chip warn">厚みを確認</span>}
-        {d.errors.length > 0 && <span className="chip err">式のエラー</span>}
+        {thickErr && <span className="chip err">厚みが合わない</span>}
+        {exprErr && <span className="chip err">式のエラー</span>}
       </span>
       <span className="part-dims">
         {AXES.map((a) => {

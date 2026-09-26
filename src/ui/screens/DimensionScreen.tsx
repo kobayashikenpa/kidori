@@ -56,7 +56,7 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
       {cutting && (
         <div className="tags">
           {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">材料が未設定</span>}
-          {d.thicknessMismatch && <span className="chip warn">厚みを確認</span>}
+          {d.errors.some((e) => e.kind === 'thicknessMismatch') && <span className="chip err">厚みが合わない</span>}
         </div>
       )}
       {part.memo.trim() !== '' && (
@@ -67,7 +67,10 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
       )}
 
       {d.errors.length > 0 ? (
-        <div className="part-errors">
+        <div className="part-errors" role="group" aria-label="寸法のエラー">
+          <p className="band-note" style={{ margin: 0 }}>
+            {cutting ? '寸法にエラーがあるため、木取りから除いています。部材の画面で直してください' : '寸法にエラーがあります。部材の画面で直してください'}
+          </p>
           {d.errors.map((e, i) => (
             <p key={`${e.axis}-${i}`} className="msg err" style={{ margin: 0 }}>
               {e.axis}：{e.message}
