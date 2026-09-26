@@ -59,14 +59,18 @@ export function KidoriScreen() {
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   // 材料ごとの段：チェックリストの材料（orderedBoards の順）に、配置図のある材料を足す
   const sections: { board: Board; rows: CutChecklistRow[]; m: MaterialResult | null }[] = [
-    ...checklist.map((g) => ({ board: g.board, rows: g.rows, m: result.materials.find((x) => x.boardId === g.board.id) ?? null })),
+    ...checklist.flatMap((g) =>
+      g.board ? [{ board: g.board, rows: g.rows, m: result.materials.find((x) => x.boardId === g.board?.id) ?? null }] : [],
+    ),
     ...result.materials
-      .filter((m) => m.sheets.length > 0 && !checklist.some((g) => g.board.id === m.boardId))
+      .filter((m) => m.sheets.length > 0 && !checklist.some((g) => g.board?.id === m.boardId))
       .flatMap((m) => {
         const board = job.boards.find((b) => b.id === m.boardId)
         return board ? [{ board, rows: [], m }] : []
       }),
   ]
+  // 材料が未設定の完了の行（完了を外せるように、最後に出す）
+  const noBoardRows = checklist.find((g) => g.board === null)?.rows ?? []
   const grainOf = (boardId: string): BoardGrain => job.boards.find((b) => b.id === boardId)?.grain ?? 'long'
 
   return (
@@ -183,6 +187,15 @@ export function KidoriScreen() {
           )}
         </section>
       ))}
+      {noBoardRows.length > 0 && (
+        <section aria-label="材料が未設定">
+          <h3>
+            材料が未設定
+            <span className="kd-h3-sub">完了を外すと、材料を入れたときに木取りに戻ります</span>
+          </h3>
+          <CutChecklist label="材料が未設定" rows={noBoardRows} onToggle={toggleRow} />
+        </section>
+      )}
     </section>
   )
 }

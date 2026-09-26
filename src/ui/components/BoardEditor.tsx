@@ -121,6 +121,7 @@ function BoardForm({ board, done }: { board: Board | null; done: () => void }) {
           <NumberField
             key={round}
             id={`${pre}-thickness`}
+            ariaLabel="材料の厚み"
             allowEmpty
             placeholder="例：18"
             value={thickness}

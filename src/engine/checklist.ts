@@ -20,7 +20,8 @@ export interface CutChecklistRow {
 }
 
 export interface CutChecklistGroup {
-  board: Board
+  /** null：材料が未設定（材料を外した・削除した部材の、完了にした行だけ。完了を外せるように最後に出す） */
+  board: Board | null
   /** 部材の並び順 */
   rows: CutChecklistRow[]
 }
@@ -28,12 +29,14 @@ export interface CutChecklistGroup {
 /**
  * 材料ごと（orderedBoards の順）のチェックリスト。行の無い材料は入れない。
  * 出さない行：枚数0の部材、材料（フラッシュ・表面材の材料）が見つからない部材、
- * 寸法のエラー（厚みの不一致を含む）のある部材。ただし完了にした行は、寸法が出せなくても出す（完了を外せるように）
+ * 寸法のエラー（厚みの不一致を含む）のある部材。ただし完了にした行は、寸法が出せなくても、材料が無くても出す（完了を外せるように）。
+ * 材料の無い完了の行は、最後の「材料が未設定」の組（board が null）に入れる
  */
 export function cuttingChecklist(job: Job, dims: DimensionResult): CutChecklistGroup[] {
   const boardIds = new Set(job.boards.map((b) => b.id))
   const partById = new Map(job.parts.map((p) => [p.id, p]))
   const rowsByBoard = new Map<string, CutChecklistRow[]>()
+  const noBoard: CutChecklistRow[] = []
 
   for (const d of dims.parts) {
     const part = partById.get(d.partId)
@@ -56,18 +59,26 @@ export function cuttingChecklist(job: Job, dims: DimensionResult): CutChecklistG
       }
     } else if (part.boardId !== null) {
       targets.push({ kind: 'part', boardId: part.boardId, count: d.quantity, done: part.checks.cut })
+    } else if (part.checks.cut) {
+      targets.push({ kind: 'part', boardId: '', count: d.quantity, done: true })
     }
 
     for (const t of targets) {
-      if (!boardIds.has(t.boardId) || (!ok && !t.done)) continue
+      if (!ok && !t.done) continue
+      if (!boardIds.has(t.boardId)) {
+        // 表面材の材料が無いときは木取りに関わらないので出さない
+        if (t.done && t.kind === 'part') noBoard.push({ ...t, partId: part.id, partName: d.name, size, sizeLabel })
+        continue
+      }
       const rows = rowsByBoard.get(t.boardId) ?? []
       rows.push({ ...t, partId: part.id, partName: d.name, size, sizeLabel })
       rowsByBoard.set(t.boardId, rows)
     }
   }
 
-  return orderedBoards(job).flatMap((board) => {
+  const groups: CutChecklistGroup[] = orderedBoards(job).flatMap((board) => {
     const rows = rowsByBoard.get(board.id)
     return rows ? [{ board, rows }] : []
   })
+  return noBoard.length > 0 ? [...groups, { board: null, rows: noBoard }] : groups
 }

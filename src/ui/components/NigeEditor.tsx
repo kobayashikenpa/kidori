@@ -103,6 +103,8 @@ function NigeForm({ nige, done }: { nige: Nige | null; done: () => void }) {
             bad={!!error && name.trim() !== ''}
             placeholder="例：1"
             text={text}
+            // 「決定」で登録する（前の Enter と同じ）。名前が空なら登録せず、名前の欄を入れてもらう
+            onDone={() => name.trim() !== '' && text !== '' && save()}
             onText={(t) => {
               setText(t)
               setError(null)

@@ -145,6 +145,7 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
           <NumberField
             key={round}
             id={`${pre}-core`}
+            ariaLabel="芯材の厚み"
             allowEmpty
             placeholder="例：15"
             value={core}

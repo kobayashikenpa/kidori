@@ -224,6 +224,7 @@ export function PartEditor({ part, onClose }: Props) {
             </label>
             <NumberField
               id="part-allowance"
+              ariaLabel="切り代"
               allowEmpty
               placeholder={`空欄＝初期値 ${fmt(job.settings.allowance)}`}
               value={draft.allowance}

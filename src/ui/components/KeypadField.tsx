@@ -14,6 +14,8 @@ interface Props {
   onText: (t: string) => void
   /** 閉じたときに呼ぶ */
   onClose?: () => void
+  /** 「決定」（または Enter）で閉じたときだけ、onClose のあとに呼ぶ（入力欄の登録など） */
+  onDone?: () => void
   /** 数字キーを開いたときに呼ぶ（打ち始めの文字を用意するため） */
   onOpen?: () => void
   /** 整数だけか（「.」のキーを出さない） */
@@ -26,12 +28,13 @@ interface Props {
   ariaLabel?: string
 }
 
-export function KeypadField({ text, onText, onClose, onOpen, integer = false, bad, unit = 'mm', placeholder, id, ariaLabel }: Props) {
+export function KeypadField({ text, onText, onClose, onDone, onOpen, integer = false, bad, unit = 'mm', placeholder, id, ariaLabel }: Props) {
   const [open, setOpen] = useState(false)
   const [fresh, setFresh] = useState(false)
   const boxRef = useRef<HTMLButtonElement>(null)
   const padRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
+  const doneRef = useRef(onDone)
   const padId = `${useId()}-pad`
 
   const press = (key: string) => {
@@ -41,6 +44,7 @@ export function KeypadField({ text, onText, onClose, onOpen, integer = false, ba
   const pressRef = useRef(press)
   useEffect(() => {
     closeRef.current = onClose
+    doneRef.current = onDone
     pressRef.current = press
   })
 
@@ -62,6 +66,7 @@ export function KeypadField({ text, onText, onClose, onOpen, integer = false, ba
         e.stopPropagation()
         close()
         boxRef.current?.focus()
+        if (e.key === 'Enter') doneRef.current?.()
       } else if (/^[\d.]$/.test(e.key)) pressRef.current(e.key)
       else if (e.key === 'Backspace') pressRef.current('back')
       else return
@@ -93,6 +98,7 @@ export function KeypadField({ text, onText, onClose, onOpen, integer = false, ba
   const done = () => {
     setOpen(false)
     closeRef.current?.()
+    doneRef.current?.()
   }
   // キーを押しても枠から注目が外れないようにする
   const keep = (e: ReactPointerEvent) => e.preventDefault()
@@ -109,7 +115,7 @@ export function KeypadField({ text, onText, onClose, onOpen, integer = false, ba
         id={id}
         type="button"
         className={`input num keypad-box${open ? ' active' : ''}${bad ? ' bad' : ''}`}
-        aria-label={ariaLabel ? `${ariaLabel} ${text || '空'}` : undefined}
+        aria-label={`${ariaLabel ?? ''} ${text || '空'}`.trim()}
         aria-expanded={open}
         aria-controls={padId}
         aria-invalid={bad || undefined}

@@ -199,7 +199,7 @@ describe('setCutChecklistRow（切り出しのチェックリストの完了）'
   it('見本：メラミン1 の天地板を完了にすると、木取りで メラミン1 だけ除かれる。外すと戻る', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     const groups = rowsOf(job)
-    expect(groups.map((g) => [boardLabel(g.board), g.rows.map((r) => `${r.partName} ${r.sizeLabel} ×${r.count}`)])).toEqual([
+    expect(groups.map((g) => [g.board ? boardLabel(g.board) : null, g.rows.map((r) => `${r.partName} ${r.sizeLabel} ×${r.count}`)])).toEqual([
       ['シナランバー 18mm', ['側板 1810×410 ×2', '棚板 873×390 ×4']],
       ['シナベニヤ 4mm', ['背板 900×1800 ×1']],
       ['メラミン 1mm', ['天地板 874×410 ×4']],
