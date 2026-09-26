@@ -168,10 +168,16 @@ describe('expandPieces（片の展開と木目による向き）', () => {
     ])
   })
 
-  it('厚みの寸法が決まらない（面が決まらない）部材は、寸法エラーとは別の理由（noThickness）で除く', () => {
+  it('厚みの寸法が材料の厚みと合わない部材は、thicknessMismatch で除く（自動で見つからない・手で選んだ軸が違う）', () => {
     const job = bookshelfJob()
     addPart(job, { id: 'nothick', name: '厚み不明', expr: { W: '100', H: '20', D: '100' } })
-    expect(expand(job).skipped).toEqual([{ partId: 'nothick', name: '厚み不明', reason: 'noThickness' }])
+    addPart(job, { id: 'wrong', name: '厚み違い', expr: { W: '19', H: '700', D: '600' }, thicknessAxis: 'W' })
+    expect(expand(job).skipped).toEqual([
+      { partId: 'nothick', name: '厚み不明', reason: 'thicknessMismatch' },
+      { partId: 'wrong', name: '厚み違い', reason: 'thicknessMismatch' },
+    ])
+    // ほかの部材はそのまま計算する
+    expect(group(job, LUMBER_18_ID).pieces).toHaveLength(8)
   })
 
   it('式のエラーがあれば、厚みが決まらなくても寸法エラーとして除く', () => {

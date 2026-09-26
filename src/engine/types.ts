@@ -130,6 +130,7 @@ export type DimensionErrorKind =
   | 'divideByZero' // 0 で割った
   | 'missingBoard' // 式が使っている材料の厚みの材料が削除されている
   | 'missingNige' // 式が使っている逃げが削除されている
+  | 'thicknessMismatch' // 厚みの寸法の値が材料の厚みと合わない（自動で見つからないときを含む。枚数1以上・材料ありの部材だけ）
 
 export interface DimensionError {
   partId: string
@@ -159,7 +160,7 @@ export interface PartDimensions {
   thicknessAxis: Axis | null
   /** 自動判定で決めたか */
   thicknessAuto: boolean
-  /** 厚みの寸法の値 ≠ 板の厚み（確認を促す） */
+  /** 厚みの寸法の値 ≠ 板の厚み。true なら errors にも thicknessMismatch のエラーが入る（第1.2版からエラー） */
   thicknessMismatch: boolean
   /** 板の面になる2軸（W→H→D の順） */
   faceAxes: [Axis, Axis] | null
@@ -271,5 +272,9 @@ export interface PackingResult {
   materials: MaterialResult[]
   /** 全体の歩留まり */
   totalYieldRate: number
-  skipped: { partId: string; name: string; reason: 'dimensionError' | 'noThickness' | 'noBoard' }[]
+  /**
+   * 計算から除いた部材。thicknessMismatch：厚みの寸法が材料の厚みと合わない（第1.2版）。
+   * noThickness は第1.2版からは出ない（厚みが決まらない部材は thicknessMismatch になる）。型は以前のまま残す
+   */
+  skipped: { partId: string; name: string; reason: 'dimensionError' | 'thicknessMismatch' | 'noThickness' | 'noBoard' }[]
 }

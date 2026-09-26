@@ -1,6 +1,6 @@
 // 厚みの寸法の判定
-import { eq1 } from '../round'
-import { AXES, type Axis, type Board, type Part } from '../types'
+import { eq1, round1 } from '../round'
+import { AXES, type Axis, type Board, type DimensionError, type Part } from '../types'
 
 /**
  * 厚みの寸法を決める。
@@ -28,7 +28,7 @@ export interface ThicknessInfo {
   thicknessAxis: Axis | null
   /** 自動判定で決めたか */
   thicknessAuto: boolean
-  /** 厚みの寸法の値 ≠ 板の厚み（確認を促す） */
+  /** 厚みの寸法の値 ≠ 板の厚み（エラー。thicknessMismatchError） */
   thicknessMismatch: boolean
   /** 板の面になる2軸（W→H→D の順） */
   faceAxes: [Axis, Axis] | null
@@ -60,5 +60,44 @@ export function detectThickness(
     thicknessAuto: auto,
     thicknessMismatch: mismatch,
     faceAxes: axis ? [faces[0], faces[1]] : null,
+  }
+}
+
+function mm(v: number): string {
+  return String(round1(v))
+}
+
+/**
+ * 厚みの寸法の不一致のエラー（仕様書 5.3。第1.2版からエラー）。不一致でなければ null。
+ * - 手で選んだ軸（または自動で決めた軸）の値が違う：その軸に「厚みの寸法（W=19）が材料の厚み 18 と合いません」
+ * - 自動で見つからない：材料の厚みに一番近い値の軸（同じなら W→H→D の順）に付ける
+ */
+export function thicknessMismatchError(
+  partId: string,
+  info: ThicknessInfo,
+  board: Pick<Board, 'thickness'> | null,
+  input: Partial<Record<Axis, number>>,
+): DimensionError | null {
+  if (!info.thicknessMismatch || !board) return null
+  const t = mm(board.thickness)
+  if (info.thicknessAxis) {
+    const axis = info.thicknessAxis
+    return {
+      partId,
+      axis,
+      kind: 'thicknessMismatch',
+      message: `厚みの寸法（${axis}=${mm(input[axis] ?? 0)}）が材料の厚み ${t} と合いません`,
+    }
+  }
+  let axis: Axis = 'W'
+  for (const a of AXES) {
+    if (Math.abs((input[a] ?? Infinity) - board.thickness) < Math.abs((input[axis] ?? Infinity) - board.thickness)) axis = a
+  }
+  const values = AXES.map((a) => `${a}=${mm(input[a] ?? 0)}`).join('・')
+  return {
+    partId,
+    axis,
+    kind: 'thicknessMismatch',
+    message: `材料の厚み ${t} と同じ寸法がありません（${values}）。寸法を直すか、厚みの寸法を選んでください`,
   }
 }

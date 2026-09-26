@@ -16,6 +16,7 @@ import { fmt, pct } from '../format'
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
   noBoard: '材料が未設定',
   dimensionError: '寸法を計算できない',
+  thicknessMismatch: '厚みの寸法が材料の厚みと合わない',
   noThickness: '厚みが決まらない（部材の画面で厚みを選んでください）',
 }
 
