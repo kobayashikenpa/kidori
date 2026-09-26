@@ -46,7 +46,7 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 
 /**
  * 新しい仕事：設定と材料はひな形（最後に使った設定）を写す。初期値のひな形なら 逃げ0.5・1、材料 メラミン1・ラワン2.5・4・5.5。
- * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。部材なし
+ * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。フラッシュは id を新しくし、表面材は新しい材料を指す。部材なし
  */
 export function createJob(
   name: string,
@@ -56,16 +56,27 @@ export function createJob(
 ): Job {
   const t = now.toISOString()
   const s = template.settings
+  const boards = template.materials.map((m) => {
+    const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
+    if (m.builtIn) b.builtIn = true
+    return b
+  })
+  // フラッシュの表面材は、材料名＋厚みが同じ材料の id に直す（見つからない表面材は外す）
+  const flushes: Flush[] = template.flushes.map((f) => ({
+    id: newId('flush'),
+    name: f.name,
+    core: f.core,
+    faces: f.faces.flatMap((x) => {
+      const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
+      return b ? [{ boardId: b.id, count: x.count }] : []
+    }),
+  }))
   return {
     id,
     name: name.trim() || '名前のない仕事',
     settings: { ...s, nige: s.nige.map((n) => ({ ...n })) },
-    boards: template.materials.map((m) => {
-      const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
-      if (m.builtIn) b.builtIn = true
-      return b
-    }),
-    flushes: [],
+    boards,
+    flushes,
     parts: [],
     createdAt: t,
     updatedAt: t,
@@ -92,7 +103,8 @@ export function copyName(name: string, existingNames: readonly string[]): string
 
 /**
  * 仕事をコピーする（似た家具を作るとき用）。仕事・板・部材の id は新しくし、部材が使う板は新しい板の id につけ替える。
- * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板の id につけ替える。逃げの id は設定ごと写すのでそのまま。
+ * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板（フラッシュ）の id につけ替える。逃げの id は設定ごと写すのでそのまま。
+ * フラッシュの id・表面材・部材の flushId・表面材ごとの完了もつけ替える。
  * 元の仕事は書き換えない
  */
 export function copyJob(
@@ -108,23 +120,39 @@ export function copyJob(
     boardIds.set(b.id, nid)
     return { ...b, id: nid }
   })
-  const parts = job.parts.map((p) => ({
-    ...p,
-    id: newId('part'),
-    boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
-    expr: {
-      W: remapBoardIds(p.expr.W, boardIds),
-      H: remapBoardIds(p.expr.H, boardIds),
-      D: remapBoardIds(p.expr.D, boardIds),
-    },
-    checks: { ...p.checks },
-  }))
+  const flushIds = new Map<string, string>()
+  const flushes = job.flushes.map((f) => {
+    const nid = newId('flush')
+    flushIds.set(f.id, nid)
+    return { ...f, id: nid, faces: f.faces.map((x) => ({ boardId: boardIds.get(x.boardId) ?? x.boardId, count: x.count })) }
+  })
+  // 式の {t:…} は材料とフラッシュのどちらも指す
+  const thicknessIds = new Map([...boardIds, ...flushIds])
+  const parts = job.parts.map((p) => {
+    const part: Part = {
+      ...p,
+      id: newId('part'),
+      boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
+      expr: {
+        W: remapBoardIds(p.expr.W, thicknessIds),
+        H: remapBoardIds(p.expr.H, thicknessIds),
+        D: remapBoardIds(p.expr.D, thicknessIds),
+      },
+      checks: { ...p.checks },
+    }
+    if (p.flushId !== undefined) part.flushId = flushIds.get(p.flushId) ?? p.flushId
+    const done = p.checks.cutByBoard
+    if (done) {
+      part.checks.cutByBoard = Object.fromEntries(Object.entries(done).map(([k, v]) => [boardIds.get(k) ?? k, v]))
+    }
+    return part
+  })
   return {
     id,
     name: copyName(job.name, existingNames),
     settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     boards,
-    flushes: [],
+    flushes,
     parts,
     createdAt: t,
     updatedAt: t,
