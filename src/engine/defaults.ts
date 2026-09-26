@@ -15,9 +15,20 @@ export function defaultSettings(): Settings {
   return { ...DEFAULT_SETTINGS, nige: defaultNige() }
 }
 
+/** 材料のサイズ（大きさの種類・短辺・長辺・木目の方向） */
+export type BoardSheet = Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'>
+
+/**
+ * 新しく足す材料のサイズ：4×8（シハチ 1220×2440）・木目は長手方向（仕様書 9「材料のサイズの選択」の初期値）。
+ * 呼ぶたびに新しいオブジェクト
+ */
+export function defaultSheet(): BoardSheet {
+  const [width, length] = BOARD_SIZES.shihachi
+  return { sizeKind: 'shihachi', width, length, grain: 'long' }
+}
+
 /** 新しい仕事の材料：メラミン1・ラワン2.5・ラワン4・ラワン5.5（4×8・木目は長手方向。仕様書 5.1）。id は newId('board')。印 builtIn: true を付ける */
 export function defaultBoards(newId: (prefix: string) => string): Board[] {
-  const [width, length] = BOARD_SIZES.shihachi
   const list: [string, number][] = [
     ['メラミン', 1],
     ['ラワン', 2.5],
@@ -28,10 +39,7 @@ export function defaultBoards(newId: (prefix: string) => string): Board[] {
     id: newId('board'),
     material,
     thickness,
-    sizeKind: 'shihachi',
-    width,
-    length,
-    grain: 'long',
+    ...defaultSheet(),
     builtIn: true,
   }))
 }

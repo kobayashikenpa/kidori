@@ -3,26 +3,20 @@ import { defaultBoards } from './defaults'
 import { eq1 } from './round'
 import type { Board, Job } from './types'
 
-/** 最初から入っている材料の内容（材料名・厚み・大きさ・木目）。以前のデータの判定用 */
+/** 最初から入っている材料（材料名・厚み）。以前のデータの判定用 */
 const DEFAULTS: readonly Board[] = defaultBoards(() => '')
 
+/** 最初からある4つと材料名＋厚みが同じか（サイズ・木目は木取りの画面で変えられるので比べない。第1.3版） */
 function sameAsDefault(b: Board): boolean {
-  return DEFAULTS.some(
-    (d) =>
-      d.material === b.material.trim() &&
-      eq1(d.thickness, b.thickness) &&
-      d.sizeKind === b.sizeKind &&
-      eq1(d.width, b.width) &&
-      eq1(d.length, b.length) &&
-      d.grain === b.grain,
-  )
+  return DEFAULTS.some((d) => d.material === b.material.trim() && eq1(d.thickness, b.thickness))
 }
 
 /**
  * 最初から入っている材料か。
  * - `builtIn: true` の印があれば最初からある材料
  * - 仕事の中に印のある材料が1つでもあれば（第1.2版以降に作った仕事）、印の無い材料は足した材料
- * - 印がひとつも無い仕事（第1.1版までに作った仕事）では、最初からある4つと材料名・厚み・大きさ・木目が同じ材料を最初からある材料とみなす
+ * - 印がひとつも無い仕事（第1.1版までに作った仕事）では、最初からある4つと材料名＋厚みが同じ材料を最初からある材料とみなす
+ *   （大きさ・木目は比べない。木取りの画面でサイズを選んでも並び順が変わらないように）
  */
 export function isBuiltInBoard(board: Board, job: Pick<Job, 'boards'>): boolean {
   if (board.builtIn === true) return true
