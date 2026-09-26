@@ -966,6 +966,25 @@ select.input {
 }
 
 /* ---------- 木取り ---------- */
+.kd-hints {
+  margin-top: 14px;
+  border-left: 4px solid var(--ok);
+}
+.kd-hints h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--ok);
+}
+.kd-hints ul {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.kd-hints li + li {
+  margin-top: 4px;
+}
 .kd-summary {
   display: flex;
   flex-direction: column;
