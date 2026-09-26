@@ -24,6 +24,8 @@ export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   const result = useMemo(() => packJob(job, computeDimensions(job)), [job])
   const s = job.settings
+  // 部材ごとに切り代を入れた部材（設定の切り代を変えても変わらないことを見せる）
+  const own = job.parts.filter((p) => p.quantity > 0 && p.allowance !== null)
   const unplaced = result.materials.flatMap((m) => m.unplaced.map((u) => ({ ...u, board: boardLabel(m) })))
   const empty = result.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
@@ -35,6 +37,11 @@ export function KidoriScreen() {
       <p className="lead num">
         刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm（設定の画面で変えられます）
       </p>
+      {own.length > 0 && (
+        <p className="lead num">
+          部材ごとに切り代を入れた部材：{own.map((p) => `${p.name} ${fmt(p.allowance ?? 0)}mm`).join('・')}（設定の切り代を変えても、この値のまま）
+        </p>
+      )}
 
       <div className="field">
         <span className="label">切り方</span>

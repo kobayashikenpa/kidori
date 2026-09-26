@@ -21,7 +21,7 @@ export function SavingHints({ job }: { job: Job }) {
   // 部材ごとに切り代を入れた部材は、お知らせでもその切り代のまま（設定の切り代を変えても変わらない）
   const own = parts.filter((p) => p.quantity > 0 && p.allowance !== null)
 
-  if (hints.length === 0 && !pending && own.length === 0) return null
+  if (hints.length === 0 && !pending) return null
 
   return (
     <aside className={`card kd-hints${pending ? ' pending' : ''}`} aria-label="材料を減らせるときのお知らせ" aria-busy={pending}>
@@ -35,7 +35,7 @@ export function SavingHints({ job }: { job: Job }) {
         </ul>
       )}
       {hints.length > 0 && <p className="band-note">設定は変えていません。変えるときは設定の画面で変えてください。</p>}
-      {own.length > 0 && (
+      {hints.length > 0 && own.length > 0 && (
         <p className="band-note num">
           部材ごとに切り代を入れた部材（{own.map((p) => `${p.name} ${fmt(p.allowance ?? 0)}mm`).join('・')}）は、設定の切り代（{fmt(settings.allowance)}mm）を変えても、その切り代のまま計算します。
         </p>
