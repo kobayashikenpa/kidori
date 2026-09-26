@@ -1,5 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultSheet, nigeName } from '../engine/defaults'
+import { defaultSheet, nigeName, type BoardSheet } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -240,6 +240,52 @@ export function removeBoard(job: Job, boardId: string): OpResult {
   })
 }
 
+/** 板をまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材の板は未設定（null）になる */
+export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
+  const ids = new Set(boardIds.filter((id) => job.boards.some((b) => b.id === id)))
+  if (ids.size === 0) return fail('材料が見つかりません')
+  return ok({
+    ...job,
+    boards: job.boards.filter((b) => !ids.has(b.id)),
+    parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
+  })
+}
+
+/**
+ * 式で、指定した id のどれかを使っている部材を「部材名（軸）」でまとめる（部材の並び順・部材ごとに1つ）。
+ * 1つの id ごとの判定は engine の関数（used）に任せ、軸ごとに当てて集める
+ */
+function partsUsingAny(job: Job, ids: readonly string[], used: (job: Pick<Job, 'parts'>, id: string) => string[]): string[] {
+  const out: string[] = []
+  for (const p of job.parts) {
+    const axes = AXES.filter((a) => {
+      const probe = { parts: [{ ...p, expr: { W: p.expr[a], H: '', D: '' } }] }
+      return ids.some((id) => used(probe, id).length > 0)
+    })
+    if (axes.length > 0) out.push(`${p.name}（${axes.join('・')}）`)
+  }
+  return out
+}
+
+/** 板をまとめて消す前の確認用：その板のどれかから切る部材の名前（重ならない）と、式でそのどれかの厚みを使っている部材 */
+export function boardsUsages(job: Job, boardIds: readonly string[]): { cutFrom: string[]; thickness: string[] } {
+  const ids = new Set(boardIds)
+  return {
+    cutFrom: job.parts.filter((p) => p.boardId !== null && ids.has(p.boardId)).map((p) => p.name),
+    thickness: partsUsingAny(job, boardIds, partsUsingBoardThickness),
+  }
+}
+
+/** 材料のサイズを選ぶ（木取りの画面）。3×6・4×8 は寸法が決まり木目は長手方向。自由入力は短辺・長辺・木目。0 以下の寸法は断る */
+export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpResult {
+  return updateBoard(job, boardId, {
+    sizeKind: size.sizeKind,
+    width: size.width,
+    length: size.length,
+    grain: size.grain,
+  })
+}
+
 // ---------- 逃げ ----------
 
 /** 逃げの寸法の検査。0 より大きく、ほかの逃げと同じ寸法（小数第1位で比較）でないこと */
@@ -276,6 +322,18 @@ export function nigeUsages(job: Job, nigeId: string): string[] {
 export function removeNige(job: Job, nigeId: string): OpResult {
   if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
   return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => n.id !== nigeId) } })
+}
+
+/** 逃げをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る */
+export function removeNiges(job: Job, nigeIds: readonly string[]): OpResult {
+  const ids = new Set(nigeIds)
+  if (!job.settings.nige.some((n) => ids.has(n.id))) return fail('逃げが見つかりません')
+  return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => !ids.has(n.id)) } })
+}
+
+/** 逃げをまとめて消す前の確認用：式でそのどれかを使っている部材（例：［棚板（W）］） */
+export function nigesUsages(job: Job, nigeIds: readonly string[]): string[] {
+  return partsUsingAny(job, nigeIds, partsUsingNige)
 }
 
 // ---------- 部材 ----------
