@@ -590,7 +590,8 @@ src/engine/
   packing/pieces.ts      木取り済み（checks.cut）の部材を除き、done に入れる
   packing/sizes.ts       compareStandardSizes：材料ごとに 3×6 と 4×8 で木取りした枚数・歩留まり
 src/store/
-  template.ts            最後に使った設定（ひな形）：templateOf・defaultTemplate・sameTemplate・sampleFromTemplate
+  template.ts            最後に使った設定（ひな形）：templateOf・defaultTemplate・sameTemplate
+  sample.ts              sampleFromTemplate（見本の仕事をひな形の設定で作る）
   jobs.ts                createJob(name, template)、newBoard の初期サイズ 4×8、setBoardSize、removeNiges・removeBoards
   storage.ts             ひな形の読み書き（キー kidori.lastSettings.v1）
   reducer.ts / JobStore.tsx  StoreState.template、設定が変わったらひな形を更新して保存
@@ -649,7 +650,7 @@ export interface SettingsTemplate {
 
 ### 8.4 見本（本棚 W900）をひな形から作る — 決定（planner）
 
-`sampleFromTemplate(template, now): Job`（`src/store/template.ts`）。`bookshelfJob()`（engine の見本。テストで使う）は変えない。
+`sampleFromTemplate(template, now): Job`（`src/store/sample.ts`）。`bookshelfJob()`（engine の見本。テストで使う）は変えない。
 1. `createJob('本棚 W900', template, now, 'job-bookshelf-w900')` で作る（見本の id は今のまま固定。仕事の画面の「見本があるか」の判定に使う）
 2. 見本の材料 シナランバー 18・シナベニヤ 4 について、同じ材料名（前後の空白を除き NFKC でそろえて比べる）＋厚み（`eq1`）の材料があればそれを使い、無ければ材料の最後に足す（印なし＝足した材料として上に並ぶ）
 3. 見本の部材は `bookshelfJob().parts` を写し、`boardId` を 2 の材料の id につけ替える
