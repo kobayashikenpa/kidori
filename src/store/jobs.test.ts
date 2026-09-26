@@ -37,7 +37,7 @@ function unwrap(r: OpResult): Job {
 
 describe('createJob', () => {
   it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は4つ、部材はない', () => {
-    const job = createJob('食器棚', new Date('2026-09-01T00:00:00Z'), 'job-1')
+    const job = createJob('食器棚', undefined, new Date('2026-09-01T00:00:00Z'), 'job-1')
     expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
@@ -142,13 +142,13 @@ describe('板', () => {
     expect(job.parts.find((p) => p.name === '背板')!.boardId).toBe(VENEER_4_ID)
   })
 
-  it('見本の板2つを新しい仕事に登録できる', () => {
+  it('見本の板2つを新しい仕事に登録できる（新しく足す材料は 4×8。第1.3版）', () => {
     let job = createJob('本棚')
     job = { ...job, boards: [] }
     job = unwrap(addBoard(job, newBoard({ material: 'シナランバー', thickness: 18 })))
     job = unwrap(addBoard(job, newBoard({ material: 'シナベニヤ', thickness: 4 })))
     expect(job.boards.map(boardLabel)).toEqual(['シナランバー 18mm', 'シナベニヤ 4mm'])
-    expect(job.boards[0]).toMatchObject({ width: 910, length: 1820, grain: 'long' })
+    expect(job.boards[0]).toMatchObject({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
 
   it('材料名＋厚みが同じ板は登録できない', () => {
@@ -256,8 +256,8 @@ describe('仕事の名前・コピー・削除', () => {
   })
 
   it('仕事を消す。開いていた仕事を消すと、何も開いていない状態になる', () => {
-    const a = createJob('a', new Date(), 'a')
-    const b = createJob('b', new Date(), 'b')
+    const a = createJob('a', undefined, new Date(), 'a')
+    const b = createJob('b', undefined, new Date(), 'b')
     expect(deleteJob([a, b], 'a', 'a')).toEqual({ jobs: [b], currentJobId: null })
     expect(deleteJob([a, b], 'b', 'a')).toEqual({ jobs: [b], currentJobId: 'b' })
     expect(deleteJob([a, b], null, 'x')).toEqual({ jobs: [a, b], currentJobId: null })

@@ -93,7 +93,7 @@ describe('storeReducer', () => {
 describe('removeJob', () => {
   it('開いていた仕事を消すと、何も開いていない状態になる', () => {
     const s0 = stateWithSample()
-    const other = createJob('食器棚', NOW, 'job-other')
+    const other = createJob('食器棚', undefined, NOW, 'job-other')
     const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
     const s2 = storeReducer(s1, { type: 'removeJob', id: s0.currentJobId! })
     expect(s2.jobs.map((j) => j.id)).toEqual(['job-other'])
@@ -102,7 +102,7 @@ describe('removeJob', () => {
 
   it('開いていない仕事を消しても、開いている仕事はそのまま', () => {
     const s0 = stateWithSample()
-    const other = createJob('食器棚', NOW, 'job-other')
+    const other = createJob('食器棚', undefined, NOW, 'job-other')
     const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
     const s2 = storeReducer(s1, { type: 'removeJob', id: 'job-other' })
     expect(s2.currentJobId).toBe(s0.currentJobId)
@@ -113,7 +113,7 @@ describe('removeJob', () => {
 describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
   /** 初期の材料の仕事で、ラワン4 W602 H1200 D4（木目 H）×4枚・部材の切り代は空欄・仕事の切り代 0 */
   function stateWithRawan(): StoreState {
-    const r = updateSettings(createJob('お知らせ', NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
+    const r = updateSettings(createJob('お知らせ', undefined, NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
     if (!r.ok) throw new Error(r.message)
     let job = r.job
     const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
