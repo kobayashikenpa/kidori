@@ -6,12 +6,14 @@ import { tokenize, type Operator, type Token } from './tokenize'
 export type Expr =
   | { type: 'number'; value: number }
   | { type: 'ref'; part: string; axis: Axis }
+  | { type: 'thickness'; boardId: string }
+  | { type: 'nige'; nigeId: string }
   | { type: 'neg'; arg: Expr }
   | { type: 'binary'; op: Operator; left: Expr; right: Expr }
 
 /** 式の計算で起こるエラー */
 export interface FormulaError {
-  kind: 'syntax' | 'unknownRef' | 'divideByZero'
+  kind: 'syntax' | 'unknownRef' | 'divideByZero' | 'missingBoard' | 'missingNige'
   /** 画面にそのまま出せる日本語 */
   message: string
   /** unknownRef のときの部材名 */
@@ -68,7 +70,7 @@ export function parse(expr: string): ParseResult {
     return left
   }
 
-  // 因子 = - 因子 | 数値 | 参照 | ( 式 )
+  // 因子 = - 因子 | 数値 | 参照 | 材料の厚み | 逃げ | ( 式 )
   function parseFactor(): Expr {
     const tok = peek()
     if (!tok) return fail('式が途中で終わっています', tok)
@@ -82,6 +84,12 @@ export function parse(expr: string): ParseResult {
       case 'ref':
         pos++
         return { type: 'ref', part: tok.part, axis: tok.axis }
+      case 'thickness':
+        pos++
+        return { type: 'thickness', boardId: tok.boardId }
+      case 'nige':
+        pos++
+        return { type: 'nige', nigeId: tok.nigeId }
       case '(': {
         pos++
         if (peek()?.type === ')') return fail('( ) の中が空です', peek())

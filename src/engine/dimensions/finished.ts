@@ -46,10 +46,11 @@ class AbortThickness {
  * - ほかの部材を通って、自分の厚みの判定が自分の逃げを引いた値に戻ってくる場合は循環参照（cycle）
  * - エラーのある寸法を参照している寸法は計算せず、元のエラーの寸法を from で示す
  */
-export function computeFinished(job: Pick<Job, 'parts' | 'boards'>): Map<string, FinishedDims> {
+export function computeFinished(job: Pick<Job, 'parts' | 'boards' | 'settings'>): Map<string, FinishedDims> {
   const res = resolve(job.parts)
   const partById = new Map(job.parts.map((p) => [p.id, p]))
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
+  const nigeById = new Map(job.settings.nige.map((n) => [n.id, n.value]))
   // 全角・半角をそろえた部材名 → id（式の中の参照は、そろえた名前で出てくる）
   const idByName = new Map<string, string>()
   for (const p of job.parts) {
@@ -135,9 +136,13 @@ export function computeFinished(job: Pick<Job, 'parts' | 'boards'>): Map<string,
       if (!v.ok) return { ok: false, error: propagate(d, v.error) }
       values.set(dimKey(dep.partId, dep.axis), v.value)
     }
-    const r = evaluate(node.ast!, (part, axis) => {
-      const id = idByName.get(part)
-      return id === undefined ? null : (values.get(dimKey(id, axis)) ?? null)
+    const r = evaluate(node.ast!, {
+      ref: (part, axis) => {
+        const id = idByName.get(part)
+        return id === undefined ? null : (values.get(dimKey(id, axis)) ?? null)
+      },
+      thickness: (boardId) => boardById.get(boardId)?.thickness ?? null,
+      nige: (nigeId) => nigeById.get(nigeId) ?? null,
     })
     return r.ok ? r : { ok: false, error: { partId: d.partId, axis: d.axis, kind: r.error.kind, message: r.error.message } }
   }
