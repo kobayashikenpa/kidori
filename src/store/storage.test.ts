@@ -7,6 +7,7 @@ import {
   BROKEN_BACKUP_KEY,
   CURRENT_JOB_KEY,
   JOBS_KEY,
+  LEGACY_JOBS_KEY,
   MAX_BACKUPS,
   loadSaved,
   saveSaved,
@@ -80,17 +81,18 @@ describe('保存と読み込み', () => {
   })
 
   it('壊れた JSON は読まずにエラーの印を返し、元のデータを退避して上書きしない', () => {
-    const s = memoryStorage({ [JOBS_KEY]: '{"version":1,"jobs":[', [CURRENT_JOB_KEY]: 'x' })
+    const s = memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[', [CURRENT_JOB_KEY]: 'x' })
     const r = loadSaved(s, T1)
     expect(r.status).toBe('error')
     expect(r.data).toEqual({ jobs: [], currentJobId: null })
-    expect(s.map.get(JOBS_KEY)).toBe('{"version":1,"jobs":[')
-    expect(s.map.get(`${BROKEN_BACKUP_KEY}.2026-09-25T01:00:00.000Z`)).toBe('{"version":1,"jobs":[')
+    expect(s.map.get(JOBS_KEY)).toBe('{"version":2,"jobs":[')
+    expect(s.map.get(`${BROKEN_BACKUP_KEY}.2026-09-25T01:00:00.000Z`)).toBe('{"version":2,"jobs":[')
     if (r.status === 'error') expect(r.canSave).toBe(true)
   })
 
   it('形の違うデータ（版が違う・仕事の形でない）もエラーにする', () => {
-    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[]}' })).status).toBe('error')
+    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":1,"jobs":[]}' })).status).toBe('error')
+    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[]}' })).status).toBe('error')
     expect(loadSaved(memoryStorage({ [JOBS_KEY]: 'null' })).status).toBe('error')
   })
 
@@ -113,7 +115,7 @@ function storedWith(edit: (job: Record<string, any>) => void, extraJobs: unknown
   const job = JSON.parse(JSON.stringify(bookshelfJob()))
   edit(job)
   return memoryStorage({
-    [JOBS_KEY]: JSON.stringify({ version: 1, jobs: [job, ...extraJobs] }),
+    [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [job, ...extraJobs] }),
     [CURRENT_JOB_KEY]: job.id,
   })
 }
@@ -138,7 +140,7 @@ describe('中身の検査と修復', () => {
   })
 
   it('仕事の配列が全部読めなくても、空の一覧で画面を出せる', () => {
-    const r = loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":1,"jobs":[{"id":1}]}' }), T1)
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[{"id":1}]}' }), T1)
     expect(r.status).toBe('repaired')
     expect(r.data.jobs).toEqual([])
   })
@@ -314,5 +316,123 @@ describe('読めなかったデータの退避', () => {
     const r = loadSaved(s, T1)
     expect(r.status === 'error' && !r.canSave).toBe(true)
     expect(calls).toBeLessThan(200)
+  })
+})
+
+/** 以前の版（第1版）の形の見本：設定に逃げが無く、棚板は W = 天地板.W・部材ごとの逃げ W1、メモ・チェックなし */
+function legacyBookshelf(): Record<string, any> {
+  const job = JSON.parse(JSON.stringify(bookshelfJob()))
+  delete job.settings.nige
+  for (const p of job.parts) {
+    delete p.memo
+    delete p.checks
+    p.clearance = {}
+  }
+  const shelf = job.parts.find((p: any) => p.name === '棚板')
+  shelf.expr.W = '天地板.W'
+  shelf.clearance = { W: 1 }
+  return job
+}
+
+describe('保存データ第2版と、以前の版からの移し替え', () => {
+  it('第1版の見本を読むと、棚板の式が 天地板.W - 逃げ1mm になり、仕上がり 863 のまま', () => {
+    const legacy = legacyBookshelf()
+    const v1 = JSON.stringify({ version: 1, jobs: [legacy] })
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: v1, [CURRENT_JOB_KEY]: legacy.id })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('ok')
+    const job = r.data.jobs[0]!
+    expect(r.data.currentJobId).toBe(legacy.id)
+    expect(job.settings.nige).toEqual(defaultSettings().nige)
+    const shelf = job.parts.find((p) => p.name === '棚板')!
+    expect(shelf.expr.W).toBe('天地板.W - {n:nige-1}')
+    expect(shelf).not.toHaveProperty('clearance')
+    expect(shelf.memo).toBe('')
+    expect(shelf.checks).toEqual({ finished: false, cut: false })
+    const dims = computeDimensions(job)
+    expect(dims.errors).toEqual([])
+    expect(dims.parts.find((d) => d.name === '棚板')!.finished).toEqual({ W: 863, H: 18, D: 380 })
+    // 見本と同じ寸法になる
+    const strip = (j: typeof job) => computeDimensions(j).parts.map((d) => [d.name, d.finished, d.cutSize])
+    expect(strip(job)).toEqual(strip(bookshelfJob()))
+
+    // 保存すると第2版に書かれ、第1版は元のまま残る
+    expect(saveSaved(s, r.data)).toEqual({ ok: true })
+    expect(s.map.get(LEGACY_JOBS_KEY)).toBe(v1)
+    expect(JSON.parse(s.map.get(JOBS_KEY)!).version).toBe(2)
+    const again = loadSaved(s, T1)
+    expect(again.status).toBe('ok')
+    expect(again.data).toEqual(r.data)
+  })
+
+  it('第2版があれば第1版は読まない', () => {
+    const s = memoryStorage({
+      [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [] }),
+      [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacyBookshelf()] }),
+    })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('ok')
+    expect(r.data.jobs).toEqual([])
+  })
+
+  it('第1版が壊れていてもエラーの印で返し、第1版は書き換えない', () => {
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: '{' })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('error')
+    expect(s.map.get(LEGACY_JOBS_KEY)).toBe('{')
+  })
+
+  it('第2版の見本を保存して読み込むと同じ内容に戻る（逃げ・メモ・チェックも）', () => {
+    const s = memoryStorage()
+    const job = bookshelfJob()
+    job.parts[1]!.memo = '穴あけ'
+    job.parts[1]!.checks = { finished: true, cut: false }
+    job.settings.nige.push({ id: 'nige-x', value: 2 })
+    saveSaved(s, { jobs: [job], currentJobId: job.id })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('ok')
+    expect(r.data.jobs[0]).toEqual(job)
+  })
+
+  it('逃げの値が 0・負・重複しているもの、id が重複しているものは外して repaired で読む', () => {
+    const r = loadSaved(
+      storedWith((j) => {
+        j.settings.nige = [
+          { id: 'nige-0.5', value: 0.5 },
+          { id: 'a', value: 0 },
+          { id: 'b', value: -1 },
+          { id: 'c', value: 0.5 },
+          { id: 'nige-0.5', value: 3 },
+          { id: '', value: 4 },
+          { id: 'nige-1', value: 1 },
+        ]
+      }),
+      T1,
+    )
+    expect(r.status).toBe('repaired')
+    expect(r.data.jobs[0]!.settings.nige).toEqual(defaultSettings().nige)
+  })
+
+  it('第2版で逃げ・メモ・チェックが無ければ初期値にして repaired で読む', () => {
+    const r = loadSaved(
+      storedWith((j) => {
+        delete j.settings.nige
+        delete j.parts[0].memo
+        j.parts[1].checks = 'x'
+      }),
+      T1,
+    )
+    expect(r.status).toBe('repaired')
+    const job = r.data.jobs[0]!
+    expect(job.settings.nige).toEqual(defaultSettings().nige)
+    expect(job.parts[0]!.memo).toBe('')
+    expect(job.parts[1]!.checks).toEqual({ finished: false, cut: false })
+  })
+
+  it('第2版に部材ごとの逃げが残っていても、移し替えて寸法が変わらない', () => {
+    const r = loadSaved(storedWith((j) => Object.assign(j, legacyBookshelf(), { settings: bookshelfJob().settings })), T1)
+    const job = r.data.jobs[0]!
+    expect(job.parts.find((p) => p.name === '棚板')!.expr.W).toBe('天地板.W - {n:nige-1}')
+    expect(computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(863)
   })
 })

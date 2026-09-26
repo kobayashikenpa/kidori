@@ -1,6 +1,7 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
 import { defaultNige, defaultSettings } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
+import { migrateClearance, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -11,20 +12,25 @@ import {
   type CutMode,
   type Job,
   type Nige,
-  type Part,
   type PartGrain,
-  type Settings,
 } from '../engine/types'
+import { newId } from './jobs'
 
-export const JOBS_KEY = 'kidori.jobs.v1'
+/** 保存データ第2版のキー（{ version: 2, jobs }） */
+export const JOBS_KEY = 'kidori.jobs.v2'
+/**
+ * 以前の版（第1版）のキー。第2版が無いときだけ読み、移し替えて第2版に書く。
+ * 移し替えがうまくいかなかったときの控えとして、消さず・書き換えない
+ */
+export const LEGACY_JOBS_KEY = 'kidori.jobs.v1'
 export const CURRENT_JOB_KEY = 'kidori.currentJobId'
 /**
- * 読めなかった保存データを退避しておくキーの頭。実際のキーは「頭.日時」（例：kidori.jobs.v1.broken.2026-09-25T10:00:00.000Z）。
+ * 読めなかった保存データを退避しておくキーの頭。実際のキーは「頭.日時」（例：kidori.jobs.v2.broken.2026-09-25T10:00:00.000Z）。
  * 前の退避を上書きしないよう毎回別のキーにし、新しいものから MAX_BACKUPS 個だけ残す
  */
-export const BROKEN_BACKUP_KEY = 'kidori.jobs.v1.broken'
+export const BROKEN_BACKUP_KEY = 'kidori.jobs.v2.broken'
 /** 退避したキーの一覧（古い順） */
-export const BROKEN_BACKUP_INDEX_KEY = 'kidori.jobs.v1.broken.index'
+export const BROKEN_BACKUP_INDEX_KEY = 'kidori.jobs.v2.broken.index'
 export const MAX_BACKUPS = 3
 /** 退避キーがぶつかったときに、別のキーを試す回数の上限 */
 const MAX_KEY_TRIES = 100
@@ -81,6 +87,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 interface Fixes {
   count: number
+  /**
+   * 読んでいるデータの版。第1版には逃げ・メモ・チェックが無いのが当たり前なので、無くても直した数に数えない
+   */
+  version: 1 | 2
 }
 
 const isNonNegative = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -97,25 +107,54 @@ function pick<T>(v: unknown, ok: (x: unknown) => x is T, fallback: T, fx: Fixes)
   return fallback
 }
 
-function sanitizeSettings(v: unknown, fx: Fixes): Settings {
+/** 設定。逃げは第1版で無ければ undefined のまま（移し替えで初期の逃げを入れる） */
+function sanitizeSettings(v: unknown, fx: Fixes): LegacyJob['settings'] {
   if (!isRecord(v)) {
     fx.count++
-    return defaultSettings()
+    const d = defaultSettings()
+    return fx.version === 1 ? { ...d, nige: undefined } : d
   }
   return {
     kerf: pick(v.kerf, isNonNegative, DEFAULT_SETTINGS.kerf, fx),
     trim: pick(v.trim, isNonNegative, DEFAULT_SETTINGS.trim, fx),
     allowance: pick(v.allowance, isNonNegative, DEFAULT_SETTINGS.allowance, fx),
     cutMode: pick(v.cutMode, (x): x is CutMode => CUT_MODES.includes(x as CutMode), DEFAULT_SETTINGS.cutMode, fx),
-    // 保存データ第2版の検査と修復は S-05 で作る。ここでは読めなければ初期値にするだけ
-    nige: sanitizeNige(v.nige),
+    nige: sanitizeNige(v.nige, fx),
   }
 }
 
-/** 逃げ（仮）。配列で、id と 0 より大きい値がそろっているものだけ残す。配列でなければ初期値 */
-function sanitizeNige(v: unknown): Nige[] {
-  if (!Array.isArray(v)) return defaultNige()
-  return v.filter((x): x is Nige => isRecord(x) && isId(x.id) && isPositive(x.value)).map((x) => ({ id: x.id, value: x.value }))
+/**
+ * 逃げ。配列でなければ初期値（第1版で無いときは undefined にして、移し替えで初期値を入れる）。
+ * id が空・前の逃げと同じ、値が 0 以下・数でない・前の逃げと同じ寸法（小数第1位で比較）のものは外す
+ */
+function sanitizeNige(v: unknown, fx: Fixes): Nige[] | undefined {
+  if (v === undefined && fx.version === 1) return undefined
+  if (!Array.isArray(v)) {
+    fx.count++
+    return defaultNige()
+  }
+  const out: Nige[] = []
+  for (const x of v) {
+    const good =
+      isRecord(x) &&
+      isId(x.id) &&
+      isPositive(x.value) &&
+      !out.some((n) => n.id === x.id || eq1(n.value, x.value as number))
+    if (good) out.push({ id: x.id as string, value: x.value as number })
+    else fx.count++
+  }
+  return out
+}
+
+/** 以前の版の部材ごとの逃げ。数の入っている軸だけ残す（移し替えで式に移す） */
+function sanitizeClearance(v: unknown): LegacyPart['clearance'] {
+  if (!isRecord(v)) return undefined
+  const out: Partial<Record<Axis, number>> = {}
+  for (const a of AXES) {
+    const x = v[a]
+    if (typeof x === 'number' && Number.isFinite(x)) out[a] = x
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /** 板。材料名・厚み・大きさが読めない板は外す（null） */
@@ -147,7 +186,7 @@ function sanitizeExpr(v: unknown, fx: Fixes): Record<Axis, string> {
 }
 
 /** 部材。id・名前が読めない部材は外す（null）。ほかの値は初期値に直す */
-function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Part | null {
+function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): LegacyPart | null {
   if (!isRecord(v) || !isId(v.id) || typeof v.name !== 'string') return null
   const boardId =
     v.boardId === null || v.boardId === undefined
@@ -155,6 +194,11 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Par
       : typeof v.boardId === 'string' && boardIds.has(v.boardId)
         ? v.boardId
         : (fx.count++, null)
+  const v2 = fx.version === 2
+  const memo = typeof v.memo === 'string' ? v.memo : (v2 && fx.count++, '')
+  const checkOk = isRecord(v.checks) && typeof v.checks.finished === 'boolean' && typeof v.checks.cut === 'boolean'
+  if (v2 && !checkOk) fx.count++
+  const clearance = sanitizeClearance(v.clearance)
   return {
     id: v.id,
     name: v.name.trim(),
@@ -163,17 +207,18 @@ function sanitizePart(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Par
     thicknessAxis: v.thicknessAxis === null ? null : pick(v.thicknessAxis, isAxis, null, fx),
     quantity: pick(v.quantity, (x): x is number => Number.isInteger(x) && (x as number) >= 0, 1, fx),
     grain: pick(v.grain, (x): x is PartGrain => x === 'any' || isAxis(x), 'any', fx),
-    memo: typeof v.memo === 'string' ? v.memo : '',
+    memo,
     checks: {
       finished: isRecord(v.checks) && v.checks.finished === true,
       cut: isRecord(v.checks) && v.checks.cut === true,
     },
     allowance: v.allowance === null || v.allowance === undefined ? null : pick(v.allowance, isNonNegative, null, fx),
+    ...(clearance ? { clearance } : {}),
   }
 }
 
-/** 仕事。id が読めない仕事は外す（null） */
-function sanitizeJob(v: unknown, fx: Fixes): Job | null {
+/** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
+function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
   const name = typeof v.name === 'string' && v.name.trim() ? v.name.trim() : (fx.count++, '名前のない仕事')
 
@@ -188,7 +233,7 @@ function sanitizeJob(v: unknown, fx: Fixes): Job | null {
   }
 
   const boardIds = new Set(boards.map((b) => b.id))
-  const parts: Part[] = []
+  const parts: LegacyPart[] = []
   if (!Array.isArray(v.parts)) fx.count++
   for (const raw of Array.isArray(v.parts) ? v.parts : []) {
     const p = sanitizePart(raw, boardIds, fx)
@@ -217,27 +262,30 @@ function sanitizeJob(v: unknown, fx: Fixes): Job | null {
   }
 }
 
-/** 仕事の一覧を検査し、読めるものだけを返す。fixes は直した・外した数 */
-export function sanitizeJobs(list: readonly unknown[]): { jobs: Job[]; fixes: number } {
-  const fx: Fixes = { count: 0 }
+/**
+ * 仕事の一覧を検査し、読めるものだけを返す。fixes は直した・外した数。
+ * 以前の版の部材ごとの逃げは migrateClearance で設定の逃げ＋式に移す（第2版に古い形が混ざっていても同じ。寸法は変わらない）
+ */
+export function sanitizeJobs(list: readonly unknown[], version: 1 | 2 = 2): { jobs: Job[]; fixes: number } {
+  const fx: Fixes = { count: 0, version }
   const jobs: Job[] = []
   for (const raw of list) {
-    const job = sanitizeJob(raw, fx)
-    if (!job || jobs.some((j) => j.id === job.id)) fx.count++
-    else jobs.push(job)
+    const legacy = sanitizeJob(raw, fx)
+    if (!legacy || jobs.some((j) => j.id === legacy.id)) fx.count++
+    else jobs.push(migrateClearance(legacy, () => newId('nige')))
   }
   return { jobs, fixes: fx.count }
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
-function parseJobList(raw: string): unknown[] | null {
+function parseJobList(raw: string, version: 1 | 2): unknown[] | null {
   let data: unknown
   try {
     data = JSON.parse(raw)
   } catch {
     return null
   }
-  if (!isRecord(data) || data.version !== 1 || !Array.isArray(data.jobs)) return null
+  if (!isRecord(data) || data.version !== version || !Array.isArray(data.jobs)) return null
   return data.jobs
 }
 
@@ -298,14 +346,20 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   let raw: string | null
   let current: string | null
+  let version: 1 | 2 = 2
   try {
     raw = storage.getItem(JOBS_KEY)
     current = storage.getItem(CURRENT_JOB_KEY)
+    if (raw === null) {
+      // 第2版が無ければ、以前の版を読んで移し替える（以前の版のキーはそのまま残す）
+      raw = storage.getItem(LEGACY_JOBS_KEY)
+      version = 1
+    }
   } catch {
     return { status: 'error', data: { ...EMPTY }, message: '保存データを読めませんでした', canSave: false }
   }
   if (raw === null) return { status: 'empty', data: { jobs: [], currentJobId: null } }
-  const list = parseJobList(raw)
+  const list = parseJobList(raw, version)
   if (!list) {
     const canSave = backupBroken(storage, raw, now)
     return {
@@ -317,7 +371,14 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
       canSave,
     }
   }
-  const { jobs, fixes } = sanitizeJobs(list)
+  let sanitized: { jobs: Job[]; fixes: number }
+  try {
+    sanitized = sanitizeJobs(list, version)
+  } catch {
+    // 移し替えの途中で思わぬ形に出会っても、画面は出す。元のデータは残し、保存もしない
+    return { status: 'error', data: { ...EMPTY }, message: '保存データを読めませんでした', canSave: false }
+  }
+  const { jobs, fixes } = sanitized
   const currentJobId = current !== null && jobs.some((j) => j.id === current) ? current : null
   if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId } }
   const canSave = backupBroken(storage, raw, now)
@@ -331,11 +392,11 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
 }
 
-/** 仕事の一覧と開いている仕事の id を書く。例外は投げない */
+/** 仕事の一覧と開いている仕事の id を第2版のキーに書く。以前の版のキーには触らない。例外は投げない */
 export function saveSaved(storage: KeyValueStorage | null, data: SavedData): SaveResult {
   if (!storage) return { ok: false, message: 'この端末では保存が使えません' }
   try {
-    storage.setItem(JOBS_KEY, JSON.stringify({ version: 1, jobs: data.jobs }))
+    storage.setItem(JOBS_KEY, JSON.stringify({ version: 2, jobs: data.jobs }))
     storage.setItem(CURRENT_JOB_KEY, data.currentJobId ?? '')
     return { ok: true }
   } catch {
