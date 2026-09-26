@@ -29,7 +29,7 @@ export function SettingsScreen() {
   return (
     <section>
       <h2>設定</h2>
-      <p className="lead">この仕事だけに効く設定です。</p>
+      <p className="lead">この仕事だけに効く設定です。新しい仕事には、最後に変えた設定が引き継がれます。</p>
       {error && <p className="msg err">{error}</p>}
 
       <div className="card stack">

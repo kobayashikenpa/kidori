@@ -1,8 +1,8 @@
 // 仕事の画面（U-02）。保存した仕事の一覧・新しく作る・開く・名前を変える・コピー・削除（画面の中で確認）
 import { useState, type FormEvent } from 'react'
-import { bookshelfJob } from '../../engine/fixtures/bookshelf'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
+import { SAMPLE_JOB_ID, sampleFromTemplate } from '../../store/sample'
 import { useJobStore } from '../../store/useJobStore'
 
 /** 更新日の表示（例：2026/9/25 14:05）。読めない日時なら空 */
@@ -32,8 +32,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
   const [notice, setNotice] = useState<string | null>(null)
 
   const jobs = [...state.jobs].sort(byUpdatedDesc)
-  const sampleId = bookshelfJob().id
-  const hasSample = state.jobs.some((j) => j.id === sampleId)
+  const hasSample = state.jobs.some((j) => j.id === SAMPLE_JOB_ID)
 
   const reset = () => {
     setMode(null)
@@ -48,7 +47,8 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
 
   const create = (e: FormEvent) => {
     e.preventDefault()
-    const job = createJob(newName)
+    // 最後に使った設定（ひな形）を引き継ぐ
+    const job = createJob(newName, state.template)
     addJob(job, true)
     setCreating(false)
     setNewName('')
@@ -56,8 +56,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
   }
 
   const addSample = () => {
-    const t = new Date().toISOString()
-    addJob({ ...bookshelfJob(), createdAt: t, updatedAt: t }, true)
+    addJob(sampleFromTemplate(state.template), true)
     onOpened()
   }
 
