@@ -4,7 +4,6 @@ import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
 import {
-  partsUsingBoardThickness,
   partsUsingBoardThicknesses,
   partsUsingNige,
   partsUsingNiges,
@@ -229,23 +228,6 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
   return job.parts.filter((p) => p.boardId === boardId).map((p) => p.name)
 }
 
-/**
- * 板を消す前の確認用：その板から切る部材の名前と、式でその板の厚みを使っている部材（「部材名（軸）」）
- */
-export function boardUsages(job: Job, boardId: string): { cutFrom: string[]; thickness: string[] } {
-  return { cutFrom: partsUsingBoard(job, boardId), thickness: partsUsingBoardThickness(job, boardId) }
-}
-
-/** 板を消す。使っていた部材の板は未設定（null）になる。確認は画面側で partsUsingBoard を使って行う */
-export function removeBoard(job: Job, boardId: string): OpResult {
-  if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
-  return ok({
-    ...job,
-    boards: job.boards.filter((b) => b.id !== boardId),
-    parts: job.parts.map((p) => (p.boardId === boardId ? { ...p, boardId: null } : p)),
-  })
-}
-
 /** 板をまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材の板は未設定（null）になる */
 export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   const ids = new Set(boardIds.filter((id) => job.boards.some((b) => b.id === id)))
@@ -306,12 +288,6 @@ export function updateNige(job: Job, nigeId: string, value: number): OpResult {
 /** 逃げを使っている部材（「部材名（軸）」）。消す前の確認に使う */
 export function nigeUsages(job: Job, nigeId: string): string[] {
   return partsUsingNige(job, nigeId)
-}
-
-/** 逃げを消す。式の {n:…} は残り、その寸法は「削除した逃げを使っています」になる。確認は画面側で nigeUsages を使う */
-export function removeNige(job: Job, nigeId: string): OpResult {
-  if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
-  return ok({ ...job, settings: { ...job.settings, nige: job.settings.nige.filter((n) => n.id !== nigeId) } })
 }
 
 /** 逃げをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る */

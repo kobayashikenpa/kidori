@@ -8,8 +8,8 @@ import {
   createJob,
   newBoard,
   newPart,
-  removeBoard,
-  removeNige,
+  removeBoards,
+  removeNiges,
   renameJob,
   updateBoard,
   updatePart,
@@ -188,7 +188,7 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
     expect(shown).toBeDefined()
     // 画面に出ている id（React の状態）と手元の状態の id が同じ
     expect(currentJob(f.latest())!.settings.nige.find((n) => n.value === 2)!.id).toBe(shown.id)
-    const r = f.run((j) => removeNige(j, shown.id))
+    const r = f.run((j) => removeNiges(j, [shown.id]))
     expect(r.ok).toBe(true)
     expect(currentJob(f.react())!.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
 
@@ -203,7 +203,7 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
   it('初期の 逃げ0.5 も同じく消せる', () => {
     const f = storeFlow(stateWithSample())
     const id = currentJob(f.react())!.settings.nige.find((n) => n.value === 0.5)!.id
-    expect(f.run((j) => removeNige(j, id)).ok).toBe(true)
+    expect(f.run((j) => removeNiges(j, [id])).ok).toBe(true)
     expect(currentJob(f.react())!.settings.nige.map((n) => n.value)).toEqual([1])
   })
 
@@ -212,7 +212,7 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
     const before = currentJob(f.react())!.boards.length
     expect(f.run((j) => addBoard(j, newBoard({ material: 'シナ', thickness: 21 }))).ok).toBe(true)
     const shown = currentJob(f.react())!.boards.find((b) => b.material === 'シナ' && b.thickness === 21)!
-    expect(f.run((j) => removeBoard(j, shown.id)).ok).toBe(true)
+    expect(f.run((j) => removeBoards(j, [shown.id])).ok).toBe(true)
     expect(currentJob(f.react())!.boards).toHaveLength(before)
 
     const st = memoryStorage()
@@ -247,7 +247,7 @@ describe('最後に使った設定（ひな形）の更新（第1.3版 S-08）',
     const s1 = runOp(s0, 'job-a', (j) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })), t)
     expect(s1.template.materials.map((m) => m.material)).toContain('シナ')
     const id = currentJob(s1)!.boards.find((b) => b.material === 'シナ')!.id
-    const s2 = runOp(s1, 'job-a', (j) => removeBoard(j, id), t)
+    const s2 = runOp(s1, 'job-a', (j) => removeBoards(j, [id]), t)
     expect(s2.template.materials.map((m) => m.material)).not.toContain('シナ')
   })
 

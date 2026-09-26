@@ -7,7 +7,6 @@ import {
   addBoard,
   addNige,
   addPart,
-  boardUsages,
   boardsUsages,
   boardLabel,
   copyJob,
@@ -20,9 +19,7 @@ import {
   nigesUsages,
   partsReferencing,
   partsUsingBoard,
-  removeBoard,
   removeBoards,
-  removeNige,
   removeNiges,
   removePart,
   renameJob,
@@ -140,7 +137,7 @@ describe('板', () => {
   })
 
   it('板を削除すると、使っていた部材の板が未設定になる', () => {
-    const job = unwrap(removeBoard(bookshelfJob(), LUMBER_18_ID))
+    const job = unwrap(removeBoards(bookshelfJob(), [LUMBER_18_ID]))
     expect(job.boards.map((b) => b.id)).toEqual([VENEER_4_ID])
     const unset = job.parts.filter((p) => p.boardId === null).map((p) => p.name)
     expect(unset).toEqual(['全体', '側板', '天地板', '棚板'])
@@ -302,7 +299,7 @@ describe('逃げ', () => {
   })
 
   it('逃げを消すと、使っていた寸法は missingNige になる', () => {
-    const job = unwrap(removeNige(bookshelfJob(), 'nige-1'))
+    const job = unwrap(removeNiges(bookshelfJob(), ['nige-1']))
     expect(job.settings.nige.map((n) => n.id)).toEqual(['nige-0.5'])
     const errs = computeDimensions(job).errors
     expect(errs.some((e) => e.kind === 'missingNige')).toBe(true)
@@ -321,7 +318,7 @@ describe('材料の厚みを式で使うとき', () => {
   it('削除の確認用に、その板から切る部材と、式で厚みを使っている部材を返す', () => {
     const job = jobWithThickness()
     const rawan4 = job.boards.find((b) => b.thickness === 4)!
-    expect(boardUsages(job, rawan4.id)).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
+    expect(boardsUsages(job, [rawan4.id])).toEqual({ cutFrom: ['底板'], thickness: ['底板（W）'] })
   })
 
   it('コピー先の式は新しい板の id を指し、同じ寸法になる', () => {

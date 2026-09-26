@@ -303,7 +303,7 @@ export interface PackingResult {
 - `jobs.ts` の操作（純粋関数）
   - `createJob(name)`：初期設定・板なし・部材なしの仕事
   - `addPart / updatePart / removePart`：名前の重複は拒否。名前を変えたとき、ほかの部材の式の参照もつけ替える（暫定）
-  - `addBoard / updateBoard / removeBoard`：材料名＋厚みの重複は拒否。`partsUsingBoard(job, boardId)` で使っている部材名を返し、画面で確認してから削除。削除したら該当部材の `boardId` は null
+  - `addBoard / updateBoard / removeBoards`：材料名＋厚みの重複は拒否。`partsUsingBoard(job, boardId)` で使っている部材名を返し、画面で確認してから削除。削除したら該当部材の `boardId` は null
 - id は `crypto.randomUUID()`
 
 ## 5. 画面（`src/ui`）
@@ -606,7 +606,7 @@ src/ui/
 ### 8.2 材料のサイズを持つ場所 — 決定（planner）
 
 - **サイズは今までどおり `Board` の `sizeKind`・`width`・`length`・`grain` に持つ。** 材料は仕事ごとなので、`job.boards` の各材料のサイズが「この仕事で、この材料に選んだサイズ」になる（仕様書 9「選んだサイズは仕事に保存する」）
-  - 別の表（`Job.sheetSizes` など）を作らないのは、材料の削除・仕事のコピー（id のつけ替え）・保存の検査でずれが起きないようにするため。`copyJob`・`removeBoard`・`sanitizeBoard` は今のまま使える
+  - 別の表（`Job.sheetSizes` など）を作らないのは、材料の削除・仕事のコピー（id のつけ替え）・保存の検査でずれが起きないようにするため。`copyJob`・`removeBoards`・`sanitizeBoard` は今のまま使える
   - 以前のデータのサイズ（例：見本の 3×6、以前の材料の 4×8、自由入力）は、そのまま「その仕事で選んだサイズ」になる。**保存データの移し替えは要らず、`kidori.jobs.v2` の版も上げない**（形が変わらないので、上げると壊す危険だけが増える）
 - 「材料＝材料名＋厚み」は画面と引き継ぎの側で守る
   - 設定の画面（`BoardEditor`）は材料名と厚みだけを入れる。サイズと木目の方向は木取りの画面（`SheetSizePicker`）で選ぶ
@@ -722,7 +722,7 @@ export function pickBetterSize(options: [SizeSummary, SizeSummary]): { fewer; hi
 - 上に追加の入力（逃げ：寸法だけ。材料：材料名と厚み。厚みは空欄から始め、入れないと追加できない＝U-26 のまま）
 - その下に1行ずつ：名前（逃げ1／シナランバー 18mm）と「使っている部材」、「編集」「削除」のボタン（高さ 44px 以上）
   - 編集：その行がその場で編集の形になる（逃げは寸法、材料は材料名・厚み）
-  - 削除：その行がその場で確認の形になる。使っている部材があれば部材名を示す（逃げ：`nigeUsages`、材料：`boardUsages`）
+  - 削除：その行がその場で確認の形になる。使っている部材があれば部材名を示す（逃げ：`nigeUsages`・`nigesUsages`、材料：`boardsUsages`。1つだけ消すときも `removeNiges`・`removeBoards` に id 1つで渡す）
 - 「選んで削除」ボタンで選ぶモードにする。各行にチェック（44px 以上）、「選んだ◯件を削除」「やめる」。押すと、選んだものを使っている部材をまとめて示して確認し、`removeNiges(job, ids)`／`removeBoards(job, ids)` で1回の操作で消す（1回の保存・1回のひな形の更新）
 - 部品は「行の中身・追加の入力・編集の入力」を受け取るだけにし、逃げ・材料の操作（store の関数）は呼ぶ側で渡す
 

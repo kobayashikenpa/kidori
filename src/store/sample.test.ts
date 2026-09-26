@@ -3,7 +3,7 @@ import { orderedBoards } from '../engine/boards'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import type { Job } from '../engine/types'
-import { addBoard, addNige, boardLabel, createJob, newBoard, removeNige, updateSettings, type OpResult } from './jobs'
+import { addBoard, addNige, boardLabel, createJob, newBoard, removeNiges, updateSettings, type OpResult } from './jobs'
 import { SAMPLE_JOB_ID, sampleFromTemplate } from './sample'
 import { defaultTemplate, templateOf } from './template'
 
@@ -54,8 +54,8 @@ describe('sampleFromTemplate（見本をひな形から作る）', () => {
 
   it('逃げ1 を消して逃げ2 だけのひな形：逃げ1 が足され、棚板の仕上がり W が 863', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
-    a = must(removeNige(a, 'nige-0.5'))
-    a = must(removeNige(a, 'nige-1'))
+    a = must(removeNiges(a, ['nige-0.5']))
+    a = must(removeNiges(a, ['nige-1']))
     a = must(addNige(a, 2, 'nige-2'))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings.nige.map((n) => n.value)).toEqual([2, 1])
@@ -64,7 +64,7 @@ describe('sampleFromTemplate（見本をひな形から作る）', () => {
 
   it('寸法 1 の逃げが別の id でも、その逃げを使う', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
-    a = must(removeNige(a, 'nige-1'))
+    a = must(removeNiges(a, ['nige-1']))
     a = must(addNige(a, 1, 'nige-mine'))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings.nige.map((n) => n.id)).toEqual(['nige-0.5', 'nige-mine'])
