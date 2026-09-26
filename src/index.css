@@ -440,6 +440,38 @@ select.input {
   flex: 1;
 }
 
+/* ---------- 逃げの一覧 ---------- */
+.nige-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.nige-info {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nige-info .board-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+.nige-actions {
+  display: flex;
+  gap: 6px;
+}
+.nige-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.nige-add .unit-input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---------- 板の一覧 ---------- */
 .board-item {
   display: flex;

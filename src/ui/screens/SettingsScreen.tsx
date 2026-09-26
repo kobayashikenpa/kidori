@@ -1,9 +1,10 @@
-// 設定の画面：刃厚・耳落とし・切り代・切り方、板の一覧、配色
+// 設定の画面：刃厚・耳落とし・切り代・切り方、逃げの一覧、板の一覧、配色
 import { useState } from 'react'
 import type { Board, Settings } from '../../engine/types'
 import { boardLabel, boardSizeLabel, partsUsingBoard, updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { BoardEditor } from '../components/BoardEditor'
+import { NigeEditor } from '../components/NigeEditor'
 import { NumberField } from '../components/NumberField'
 import { Segmented } from '../components/Segmented'
 import { CUT_MODE_HINT, CUT_MODES } from '../cutModes'
@@ -72,6 +73,9 @@ export function SettingsScreen() {
           <span className="hint">{CUT_MODE_HINT[s.cutMode]}</span>
         </div>
       </div>
+
+      <h3>逃げ</h3>
+      <NigeEditor />
 
       <h3>材料</h3>
       <div className="stack">

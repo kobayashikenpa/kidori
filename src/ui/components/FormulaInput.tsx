@@ -89,7 +89,9 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
         {units.length === 0 && !open && <span className="expr-placeholder">押して数値または式を入力</span>}
         {units.map((u, i) => {
           const gap = i > 0 && u.start > units[i - 1].end
-          const chip = CHIP_CLASS[u.kind]
+          // 削除した材料・逃げは赤で見せる（直す場所が分かるように）
+          const missing = (u.kind === 'thickness' || u.kind === 'nige') && labels[i].startsWith('（削除した')
+          const chip = missing ? 'chip-bad' : CHIP_CLASS[u.kind]
           return (
             <span key={`${u.start}-${u.text}`} className="expr-unit-wrap">
               {open && cursor === i && <span className="caret" aria-hidden="true" />}
