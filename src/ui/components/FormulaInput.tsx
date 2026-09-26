@@ -1,6 +1,8 @@
 // W・H・D の式の入力。<input> を使わず式を表示する枠にするので、押しても電話のキーボードは出ない。
-// 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・数字・演算子のボタンだけで式を作る
+// 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・材料の厚み・逃げ・数字・演算子のボタンだけで式を作る。
+// 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4mm・逃げ1mm と見せる
 import { useState, type PointerEvent } from 'react'
+import { boardTokenLabel, nigeName } from '../../engine/defaults'
 import { formulaLabels } from '../../engine/formula/display'
 import { formulaUnits } from '../../engine/formula/units'
 import { AXES, type Axis, type DimensionError, type Job, type Part } from '../../engine/types'
@@ -124,6 +126,42 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
                   </button>
                 ))
               })}
+            </div>
+          )}
+          {job.boards.length > 0 && (
+            <div className="pad-group">
+              <span className="pad-title">材料の厚み</span>
+              <div className="pad-chips">
+                {job.boards.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className="pad-chip chip-thick"
+                    onPointerDown={keep}
+                    onClick={() => put(`{t:${b.id}}`)}
+                  >
+                    {boardTokenLabel(b)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {job.settings.nige.length > 0 && (
+            <div className="pad-group">
+              <span className="pad-title">逃げ</span>
+              <div className="pad-chips">
+                {job.settings.nige.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className="pad-chip chip-nige"
+                    onPointerDown={keep}
+                    onClick={() => put(`{n:${n.id}}`)}
+                  >
+                    {nigeName(n.value)}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <div className="pad-keys">

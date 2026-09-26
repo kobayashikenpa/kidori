@@ -698,6 +698,34 @@ select.input {
   font-size: 11px;
   color: var(--muted);
 }
+.pad-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pad-title {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pad-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.pad-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-height: 44px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-width: 0;
+}
 .pad-keys {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
