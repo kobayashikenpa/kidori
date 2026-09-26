@@ -1,6 +1,6 @@
 // フラッシュ（第1.5版。仕様書 4）：厚み＝芯材＋表面材の厚み×枚数、厚みの内訳、使っているものの一覧
 import { boardTokenLabel } from './defaults'
-import { round1 } from './round'
+import { eq1, exactText, round1 } from './round'
 import type { Board, Flush, Job, Part } from './types'
 
 /** 芯材＋Σ 表面材の厚み×枚数。見つからない材料の表面材は数えない */
@@ -93,4 +93,41 @@ export function flushesEmptiedByBoards(job: Pick<Job, 'boards' | 'flushes'>, boa
 export function partsUsingFlushes(job: Pick<Job, 'parts'>, flushIds: readonly string[]): string[] {
   const ids = new Set(flushIds)
   return job.parts.filter((p) => p.flushId !== undefined && ids.has(p.flushId)).map((p) => p.name)
+}
+
+// ---------- 新しく登録するときの初期値（第1.6版。仕様書 4） ----------
+
+const nameKey = (s: string) => s.trim().normalize('NFKC')
+
+/** 新しいフラッシュの表面材の初期値：メラミン1 ×2・ラワン4 ×2（この順）。その材料（材料名＋厚み）が無ければ入れない */
+export function defaultFlushFaces(job: Pick<Job, 'boards'>): Flush['faces'] {
+  const spec: [string, number][] = [
+    ['メラミン', 1],
+    ['ラワン', 4],
+  ]
+  return spec.flatMap(([material, thickness]) => {
+    const b = job.boards.find((x) => nameKey(x.material) === material && eq1(x.thickness, thickness))
+    return b ? [{ boardId: b.id, count: 2 }] : []
+  })
+}
+
+const AUTO_PREFIX = 'フラッシュ'
+
+/**
+ * 自動の名前＝「フラッシュ＋合計の厚み」（例：フラッシュ25、フラッシュ25.5。厚みは丸めない）。
+ * taken（ほかのフラッシュの名前）と重なるときは フラッシュ25-2・-3 … にする
+ */
+export function autoFlushName(total: number, taken: readonly string[] = []): string {
+  const base = `${AUTO_PREFIX}${exactText(total)}`
+  const used = new Set(taken.map(nameKey))
+  if (!used.has(base)) return base
+  for (let i = 2; ; i++) {
+    const n = `${base}-${i}`
+    if (!used.has(n)) return n
+  }
+}
+
+/** 自動の名前の形（フラッシュ25・フラッシュ25.5・フラッシュ25-2）か。編集のとき、名前を芯材・表面材についていかせるかの判定に使う */
+export function isAutoFlushName(name: string): boolean {
+  return /^フラッシュ\d+(\.\d+)?(-\d+)?$/.test(nameKey(name))
 }
