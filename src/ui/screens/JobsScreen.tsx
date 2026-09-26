@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
-import { SAMPLE_JOB_ID, sampleFromTemplate } from '../../store/sample'
+import { sampleFromTemplate } from '../../store/sample'
 import { useJobStore } from '../../store/useJobStore'
 
 /** 更新日の表示（例：2026/9/25 14:05）。読めない日時なら空 */
@@ -32,7 +32,6 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
   const [notice, setNotice] = useState<string | null>(null)
 
   const jobs = [...state.jobs].sort(byUpdatedDesc)
-  const hasSample = state.jobs.some((j) => j.id === SAMPLE_JOB_ID)
 
   const reset = () => {
     setMode(null)
@@ -236,14 +235,12 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
         })}
       </div>
 
-      {!hasSample && (
-        <div className="stack" style={{ marginTop: 24 }}>
-          <button type="button" className="btn ghost" onClick={addSample}>
-            見本（本棚 W900）を追加
-          </button>
-          <p className="lead" style={{ margin: 0 }}>使い方を試したいときだけ使ってください（なくても困りません。あとで削除できます）</p>
-        </div>
-      )}
+      <div className="stack" style={{ marginTop: 24 }}>
+        <button type="button" className="btn ghost" onClick={addSample}>
+          見本（本棚 W900）を追加
+        </button>
+        <p className="lead" style={{ margin: 0 }}>使い方を試したいときだけ使ってください（今の設定で作ります。なくても困りません。あとで削除できます）</p>
+      </div>
     </section>
   )
 }
