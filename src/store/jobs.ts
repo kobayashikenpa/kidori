@@ -1,5 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { defaultSheet, nigeName, type BoardSheet } from '../engine/defaults'
+import { defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -260,28 +260,33 @@ export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpRes
 
 // ---------- 逃げ ----------
 
-/** 逃げの寸法の検査。0 より大きく、ほかの逃げと同じ寸法（小数第1位で比較）でないこと */
-function validateNige(job: Job, value: number, selfId: string | null): string | null {
-  if (!(Number.isFinite(value) && round1(value) > 0)) return '逃げの寸法は 0 より大きい数を入れてください'
-  const dup = job.settings.nige.find((n) => n.id !== selfId && eq1(n.value, value))
-  if (dup) return `${nigeName(dup.value)} はすでにあります`
+/**
+ * 調整寸法（逃げ）の検査。名前が空でなく、寸法が 0 より大きく、
+ * ほかの調整寸法と名前も寸法（小数第1位で比較）も同じでないこと
+ */
+function validateNige(job: Job, name: string, value: number, selfId: string | null): string | null {
+  if (!name.trim()) return '名前を入れてください'
+  if (!(Number.isFinite(value) && round1(value) > 0)) return '寸法は 0 より大きい数を入れてください'
+  const key = nigeNameKey(name)
+  const dup = job.settings.nige.find((n) => n.id !== selfId && nigeNameKey(n.name) === key && eq1(n.value, value))
+  if (dup) return `${nigeName(dup)} はすでにあります`
   return null
 }
 
-/** 逃げを足す。入れるのは寸法だけ（名前は「逃げ＋寸法」）。同じ寸法の逃げがあれば断る */
-export function addNige(job: Job, value: number, id: string = newId('nige')): OpResult {
-  const err = validateNige(job, value, null)
+/** 調整寸法（逃げ）を足す。名前（前後の空白は外す）と寸法。名前と寸法の両方が同じものがあれば断る */
+export function addNige(job: Job, name: string, value: number, id: string = newId('nige')): OpResult {
+  const err = validateNige(job, name, value, null)
   if (err) return fail(err)
-  const nige: Nige = { id, value: round1(value) }
+  const nige: Nige = { id, name: name.trim(), value: round1(value) }
   return ok({ ...job, settings: { ...job.settings, nige: [...job.settings.nige, nige] } })
 }
 
-/** 逃げの寸法を変える。式は id で参照しているので、値がついてくる。同じ寸法のほかの逃げがあれば断る */
-export function updateNige(job: Job, nigeId: string, value: number): OpResult {
+/** 調整寸法（逃げ）の名前と寸法を変える。式は id で参照しているので、表示と値がついてくる。名前と寸法の両方が同じほかの項目があれば断る */
+export function updateNige(job: Job, nigeId: string, name: string, value: number): OpResult {
   if (!job.settings.nige.some((n) => n.id === nigeId)) return fail('逃げが見つかりません')
-  const err = validateNige(job, value, nigeId)
+  const err = validateNige(job, name, value, nigeId)
   if (err) return fail(err)
-  const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, value: round1(value) } : n))
+  const nige = job.settings.nige.map((n) => (n.id === nigeId ? { ...n, name: name.trim(), value: round1(value) } : n))
   return ok({ ...job, settings: { ...job.settings, nige } })
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { orderedBoards } from '../engine/boards'
 import type { Job } from '../engine/types'
-import { addBoard, addNige, boardLabel, createJob, newBoard, updateBoard, updateSettings, type OpResult } from './jobs'
+import { addBoard, addNige, boardLabel, createJob, newBoard, updateBoard, updateNige, updateSettings, type OpResult } from './jobs'
 import { defaultTemplate, sameTemplate, templateOf } from './template'
 
 const NOW = new Date('2026-09-26T10:00:00.000Z')
@@ -20,8 +20,8 @@ describe('defaultTemplate（初めて使うときの設定）', () => {
       allowance: 10,
       cutMode: 'vertical',
       nige: [
-        { id: 'nige-0.5', value: 0.5 },
-        { id: 'nige-1', value: 1 },
+        { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+        { id: 'nige-1', name: '逃げ', value: 1 },
       ],
     })
     expect(t.materials).toEqual([
@@ -46,7 +46,7 @@ describe('templateOf と createJob（設定の引き継ぎ）', () => {
   function changedJob(): Job {
     let job = createJob('A', undefined, NOW, 'job-a')
     job = must(updateSettings(job, { allowance: 5 }))
-    job = must(addNige(job, 2, 'nige-x'))
+    job = must(addNige(job, '逃げ', 2, 'nige-x'))
     job = must(addBoard(job, newBoard({ material: 'シナ', thickness: 18, sizeKind: 'saburoku' })))
     return job
   }
@@ -96,5 +96,13 @@ describe('templateOf と createJob（設定の引き継ぎ）', () => {
     const b = must(updateBoard(a, shina.id, { sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }))
     expect(sameTemplate(templateOf(a), templateOf(b))).toBe(true)
     expect(sameTemplate(templateOf(a), templateOf(must(updateSettings(a, { kerf: 2 }))))).toBe(false)
+  })
+
+  it('調整寸法の名前だけ変えてもひな形は変わり、写した仕事に名前が引き継がれる', () => {
+    const a = changedJob()
+    const b = must(updateNige(a, 'nige-x', 'ほぞ', 2))
+    expect(sameTemplate(templateOf(a), templateOf(b))).toBe(false)
+    const c = createJob('C', templateOf(b), NOW, 'job-c')
+    expect(c.settings.nige.at(-1)).toEqual({ id: 'nige-x', name: 'ほぞ', value: 2 })
   })
 })

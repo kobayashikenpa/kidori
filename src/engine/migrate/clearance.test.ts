@@ -32,8 +32,8 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
   it('見本：設定の逃げは 0.5・1 の2つ、棚板 W は 天地板.W - {n:nige-1}、仕上がり 863 のまま', () => {
     const job = migrateClearance(legacyBookshelf(), ids())
     expect(job.settings.nige).toEqual([
-      { id: 'nige-0.5', value: 0.5 },
-      { id: 'nige-1', value: 1 },
+      { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+      { id: 'nige-1', name: '逃げ', value: 1 },
     ])
     expect(find(job, '棚板').expr.W).toBe('天地板.W - {n:nige-1}')
     const d = computeDimensions(job)
@@ -53,9 +53,9 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     tenchi.clearance = { W: 2 }
     const job = migrateClearance(legacy, ids())
     expect(job.settings.nige).toEqual([
-      { id: 'nige-0.5', value: 0.5 },
-      { id: 'nige-1', value: 1 },
-      { id: 'nige-new-1', value: 2 },
+      { id: 'nige-0.5', name: '逃げ', value: 0.5 },
+      { id: 'nige-1', name: '逃げ', value: 1 },
+      { id: 'nige-new-1', name: '逃げ', value: 2 },
     ])
     expect(find(job, '天地板').expr.W).toBe('(全体.W - 36) - {n:nige-new-1}')
     expect(computeDimensions(job).parts.find((p) => p.name === '天地板')!.finished!.W).toBe(862)
@@ -86,7 +86,7 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     ;(find(legacy, '背板')).clearance = { W: 0.3, H: 0.25 }
     const { job, changed } = migrateClearanceChecked(legacy, ids())
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 0.25, 0.3])
-    expect(nigeName(0.25)).toBe('逃げ0.25')
+    expect(nigeName({ name: '逃げ', value: 0.25 })).toBe('逃げ0.25')
     const d = computeDimensions(job)
     expect(d.parts.find((p) => p.name === '側板')!.finished!.D).toBe(399.75)
     expect(d.parts.find((p) => p.name === '背板')!.finished).toEqual({ W: 899.7, H: 1799.75, D: 4 })
@@ -133,9 +133,9 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
 
   it('設定にすでに逃げがあれば、それを使う（初期の逃げを足さない）', () => {
     const legacy = legacyBookshelf()
-    legacy.settings.nige = [{ id: 'my-1', value: 1 }]
+    legacy.settings.nige = [{ id: 'my-1', name: '逃げ', value: 1 }]
     const job = migrateClearance(legacy, ids())
-    expect(job.settings.nige).toEqual([{ id: 'my-1', value: 1 }])
+    expect(job.settings.nige).toEqual([{ id: 'my-1', name: '逃げ', value: 1 }])
     expect(find(job, '棚板').expr.W).toBe('天地板.W - {n:my-1}')
   })
 

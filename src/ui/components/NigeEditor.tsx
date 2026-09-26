@@ -1,6 +1,6 @@
 // 設定の画面の逃げの一覧：寸法を入れるだけで追加（名前は「逃げ＋寸法」）、寸法の変更、削除（使っている部材を示して確認）
 import { useState } from 'react'
-import { nigeName } from '../../engine/defaults'
+import { NIGE_DEFAULT_NAME, nigeName } from '../../engine/defaults'
 import type { Nige } from '../../engine/types'
 import { addNige, nigesUsages, nigeUsages, removeNiges, updateNige } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -27,7 +27,7 @@ export function NigeEditor() {
         kind="逃げ"
         idPrefix="nige"
         items={job.settings.nige}
-        label={(n) => nigeName(n.value)}
+        label={(n) => nigeName(n)}
         usage={(n) => {
           const users = nigeUsages(job, n.id)
           return users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'
@@ -58,7 +58,7 @@ function NigeAdd() {
   const add = () => {
     const v = readValue(text)
     if (typeof v === 'string') return setError(v)
-    const r = run((j) => addNige(j, v))
+    const r = run((j) => addNige(j, NIGE_DEFAULT_NAME, v))
     if (r.ok) {
       setText('')
       setError(null)
@@ -108,7 +108,7 @@ function NigeEdit({ nige, done }: { nige: Nige; done: () => void }) {
   const save = () => {
     const v = readValue(text)
     if (typeof v === 'string') return setError(v)
-    const r = run((j) => updateNige(j, nige.id, v))
+    const r = run((j) => updateNige(j, nige.id, nige.name, v))
     if (r.ok) {
       closeKeyboard()
       done()
@@ -117,7 +117,7 @@ function NigeEdit({ nige, done }: { nige: Nige; done: () => void }) {
   return (
     <>
       <label className="label" htmlFor={`nige-edit-${nige.id}`}>
-        {nigeName(nige.value)} の寸法
+        {nigeName(nige)} の寸法
       </label>
       <span className="unit-input">
         <input

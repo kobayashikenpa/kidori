@@ -183,7 +183,7 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
 
   it('逃げ2 を足してすぐ消すと、画面に出ている逃げが消え、保存して読み込んでも戻らない', () => {
     const f = storeFlow(stateWithSample())
-    expect(f.run((j) => addNige(j, 2)).ok).toBe(true)
+    expect(f.run((j) => addNige(j, '逃げ', 2)).ok).toBe(true)
     const shown = currentJob(f.react())!.settings.nige.find((n) => n.value === 2)!
     expect(shown).toBeDefined()
     // 画面に出ている id（React の状態）と手元の状態の id が同じ
@@ -236,7 +236,7 @@ describe('最後に使った設定（ひな形）の更新（第1.3版 S-08）',
     expect(s0.template).toEqual(defaultTemplate())
     const s1 = runOp(s0, 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
     expect(s1.template.settings.kerf).toBe(2)
-    const s2 = runOp(s1, 'job-b', (j) => addNige(j, 3, 'nige-3'), t)
+    const s2 = runOp(s1, 'job-b', (j) => addNige(j, '逃げ', 3, 'nige-3'), t)
     expect(s2.template.settings.kerf).toBe(3)
     expect(s2.template.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 3])
     expect(s2.template).toEqual(templateOf(s2.jobs.find((j) => j.id === 'job-b')!))

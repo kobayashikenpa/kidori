@@ -736,3 +736,32 @@ export function pickBetterSize(options: [SizeSummary, SizeSummary]): { fewer; hi
   2. 追加の欄が画面の下にあり、確認の形の「削除する」がキーボードの陰に隠れる
   3. 上の2つでなければ、保存の側（再読み込みで戻る）を疑う：`canSave` が false（保存を止めている）で、消しても再読み込みで元に戻っている
 - 直し方の方針：開発サーバー（幅375px）と iPhone で再現してから直す。追加したら追加の欄の注目を外す（キーボードを閉じる）、確認の形を見える位置へスクロールし見た目をはっきり変える。store の側にも「足した逃げを消すと一覧から消え、保存して読み込んでも戻らない」テストを足す。第1.3版の共通の一覧（8.8）でも同じ直し方を使う
+
+## 9. 第1.4版の変更（調整寸法・厚みの自動表示・寸法表の内訳）
+
+仕様書 4（調整寸法）・5.3・9（寸法表の表示の切り替え）に対応する。内部の名前（`Nige`・`settings.nige`・式の `{n:id}`）は変えない。
+
+### 9.1 調整寸法（`Nige.name`）
+
+- `Nige` に `name: string`（空でない）を足す。表示名は `nigeName(n)`＝名前＋寸法（逃げ1、ほぞ15。mm なし）。式の表示（`unitLabel`・`formulaLabels`）もこれを使う
+- 同じものの判定は、名前（`nigeNameKey`：前後の空白を外し全角・半角をそろえる）と寸法の両方。`addNige(job, name, value, id?)`・`updateNige(job, id, name, value)`
+- 保存データの版は上げない。`sanitizeNige` で、名前の無い項目（第1.3版まで）は名前「逃げ」にする（直した数に数えない）。名前が文字でない・空なら「逃げ」に直す（直した数に数える）
+- 以前の版の部材ごとの逃げの移し替え・見本の 逃げ1 は、名前「逃げ」の項目だけを探し、無ければ名前「逃げ」で足す
+
+### 9.2 寸法表の内訳（`dimensions/explain.ts`）
+
+```ts
+explainDimension(job, partId, axis): DimensionExplanation
+```
+
+- 式を左から順に、記号・数・参照（部材の寸法・材料の厚み・調整寸法。表示名と値）の並びにして、計算結果と一緒に返す。例：天地板.W → `全体.W 900 − 側板.W 18 × 2 = 864`
+- 値は `computeDimensions` と同じ計算（仕上がり寸法）。式や参照先にエラーがあれば `result` は null で、その寸法のエラーを返す
+
+### 9.3 厚みの寸法の自動表示（`dimensions/thickness.ts`）
+
+```ts
+thicknessChoice(part, board, finished): { autoAxis; ambiguous; showSelector }
+```
+
+- `autoAxis`：自動で選ぶ軸（手で選んだ軸は見ない。W→H→D で材料の厚みと同じ最初の軸）。`ambiguous`：材料の厚みと同じ値の軸が2つ以上。`showSelector`：`ambiguous` か、手で選んだ軸があるとき
+- 画面は `showSelector` が false なら「厚み：W（自動）」と表示だけにする

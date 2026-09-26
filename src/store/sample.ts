@@ -2,6 +2,7 @@
 import { BOARD_SIZES, type Board, type Job } from '../engine/types'
 import { bookshelfJob } from '../engine/fixtures/bookshelf'
 import { eq1 } from '../engine/round'
+import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { createJob, newId } from './jobs'
 import type { SettingsTemplate } from './template'
 
@@ -17,7 +18,7 @@ const sameName = (a: string, b: string) => a.trim().normalize('NFKC') === b.trim
  * ひな形から見本を作る。
  * - 設定の数値（刃厚・端切り・切り代・切り方）と材料はひな形のまま
  * - 見本の材料（シナランバー 18・シナベニヤ 4）は、同じ材料名＋厚みがあればそれを使い、無ければ最後に足す。どちらも 3×6 にする
- * - 見本の棚板が使う 逃げ1 は、寸法 1 の逃げがあればそれを使い、無ければ足す
+ * - 見本の棚板が使う 逃げ1 は、名前「逃げ」寸法 1 の調整寸法があればそれを使い、無ければ足す
  */
 export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
   const base = bookshelfJob()
@@ -41,10 +42,10 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
 
   // 逃げ1：あればその id、無ければ足す
   let nige = job.settings.nige
-  let nigeId = nige.find((n) => eq1(n.value, 1))?.id
+  let nigeId = nige.find((n) => n.name === NIGE_DEFAULT_NAME && eq1(n.value, 1))?.id
   if (nigeId === undefined) {
     nigeId = nige.some((n) => n.id === SAMPLE_NIGE_ID) ? newId('nige') : SAMPLE_NIGE_ID
-    nige = [...nige, { id: nigeId, value: 1 }]
+    nige = [...nige, { id: nigeId, name: NIGE_DEFAULT_NAME, value: 1 }]
   }
   const fixNige = (e: string) => e.split(`{n:${SAMPLE_NIGE_ID}}`).join(`{n:${nigeId}}`)
 

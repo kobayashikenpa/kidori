@@ -217,7 +217,7 @@ export function FormulaInput({ axis, value, onChange, job, boardId, parts, finis
                     onPointerDown={keep}
                     onClick={() => put(`{n:${n.id}}`)}
                   >
-                    {nigeName(n.value)}
+                    {nigeName(n)}
                   </button>
                 ))}
               </div>

@@ -2,11 +2,14 @@
 import { round1 } from './round'
 import { BOARD_SIZES, DEFAULT_SETTINGS, type Board, type Nige, type Settings } from './types'
 
+/** 調整寸法の初期の名前。以前の版の逃げ（名前が無い）もこの名前にする */
+export const NIGE_DEFAULT_NAME = '逃げ'
+
 /** 新しい仕事の逃げ：逃げ0.5・逃げ1。呼ぶたびに新しい配列。id は仕事の中で重複しなければよいので固定 */
 export function defaultNige(): Nige[] {
   return [
-    { id: 'nige-0.5', value: 0.5 },
-    { id: 'nige-1', value: 1 },
+    { id: 'nige-0.5', name: NIGE_DEFAULT_NAME, value: 0.5 },
+    { id: 'nige-1', name: NIGE_DEFAULT_NAME, value: 1 },
   ]
 }
 
@@ -50,11 +53,16 @@ function mm(v: number): string {
 }
 
 /**
- * 逃げの名前（例：逃げ0.5、逃げ1、逃げ0.25。「mm」は付けない。仕様書 4）。
- * 逃げは寸法そのものを式で引くので、名前も丸めない（0.25 を 0.3 と見せない）。浮動小数の誤差（0.1 + 0.2 など）だけ消す
+ * 調整寸法の表示名＝名前＋寸法（例：逃げ0.5、逃げ1、ほぞ15、逃げ0.25。「mm」は付けない。仕様書 4）。
+ * 寸法そのものを式で使うので、寸法は丸めない（0.25 を 0.3 と見せない）。浮動小数の誤差（0.1 + 0.2 など）だけ消す
  */
-export function nigeName(value: number): string {
-  return `逃げ${Number(value.toFixed(6))}`
+export function nigeName(nige: Pick<Nige, 'name' | 'value'>): string {
+  return `${nige.name}${Number(nige.value.toFixed(6))}`
+}
+
+/** 調整寸法の名前をそろえる（前後の空白を外し、全角・半角をそろえる）。同じものの判定に使う */
+export function nigeNameKey(name: string): string {
+  return name.trim().normalize('NFKC')
 }
 
 /** 式のボタン・式の中の材料の厚みの表示（例：ラワン4。「mm」は付けず、間に空白なし。仕様書 5.1） */

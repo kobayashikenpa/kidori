@@ -33,6 +33,14 @@ describe('unitLabel（単位の表示名）', () => {
     expect(formulaLabels('天地板.W - {n:nige-1}', job)).toEqual(['天地板.W', '−', '逃げ2'])
   })
 
+  it('調整寸法は名前＋寸法（ほぞ15）。名前を変えると表示もついてくる', () => {
+    const job = bookshelfJob()
+    job.settings.nige.push({ id: 'n-hozo', name: 'ほぞ', value: 15 })
+    expect(formulaLabels('棚板.D + {n:n-hozo}', job)).toEqual(['棚板.D', '+', 'ほぞ15'])
+    job.settings.nige[2].name = 'ホゾ'
+    expect(formulaLabels('{n:n-hozo}', job)).toEqual(['ホゾ15'])
+  })
+
   it('全角で書いた部材の参照・数字は半角にそろえて見せる', () => {
     expect(formulaLabels('全体．Ｗ－１', bookshelfJob())).toEqual(['全体.W', '−', '1'])
   })

@@ -58,7 +58,7 @@ function normalized(t: SettingsTemplate) {
       trim: s.trim,
       allowance: s.allowance,
       cutMode: s.cutMode,
-      nige: s.nige.map((n) => ({ id: n.id, value: n.value })),
+      nige: s.nige.map((n) => ({ id: n.id, name: n.name, value: n.value })),
     },
     materials: t.materials.map((m) => ({ material: m.material, thickness: m.thickness, builtIn: m.builtIn === true })),
   }
