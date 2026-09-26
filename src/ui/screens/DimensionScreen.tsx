@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { AXES, type Board, type Part, type PartChecks, type PartDimensions } from '../../engine/types'
-import { boardLabel, setPartChecks } from '../../store/jobs'
+import { boardLabel, setFlushCutCheck, setPartChecks } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { DimensionTable } from '../components/DimensionTable'
 import { Segmented } from '../components/Segmented'
@@ -40,9 +40,13 @@ export function DimensionScreen() {
       {view === 'table' ? (
         <>
           <p className="lead" style={{ margin: '8px 0' }}>
-            青の数字（仕上がり寸法）を押すと内訳が開きます。完了のチェックはカードで付けます（完了した寸法はグレー）。
+            青の数字（仕上がり寸法）を押すと内訳が開きます。完了のチェックはカードで付けます（完了した寸法はグレー）。フラッシュの部材は、表面材ごとの完了をこの表で付けます。
           </p>
-          <DimensionTable job={job} dims={dims.parts} />
+          <DimensionTable
+            job={job}
+            dims={dims.parts}
+            onFlushCheck={(partId, boardId, done) => run((j) => setFlushCutCheck(j, partId, boardId, done))}
+          />
         </>
       ) : (
         <div className="stack" style={{ marginTop: 10 }}>

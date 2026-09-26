@@ -5,16 +5,20 @@
 import { Fragment, useMemo, useState } from 'react'
 import { explainDimension, explanationText } from '../../engine/dimensions/explain'
 import { computeFinished } from '../../engine/dimensions/finished'
+import { flushBreakdown } from '../../engine/flush'
 import { AXES, type Axis, type Job, type PartDimensions } from '../../engine/types'
+import { flushThicknessText } from '../flushText'
 import { fmt } from '../format'
 
 interface Props {
   job: Job
   /** computeDimensions(job).parts（部材の並び順） */
   dims: readonly PartDimensions[]
+  /** フラッシュの部材の、表面材ごとの木取りの完了を変える（setFlushCutCheck） */
+  onFlushCheck: (partId: string, boardId: string, done: boolean) => void
 }
 
-export function DimensionTable({ job, dims }: Props) {
+export function DimensionTable({ job, dims, onFlushCheck }: Props) {
   const finished = useMemo(() => computeFinished(job), [job])
   // 開いている内訳（1つだけ）
   const [open, setOpen] = useState<{ partId: string; axis: Axis } | null>(null)
@@ -50,7 +54,11 @@ export function DimensionTable({ job, dims }: Props) {
             const d = dims[i]
             const cutting = p.quantity > 0
             const finDone = cutting && p.checks.finished
-            const cutDone = cutting && p.checks.cut
+            // フラッシュの部材：厚みの内訳と、表面材ごとの完了（全部の表面材が完了なら木取り寸法もグレー）
+            const flush = p.flushId !== undefined ? flushBreakdown(job, p.flushId) : null
+            const faceDone = (boardId: string) => p.checks.cutByBoard?.[boardId] === true
+            const cutDone =
+              cutting && (flush ? flush.faces.length > 0 && flush.faces.every((f) => faceDone(f.boardId)) : p.checks.cut)
             const mismatch = d.errors.some((e) => e.kind === 'thicknessMismatch')
             const ex = AXES.map((a) => explainDimension(job, p.id, a, finished))
             const openAxis = open?.partId === p.id ? open.axis : null
@@ -96,6 +104,39 @@ export function DimensionTable({ job, dims }: Props) {
                     )}
                   </td>
                 </tr>
+                {flush && (
+                  <tr className="dim-flush">
+                    <td colSpan={6}>
+                      <span className="dim-flush-head num">
+                        {p.name}：{flushThicknessText(flush)}
+                      </span>
+                      {cutting &&
+                        flush.faces.map((f) => {
+                          const on = faceDone(f.boardId)
+                          return (
+                            <button
+                              key={f.boardId}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={on}
+                              aria-label={`${p.name} の ${f.label} ${f.count * p.quantity}枚 の切り出し 完了`}
+                              className={`dim-face${on ? ' done' : ''}`}
+                              onClick={() => onFlushCheck(p.id, f.boardId, !on)}
+                            >
+                              <span className="dim-face-name">{f.label}</span>
+                              <span className="num">×{f.count * p.quantity}枚</span>
+                              <span className="dim-face-check">
+                                <span className="check-box" aria-hidden="true">
+                                  {on ? '✓' : ''}
+                                </span>
+                                完了
+                              </span>
+                            </button>
+                          )
+                        })}
+                    </td>
+                  </tr>
+                )}
                 {openAxis && (
                   <tr className="dim-explain">
                     <td colSpan={6}>

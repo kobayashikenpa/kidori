@@ -128,10 +128,10 @@ export function KidoriScreen() {
       {result.done.length > 0 && (
         <div className="card kd-issues done">
           <h4>木取り済み（計算から除いています）</h4>
-          <p className="band-note">寸法表で木取りの「完了」をつけた部材です。完了を外すと、木取りに戻ります。</p>
+          <p className="band-note">寸法表で木取りの「完了」をつけた部材です（フラッシュの部材は表面材ごと）。完了を外すと、木取りに戻ります。</p>
           <ul>
             {result.done.map((d) => (
-              <li key={d.partId} className="num">
+              <li key={`${d.partId}-${d.boardId ?? ''}`} className="num">
                 <b>{d.name}</b>（{doneBoardLabel(d.boardId)}）{d.quantity}枚
               </li>
             ))}
