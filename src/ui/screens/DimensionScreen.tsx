@@ -1,6 +1,6 @@
 // 寸法表の画面：部材ごとのカードで、①仕上がり寸法（青）と ②木取り寸法（橙）を別の段に分けて出す
 // 段ごとに「完了」のチェックがあり、チェックした段はグレーにする。メモもカードに出す
-// 「カード」「表（試作）」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
+// 「カード」「表」を切り替えられる（表は DimensionTable。選んだほうはこの端末に覚える）
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
 import { flushBreakdown } from '../../engine/flush'
@@ -31,7 +31,7 @@ export function DimensionScreen() {
         value={view}
         options={[
           { value: 'card', label: 'カード' },
-          { value: 'table', label: '表（試作）' },
+          { value: 'table', label: '表' },
         ]}
         onChange={(v) => {
           setView(v)
