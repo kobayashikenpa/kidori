@@ -447,6 +447,7 @@ export type DimensionErrorKind =
 - 削除する前に、使っている部材を示して確認する（仕様書 4・5.1）。一覧は `usages.ts` の関数で作る
   - `partsUsingNige(job, nigeId)`：式に `{n:id}` がある部材名と軸（例：`棚板（W）`）
   - `partsUsingBoardThickness(job, boardId)`：式に `{t:id}` がある部材名と軸
+  - `partsUsingNiges(job, nigeIds)`・`partsUsingBoardThicknesses(job, boardIds)`：まとめて削除する前の確認用。id のどれかを使っている部材を部材ごとに1つ（軸はまとめる）
   - 材料の削除の確認には、`partsUsingBoard`（その材料から切る部材）と `partsUsingBoardThickness` の両方を出す
 
 **仕事のコピー**：`copyJob` は板の id を新しくするので、式の `{t:古いid}` を `{t:新しいid}` につけ替える（`remapBoardIds(expr, map)`）。逃げの id は設定ごとそのまま写すので、つけ替えない

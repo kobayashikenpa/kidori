@@ -3,7 +3,13 @@ import { defaultSheet, nigeName, type BoardSheet } from '../engine/defaults'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
-import { partsUsingBoardThickness, partsUsingNige, remapBoardIds } from '../engine/formula/usages'
+import {
+  partsUsingBoardThickness,
+  partsUsingBoardThicknesses,
+  partsUsingNige,
+  partsUsingNiges,
+  remapBoardIds,
+} from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
 import { eq1, round1 } from '../engine/round'
 import {
@@ -251,28 +257,12 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   })
 }
 
-/**
- * 式で、指定した id のどれかを使っている部材を「部材名（軸）」でまとめる（部材の並び順・部材ごとに1つ）。
- * 1つの id ごとの判定は engine の関数（used）に任せ、軸ごとに当てて集める
- */
-function partsUsingAny(job: Job, ids: readonly string[], used: (job: Pick<Job, 'parts'>, id: string) => string[]): string[] {
-  const out: string[] = []
-  for (const p of job.parts) {
-    const axes = AXES.filter((a) => {
-      const probe = { parts: [{ ...p, expr: { W: p.expr[a], H: '', D: '' } }] }
-      return ids.some((id) => used(probe, id).length > 0)
-    })
-    if (axes.length > 0) out.push(`${p.name}（${axes.join('・')}）`)
-  }
-  return out
-}
-
 /** 板をまとめて消す前の確認用：その板のどれかから切る部材の名前（重ならない）と、式でそのどれかの厚みを使っている部材 */
 export function boardsUsages(job: Job, boardIds: readonly string[]): { cutFrom: string[]; thickness: string[] } {
   const ids = new Set(boardIds)
   return {
     cutFrom: job.parts.filter((p) => p.boardId !== null && ids.has(p.boardId)).map((p) => p.name),
-    thickness: partsUsingAny(job, boardIds, partsUsingBoardThickness),
+    thickness: partsUsingBoardThicknesses(job, boardIds),
   }
 }
 
@@ -333,7 +323,7 @@ export function removeNiges(job: Job, nigeIds: readonly string[]): OpResult {
 
 /** 逃げをまとめて消す前の確認用：式でそのどれかを使っている部材（例：［棚板（W）］） */
 export function nigesUsages(job: Job, nigeIds: readonly string[]): string[] {
-  return partsUsingAny(job, nigeIds, partsUsingNige)
+  return partsUsingNiges(job, nigeIds)
 }
 
 // ---------- 部材 ----------
