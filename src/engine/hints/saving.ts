@@ -1,4 +1,5 @@
-// 材料を減らせるときのお知らせ：切り代・端切りを1つずつ小さくして計算し直し、必要枚数が減る材料を知らせる。
+// 材料を減らせるときのお知らせ：切り代を優先して、今の値から 1mm ずつ小さくして 1mm まで・最後に 0.5mm で計算し直し、
+// 必要枚数が減る材料を、減る一番大きい値で知らせる。切り代で減らない材料だけ端切りを同じように試す。
 // 設定は変えない（知らせるだけ）
 import { computeDimensions } from '../dimensions'
 import { packJob } from '../packing'
@@ -12,16 +13,6 @@ export interface SavingHint {
   message: string
 }
 
-export interface SavingHintOptions {
-  /** 試す切り代（今の切り代より小さい値だけ試す）。初期値 0・5・10 */
-  allowanceCandidates?: readonly number[]
-  /** 試す端切り（今の端切りより小さい値だけ試す）。初期値 0 だけ（未決事項 19） */
-  trimCandidates?: readonly number[]
-}
-
-export const DEFAULT_ALLOWANCE_CANDIDATES: readonly number[] = [0, 5, 10]
-export const DEFAULT_TRIM_CANDIDATES: readonly number[] = [0]
-
 const KIND_LABEL = { allowance: '切り代', trim: '端切り' } as const
 
 function mm(v: number): string {
@@ -32,10 +23,20 @@ function pack(job: Job): PackingResult {
   return packJob(job, computeDimensions(job))
 }
 
-/** 今より小さい候補を、大きい値から（小さく変えるほうから）並べる。同じ値は1つ */
-function smallerValues(candidates: readonly number[], current: number): number[] {
-  const vs = [...new Set(candidates.map(round1))].filter((v) => v >= 0 && v < round1(current))
-  return vs.sort((a, b) => b - a)
+/** 試す値の最後（0mm は試さない） */
+export const SMALLEST_STEP = 0.5
+
+/**
+ * 試す値：今の値より小さい整数を大きい値から 1 まで（1mm 刻み）、最後に 0.5。0 は試さない。
+ * 今の値が整数なら 今−1 から、小数なら切り捨てた値から。今の値が 0.5 以下なら何も試さない
+ * （例：10 → 9…1, 0.5、7.5 → 7…1, 0.5、1 → 0.5、0.5 → なし）
+ */
+export function smallerSteps(current: number): number[] {
+  const c = round1(current)
+  const out: number[] = []
+  for (let v = Math.ceil(c) - 1; v >= 1; v--) out.push(v)
+  if (c > SMALLEST_STEP) out.push(SMALLEST_STEP)
+  return out
 }
 
 function messageOf(kind: 'allowance' | 'trim', value: number, materials: SavingHint['materials']): string {
@@ -59,34 +60,39 @@ function reduced(base: PackingResult, trial: PackingResult): SavingHint['materia
   return out
 }
 
-function sameMaterials(a: SavingHint['materials'], b: SavingHint['materials']): boolean {
-  return a.length === b.length && a.every((m, i) => m.boardId === b[i].boardId && m.from === b[i].from && m.to === b[i].to)
-}
-
 /**
- * 材料を減らせるときのお知らせ。切り代（仕事の切り代だけ。部材ごとの上書きはそのまま）と端切りを
- * 1つずつ変えて計算し直す（組み合わせは試さない）。切り方・刃厚は今のまま。
- * 同じ種類で、より小さく変える候補が同じ材料・枚数になるなら、そのお知らせは出さない。
- * 並びは 切り代（大きい値から）→ 端切り（大きい値から）。仕事のデータは書き換えない
+ * 材料を減らせるときのお知らせ（仕様書 9）。仕事のデータは書き換えない。切り方・刃厚は今のまま。
+ * 1. 切り代（仕事の切り代だけ。部材ごとの上書きはそのまま）を `smallerSteps` の値で大きい値から計算し直す。
+ *    材料ごとに、必要枚数が減る一番大きい値でお知らせを出す（その値で減る材料をすべて入れる）。
+ *    まだ出していない材料が減らない値ではお知らせを出さない
+ * 2. 切り代で減らなかった材料だけ、端切りを同じように試す（お知らせにはその材料だけ入れる）
+ * 切り代と端切りを同時に変える組み合わせは試さない。並びは 切り代（大きい値から）→ 端切り（大きい値から）。
+ * 計算は最大で 1 +（切り代の試す数）+（端切りの試す数）回。2枚以上使う材料がすべて出たら、そこで打ち切る
  */
-export function findSavingHints(job: Job, options: SavingHintOptions = {}): SavingHint[] {
-  const allowances = smallerValues(options.allowanceCandidates ?? DEFAULT_ALLOWANCE_CANDIDATES, job.settings.allowance)
-  const trims = smallerValues(options.trimCandidates ?? DEFAULT_TRIM_CANDIDATES, job.settings.trim)
+export function findSavingHints(job: Job): SavingHint[] {
+  const allowances = smallerSteps(job.settings.allowance)
+  const trims = smallerSteps(job.settings.trim)
   if (allowances.length === 0 && trims.length === 0) return []
 
   const base = pack(job)
+  // 1枚以下の材料はそれ以上減らない
+  const reducible = base.materials.filter((m) => m.sheetCount >= 2).map((m) => m.boardId)
+  if (reducible.length === 0) return []
+
   const hints: SavingHint[] = []
-  const tryKind = (kind: 'allowance' | 'trim', values: number[]) => {
-    let shown: SavingHint['materials'] | null = null
+  const shown = new Set<string>()
+  const tryKind = (kind: 'allowance' | 'trim', values: number[], only: (boardId: string) => boolean) => {
     for (const value of values) {
+      if (reducible.every((id) => shown.has(id))) return
       const trial = pack({ ...job, settings: { ...job.settings, [kind]: value } })
-      const materials = reduced(base, trial)
-      if (materials.length === 0 || (shown && sameMaterials(shown, materials))) continue
-      shown = materials
+      const materials = reduced(base, trial).filter((m) => only(m.boardId))
+      if (!materials.some((m) => !shown.has(m.boardId))) continue
+      for (const m of materials) shown.add(m.boardId)
       hints.push({ change: { kind, value }, materials, message: messageOf(kind, value, materials) })
     }
   }
-  tryKind('allowance', allowances)
-  tryKind('trim', trims)
+  tryKind('allowance', allowances, () => true)
+  const byAllowance = new Set(shown)
+  tryKind('trim', trims, (id) => !byAllowance.has(id))
   return hints
 }
