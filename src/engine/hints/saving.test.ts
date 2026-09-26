@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultBoards, defaultSettings } from '../defaults'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part, Settings } from '../types'
 import { findSavingHints, smallerSteps } from './saving'
@@ -209,5 +210,86 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
     const t = performance.now()
     findSavingHints(job)
     expect(performance.now() - t).toBeLessThan(3000)
+  })
+})
+
+describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変えたとき（不具合の報告の確かめ）', () => {
+  // 新しい仕事と同じ材料（メラミン1・ラワン2.5・ラワン4・ラワン5.5、4×8 1220×2440）
+  // 縦切り優先：妻手方向に使える幅は 1220 - 5 = 1215。
+  // W602 を2枚並べると (602 + 切り代) × 2 + 3。切り代5 は 1217 で入らず、4 なら 1215 ぴったり
+  let seq = 0
+  const newId = (prefix: string) => `${prefix}-${++seq}`
+
+  function newJobWith(settings: Partial<Settings>, parts: Partial<Part>[]): Job {
+    seq = 0
+    const boards = defaultBoards(newId)
+    const lauan4 = boards[2].id
+    return {
+      id: 'job-1',
+      name: '棚',
+      settings: { ...defaultSettings(), ...settings },
+      boards,
+      parts: parts.map((p, i) => ({
+        id: `p${i + 1}`,
+        name: `背板${i + 1}`,
+        boardId: lauan4,
+        expr: { W: '602', H: '1200', D: '4' },
+        thicknessAxis: null,
+        quantity: 4,
+        grain: 'H',
+        memo: '',
+        checks: { finished: false, cut: false },
+        allowance: null,
+        ...p,
+      })),
+      createdAt: '',
+      updatedAt: '',
+    }
+  }
+
+  const HINT_4 = '切り代を 4mm にすると、ラワン 4mm が 1 枚減ります（2枚 → 1枚）'
+
+  it.each(['vertical', 'horizontal', 'auto'] as const)('切り代5（%s）なら 4mm のお知らせが出る', (cutMode) => {
+    const hints = findSavingHints(newJobWith({ allowance: 5, cutMode }, [{}]))
+    expect(hints.map((h) => h.message)).toEqual([HINT_4])
+  })
+
+  it('切り代0 では切り代のお知らせは出ない。同じ仕事で切り代を 5 に変えると、すぐに 4mm のお知らせになる', () => {
+    const at0 = newJobWith({ allowance: 0 }, [{}])
+    expect(findSavingHints(at0).filter((h) => h.change.kind === 'allowance')).toEqual([])
+    // 設定の画面で切り代を変えたときと同じく、設定だけ新しくした仕事を渡す
+    const at5 = { ...at0, settings: { ...at0.settings, allowance: 5 } }
+    expect(findSavingHints(at5).map((h) => h.message)).toEqual([HINT_4])
+    // もう一度 0 に戻すと、また出ない（前の結果を覚えていない）
+    expect(findSavingHints(at0).filter((h) => h.change.kind === 'allowance')).toEqual([])
+  })
+
+  it('部材の切り代が空欄なら仕事の切り代を使う。部材の切り代に 5 を入れた部材は、仕事の切り代を下げても変わらない', () => {
+    expect(findSavingHints(newJobWith({ allowance: 5 }, [{ allowance: null }])).map((h) => h.message)).toEqual([HINT_4])
+    // 切り代のお知らせは出ず、端切り（607+3+607=1217 ≤ 1220 - 3）のお知らせだけになる
+    const fixed = findSavingHints(newJobWith({ allowance: 5 }, [{ allowance: 5 }]))
+    expect(fixed.map((h) => h.change)).toEqual([{ kind: 'trim', value: 3 }])
+    // 部材の切り代 5・仕事の切り代 10 でも同じ（仕事の切り代は使われていない）
+    expect(findSavingHints(newJobWith({ allowance: 10 }, [{ allowance: 5 }]))).toEqual(fixed)
+  })
+
+  it('仕事の切り代10・部材の切り代は空欄：10 から下げていき、一番大きい 4mm を出す', () => {
+    const hints = findSavingHints(newJobWith({ allowance: 10 }, [{}]))
+    expect(hints.map((h) => h.message)).toEqual([HINT_4])
+  })
+
+  it('材料が複数あり、ほかの材料（ラワン 5.5）が減らなくても、減る材料だけを知らせる', () => {
+    const job = newJobWith({ allowance: 5, cutMode: 'auto' }, [{}])
+    // ラワン 5.5 の部材：1枚で 2枚必要（W1215 は 1215 ぴったりに1枚。2枚目は入らない）
+    job.parts.push({
+      ...job.parts[0],
+      id: 'p2',
+      name: '底板',
+      boardId: job.boards[3].id,
+      expr: { W: '1210', H: '2000', D: '5.5' },
+      quantity: 2,
+    })
+    const hints = findSavingHints(job)
+    expect(hints.map((h) => h.message)).toEqual([HINT_4])
   })
 })
