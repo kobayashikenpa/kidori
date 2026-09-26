@@ -2,7 +2,6 @@
 // 枠を押すとボタンの並びが開き、カーソルが末尾に来る。部材の寸法・材料の厚み・逃げ・数字・演算子のボタンだけで式を作る。
 // 材料の厚みは {t:材料のid}、逃げは {n:逃げのid} として式に入れ、画面では ラワン4・逃げ1 と見せる（「mm」は付けない）
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { orderedBoards } from '../../engine/boards'
 import { boardTokenLabel, nigeName } from '../../engine/defaults'
 import { formulaLabels } from '../../engine/formula/display'
 import { formulaUnits } from '../../engine/formula/units'
@@ -54,6 +53,8 @@ interface Props {
   onChange: (v: string) => void
   /** 表示名（ラワン4・逃げ1 など）を作るための材料と設定 */
   job: Pick<Job, 'boards' | 'settings'>
+  /** 編集中の部材で選んでいる材料の id。厚みのボタンはこの材料の1つだけ出す（null なら出さない） */
+  boardId: string | null
   /** 参照ボタンに出す部材（編集中の部材自身は除く） */
   parts: Part[]
   /** 参照ボタンに添える、部材ごとの仕上がり寸法 */
@@ -75,10 +76,12 @@ const CHIP_CLASS: Partial<Record<string, string>> = {
   bad: 'chip-bad',
 }
 
-export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
+export function FormulaInput({ axis, value, onChange, job, boardId, parts, finishedOf, finished, errors, open, onOpenChange }: Props) {
   const id = `expr-${axis}`
   const units = formulaUnits(value)
   const labels = formulaLabels(value, job)
+  // 厚みのボタンは、この部材で選んでいる材料だけ（式にある別の材料の厚みは、表示と計算はそのまま）
+  const selectedBoard = job.boards.find((b) => b.id === boardId) ?? null
   // カーソル＝単位の番号（0〜単位の数）
   const [cursorRaw, setCursor] = useState(units.length)
   const cursor = Math.min(cursorRaw, units.length)
@@ -184,11 +187,11 @@ export function FormulaInput({ axis, value, onChange, job, parts, finishedOf, fi
               })}
             </div>
           )}
-          {job.boards.length > 0 && (
+          {selectedBoard && (
             <div className="pad-group">
               <span className="pad-title">材料の厚み</span>
               <div className="pad-chips">
-                {orderedBoards(job).map((b) => (
+                {[selectedBoard].map((b) => (
                   <button
                     key={b.id}
                     type="button"
