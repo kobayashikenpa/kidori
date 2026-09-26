@@ -9,10 +9,15 @@ import {
   JOBS_KEY,
   LEGACY_JOBS_KEY,
   MAX_BACKUPS,
+  TEMPLATE_KEY,
   loadSaved,
+  loadTemplate,
   saveSaved,
+  saveTemplate,
   type KeyValueStorage,
 } from './storage'
+import { addBoard, addNige, createJob, newBoard, updateSettings } from './jobs'
+import { defaultTemplate, templateOf } from './template'
 
 function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { map: Map<string, string> } {
   const map = new Map(Object.entries(init))
@@ -489,3 +494,82 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
   })
 })
 
+
+describe('最後に使った設定（ひな形）の保存と読み込み（第1.3版 S-08）', () => {
+  function changedTemplate() {
+    let job = createJob('A', undefined, new Date('2026-09-26T00:00:00Z'), 'job-a')
+    const steps = [
+      (j: typeof job) => updateSettings(j, { kerf: 2, allowance: 5, cutMode: 'auto' }),
+      (j: typeof job) => addNige(j, 2, 'nige-2'),
+      (j: typeof job) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })),
+    ]
+    for (const step of steps) {
+      const r = step(job)
+      if (!r.ok) throw new Error(r.message)
+      job = r.job
+    }
+    return templateOf(job)
+  }
+
+  it('保存して読み込むと同じ内容に戻り、kidori.jobs.v2 には触らない', () => {
+    const st = memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[]}' })
+    const t = changedTemplate()
+    expect(saveTemplate(st, t).ok).toBe(true)
+    expect(st.map.get(JOBS_KEY)).toBe('{"version":2,"jobs":[]}')
+    expect(JSON.parse(st.map.get(TEMPLATE_KEY)!).version).toBe(1)
+    expect(loadTemplate(st, [])).toEqual(t)
+  })
+
+  it('キーが無く仕事も無ければ初期値', () => {
+    expect(loadTemplate(memoryStorage(), [])).toEqual(defaultTemplate())
+    expect(loadTemplate(null, [])).toEqual(defaultTemplate())
+  })
+
+  it('キーが無く仕事があれば、更新日が一番新しい仕事の設定', () => {
+    const old = createJob('古い', undefined, new Date('2026-01-01T00:00:00Z'), 'job-old')
+    const r = updateSettings(createJob('新しい', undefined, new Date('2026-09-01T00:00:00Z'), 'job-new'), { kerf: 4 })
+    if (!r.ok) throw new Error(r.message)
+    const t = loadTemplate(memoryStorage(), [r.job, old])
+    expect(t.settings.kerf).toBe(4)
+    expect(loadTemplate(memoryStorage(), [old, r.job]).settings.kerf).toBe(4)
+  })
+
+  it('壊れた JSON・違う版なら初期値。例外を投げない', () => {
+    expect(loadTemplate(memoryStorage({ [TEMPLATE_KEY]: '{"version":1,' }), [])).toEqual(defaultTemplate())
+    expect(loadTemplate(memoryStorage({ [TEMPLATE_KEY]: '{"version":9,"template":{}}' }), [])).toEqual(defaultTemplate())
+    const throwing: KeyValueStorage = {
+      getItem: () => {
+        throw new Error('x')
+      },
+      setItem: () => {
+        throw new Error('x')
+      },
+      removeItem: () => {},
+    }
+    expect(loadTemplate(throwing, [])).toEqual(defaultTemplate())
+    expect(saveTemplate(throwing, defaultTemplate()).ok).toBe(false)
+  })
+
+  it('おかしな値は直す（材料名が空・厚み 0 以下・重複は外す）', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      template: {
+        settings: { kerf: -1, trim: 5, allowance: 10, cutMode: 'vertical', nige: [{ id: 'nige-1', value: 1 }] },
+        materials: [
+          { material: 'シナ', thickness: 18 },
+          { material: ' シナ ', thickness: 18 },
+          { material: '', thickness: 4 },
+          { material: 'ラワン', thickness: 0 },
+          { material: 'ラワン', thickness: 4, builtIn: true },
+        ],
+      },
+    })
+    const t = loadTemplate(memoryStorage({ [TEMPLATE_KEY]: raw }), [])
+    expect(t.settings.kerf).toBe(3)
+    expect(t.settings.nige).toEqual([{ id: 'nige-1', value: 1 }])
+    expect(t.materials).toEqual([
+      { material: 'シナ', thickness: 18 },
+      { material: 'ラワン', thickness: 4, builtIn: true },
+    ])
+  })
+})

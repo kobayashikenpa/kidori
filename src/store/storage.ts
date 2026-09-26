@@ -15,6 +15,10 @@ import {
   type PartGrain,
 } from '../engine/types'
 import { newId } from './jobs'
+import { defaultTemplate, templateOf, type MaterialSpec, type SettingsTemplate } from './template'
+
+/** 最後に使った設定（ひな形）のキー（{ version: 1, template }） */
+export const TEMPLATE_KEY = 'kidori.lastSettings.v1'
 
 /** 保存データ第2版のキー（{ version: 2, jobs }） */
 export const JOBS_KEY = 'kidori.jobs.v2'
@@ -418,6 +422,67 @@ export function saveSaved(storage: KeyValueStorage | null, data: SavedData): Sav
   try {
     storage.setItem(JOBS_KEY, JSON.stringify({ version: 2, jobs: data.jobs }))
     storage.setItem(CURRENT_JOB_KEY, data.currentJobId ?? '')
+    return { ok: true }
+  } catch {
+    return { ok: false, message: '保存できませんでした（端末の空き容量などを確かめてください）' }
+  }
+}
+
+// ---------- 最後に使った設定（ひな形） ----------
+
+/** ひな形の材料。材料名が空・厚みが 0 以下・材料名＋厚みの重複は外す */
+function sanitizeMaterials(v: unknown): MaterialSpec[] {
+  if (!Array.isArray(v)) return defaultTemplate().materials
+  const out: MaterialSpec[] = []
+  for (const m of v) {
+    if (!isRecord(m) || typeof m.material !== 'string' || !isPositive(m.thickness)) continue
+    const material = m.material.trim()
+    if (!material) continue
+    const thickness = m.thickness
+    const key = material.normalize('NFKC')
+    if (out.some((x) => x.material.normalize('NFKC') === key && eq1(x.thickness, thickness))) continue
+    const spec: MaterialSpec = { material, thickness }
+    if (m.builtIn === true) spec.builtIn = true
+    out.push(spec)
+  }
+  return out
+}
+
+/**
+ * 最後に使った設定を読む。例外は投げない。
+ * キーが無ければ：仕事が無ければ初期値、仕事があれば更新日が一番新しい仕事の設定。読めなければ初期値
+ */
+export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job[]): SettingsTemplate {
+  let raw: string | null = null
+  try {
+    raw = storage ? storage.getItem(TEMPLATE_KEY) : null
+  } catch {
+    return defaultTemplate()
+  }
+  if (raw === null) {
+    if (jobs.length === 0) return defaultTemplate()
+    const newest = jobs.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a))
+    return templateOf(newest)
+  }
+  try {
+    const data: unknown = JSON.parse(raw)
+    if (!isRecord(data) || data.version !== 1 || !isRecord(data.template)) return defaultTemplate()
+    const fx: Fixes = { count: 0, version: 2 }
+    const settings = sanitizeSettings(data.template.settings, fx)
+    return {
+      settings: { ...settings, nige: settings.nige ?? defaultNige() },
+      materials: sanitizeMaterials(data.template.materials),
+    }
+  } catch {
+    return defaultTemplate()
+  }
+}
+
+/** 最後に使った設定を書く。例外は投げない */
+export function saveTemplate(storage: KeyValueStorage | null, template: SettingsTemplate): SaveResult {
+  if (!storage) return { ok: false, message: 'この端末では保存が使えません' }
+  try {
+    storage.setItem(TEMPLATE_KEY, JSON.stringify({ version: 1, template }))
     return { ok: true }
   } catch {
     return { ok: false, message: '保存できませんでした（端末の空き容量などを確かめてください）' }

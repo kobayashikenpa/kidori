@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { bookshelfJob } from '../engine/fixtures/bookshelf'
 import { findSavingHints } from '../engine/hints/saving'
-import { addBoard, addNige, createJob, newBoard, newPart, removeBoard, removeNige, updatePart, updateSettings, type JobOp } from './jobs'
+import {
+  addBoard,
+  addNige,
+  addPart,
+  createJob,
+  newBoard,
+  newPart,
+  removeBoard,
+  removeNige,
+  renameJob,
+  updateBoard,
+  updatePart,
+  updateSettings,
+  type JobOp,
+} from './jobs'
+import { defaultTemplate, templateOf } from './template'
 import { applyOp, currentJob, initialState, storeReducer, type StoreState } from './reducer'
 import { loadSaved, saveSaved, type KeyValueStorage } from './storage'
 
@@ -204,5 +219,48 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
     saveSaved(st, { jobs: f.react().jobs, currentJobId: f.react().currentJobId })
     const job = loadSaved(st).data.jobs.find((j) => j.id === f.react().currentJobId)!
     expect(job.boards.some((b) => b.material === 'シナ' && b.thickness === 21)).toBe(false)
+  })
+})
+
+describe('最後に使った設定（ひな形）の更新（第1.3版 S-08）', () => {
+  /** 仕事 A・B（どちらも初期値）がある状態。A を開いている */
+  function twoJobs(): StoreState {
+    const a = createJob('A', undefined, NOW, 'job-a')
+    const b = createJob('B', undefined, NOW, 'job-b')
+    return initialState({ status: 'ok', data: { jobs: [a, b], currentJobId: 'job-a' } })
+  }
+  const t = NOW.toISOString()
+
+  it('仕事 A で刃厚を 2 にするとひな形の刃厚が 2、そのあと B で逃げ3 を足すとひな形は B の設定', () => {
+    const s0 = twoJobs()
+    expect(s0.template).toEqual(defaultTemplate())
+    const s1 = runOp(s0, 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
+    expect(s1.template.settings.kerf).toBe(2)
+    const s2 = runOp(s1, 'job-b', (j) => addNige(j, 3, 'nige-3'), t)
+    expect(s2.template.settings.kerf).toBe(3)
+    expect(s2.template.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 3])
+    expect(s2.template).toEqual(templateOf(s2.jobs.find((j) => j.id === 'job-b')!))
+  })
+
+  it('材料の追加・削除でもひな形が変わる', () => {
+    const s0 = twoJobs()
+    const s1 = runOp(s0, 'job-a', (j) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })), t)
+    expect(s1.template.materials.map((m) => m.material)).toContain('シナ')
+    const id = currentJob(s1)!.boards.find((b) => b.material === 'シナ')!.id
+    const s2 = runOp(s1, 'job-a', (j) => removeBoard(j, id), t)
+    expect(s2.template.materials.map((m) => m.material)).not.toContain('シナ')
+  })
+
+  it('部材の変更・材料のサイズの選択・名前の変更・仕事の追加や削除ではひな形が変わらない', () => {
+    let s = runOp(twoJobs(), 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
+    const tpl = s.template
+    s = runOp(s, 'job-a', (j) => addPart(j, newPart({ name: '天板', expr: { W: '900', H: '18', D: '600' } })), t)
+    const rawan = currentJob(s)!.boards[1].id
+    s = runOp(s, 'job-a', (j) => updateBoard(j, rawan, { sizeKind: 'saburoku' }), t)
+    expect(currentJob(s)!.boards[1].sizeKind).toBe('saburoku')
+    s = runOp(s, 'job-a', (j) => renameJob(j, '別の名前'), t)
+    s = storeReducer(s, { type: 'addJob', job: createJob('C', undefined, NOW, 'job-c'), open: false })
+    s = storeReducer(s, { type: 'removeJob', id: 'job-b' })
+    expect(s.template).toBe(tpl)
   })
 })

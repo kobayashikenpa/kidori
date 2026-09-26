@@ -3,14 +3,16 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type Rea
 import type { Job } from '../engine/types'
 import type { JobOp, OpResult } from './jobs'
 import { applyOp, currentJob, initialState, storeReducer, type StoreAction, type StoreState } from './reducer'
-import { browserStorage, loadSaved, saveSaved } from './storage'
+import { browserStorage, loadSaved, loadTemplate, saveSaved, saveTemplate } from './storage'
 import { JobStoreContext, type JobStoreValue } from './useJobStore'
 
 /** 入力中の連打をまとめて保存するまでの待ち時間 */
 const SAVE_DELAY_MS = 300
 
 function init(): StoreState {
-  return initialState(loadSaved(browserStorage()))
+  const storage = browserStorage()
+  const load = loadSaved(storage)
+  return initialState(load, loadTemplate(storage, load.data.jobs))
 }
 
 export function JobStoreProvider({ children }: { children: ReactNode }) {
@@ -46,12 +48,14 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
   const removeJob = useCallback((id: string) => send({ type: 'removeJob', id }), [send])
 
   // 自動保存：状態が変わったら少し待ってから書く。画面を閉じるときはすぐ書く
-  const { jobs, currentJobId, canSave } = state
+  const { jobs, currentJobId, canSave, template } = state
   useEffect(() => {
     if (!canSave) return
     const save = () => {
-      const r = saveSaved(browserStorage(), { jobs, currentJobId })
-      setSaveError(r.ok ? null : r.message)
+      const storage = browserStorage()
+      const r = saveSaved(storage, { jobs, currentJobId })
+      const t = saveTemplate(storage, template)
+      setSaveError(!r.ok ? r.message : !t.ok ? t.message : null)
     }
     const timer = setTimeout(save, SAVE_DELAY_MS)
     const onHide = () => {
@@ -63,7 +67,7 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer)
       window.removeEventListener('pagehide', onHide)
     }
-  }, [jobs, currentJobId, canSave])
+  }, [jobs, currentJobId, canSave, template])
 
   const value = useMemo<JobStoreValue>(
     () => ({ state, job: currentJob(state), run, runOn, addJob, removeJob, openJob, saveError }),

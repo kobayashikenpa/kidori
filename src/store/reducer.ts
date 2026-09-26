@@ -2,6 +2,7 @@
 import type { Job } from '../engine/types'
 import { deleteJob, type JobOp, type OpResult } from './jobs'
 import type { LoadResult } from './storage'
+import { defaultTemplate, sameTemplate, templateOf, type SettingsTemplate } from './template'
 
 export interface StoreState {
   jobs: Job[]
@@ -11,6 +12,8 @@ export interface StoreState {
   loadError: string | null
   /** 保存してよいか（壊れたデータを守るため、保存を止めることがある） */
   canSave: boolean
+  /** 最後に使った設定（ひな形）。新しい仕事・見本はこれを写して作る */
+  template: SettingsTemplate
 }
 
 export type StoreAction =
@@ -29,14 +32,14 @@ export type StoreAction =
   | { type: 'setJob'; jobId: string; job: Job; now: string }
 
 /** 読み込みの結果から最初の状態を作る。何も保存されていなければ、仕事が1つもない空の状態で始める（仕様書 10） */
-export function initialState(load: LoadResult): StoreState {
+export function initialState(load: LoadResult, template: SettingsTemplate = defaultTemplate()): StoreState {
   if (load.status === 'empty') {
-    return { jobs: [], currentJobId: null, loadError: null, canSave: true }
+    return { jobs: [], currentJobId: null, loadError: null, canSave: true, template }
   }
   if (load.status === 'error' || load.status === 'repaired') {
-    return { ...load.data, loadError: load.message, canSave: load.canSave }
+    return { ...load.data, loadError: load.message, canSave: load.canSave, template }
   }
-  return { ...load.data, loadError: load.message ?? null, canSave: true }
+  return { ...load.data, loadError: load.message ?? null, canSave: true, template }
 }
 
 export function storeReducer(state: StoreState, action: StoreAction): StoreState {
@@ -53,9 +56,15 @@ export function storeReducer(state: StoreState, action: StoreAction): StoreState
     case 'removeJob':
       return { ...state, ...deleteJob(state.jobs, state.currentJobId, action.id) }
     case 'setJob': {
-      if (!state.jobs.some((j) => j.id === action.jobId)) return state
+      const prev = state.jobs.find((j) => j.id === action.jobId)
+      if (!prev) return state
       const next = { ...action.job, id: action.jobId, updatedAt: action.now }
-      return { ...state, jobs: state.jobs.map((j) => (j.id === action.jobId ? next : j)) }
+      const jobs = state.jobs.map((j) => (j.id === action.jobId ? next : j))
+      // 設定（刃厚・端切り・切り代・切り方・逃げ・材料）が変わったときだけ、ひな形をこの仕事の設定にする。
+      // 部材の変更・材料のサイズの選択・名前の変更では変わらない
+      const after = templateOf(next)
+      if (sameTemplate(templateOf(prev), after)) return { ...state, jobs }
+      return { ...state, jobs, template: after }
     }
   }
 }
