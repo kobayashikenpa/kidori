@@ -138,7 +138,7 @@ export function PartEditor({ part, onClose }: Props) {
               </optgroup>
             )}
           </select>
-          {flush && <span className="hint">厚みの内訳：{flushBreakdownText(flush)}（表面材ごとに木取りします。芯材は入れません）</span>}
+          {flush && <span className="hint">厚み {flushBreakdownText(flush)}（表面材ごとに木取りします。芯材は入れません）</span>}
           {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
         </div>
       )}

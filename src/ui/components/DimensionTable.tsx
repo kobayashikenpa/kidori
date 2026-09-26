@@ -5,9 +5,8 @@
 import { Fragment, useMemo, useState } from 'react'
 import { explainDimension, explanationText } from '../../engine/dimensions/explain'
 import { computeFinished } from '../../engine/dimensions/finished'
-import { flushBreakdown } from '../../engine/flush'
+import { flushBreakdown, flushBreakdownText } from '../../engine/flush'
 import { AXES, type Axis, type Job, type PartDimensions } from '../../engine/types'
-import { flushThicknessText } from '../flushText'
 import { fmt } from '../format'
 
 interface Props {
@@ -108,7 +107,7 @@ export function DimensionTable({ job, dims, onFlushCheck }: Props) {
                   <tr className="dim-flush">
                     <td colSpan={6}>
                       <span className="dim-flush-head num">
-                        {p.name}：{flushThicknessText(flush)}
+                        {p.name}：厚み {flushBreakdownText(flush)}
                       </span>
                       {cutting &&
                         flush.faces.map((f) => {

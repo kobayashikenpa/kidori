@@ -2,12 +2,11 @@
 // 厚みは engine の flushBreakdown で出す。見た目・操作は材料・調整寸法と同じ（SettingsList）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
-import { flushBreakdown, type FlushBreakdown } from '../../engine/flush'
+import { flushBreakdown, flushBreakdownText, type FlushBreakdown } from '../../engine/flush'
 import type { Flush, Job } from '../../engine/types'
 import { addFlush, flushesUsages, removeFlushes, updateFlush } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
-import { flushThicknessText } from '../flushText'
 import { closeKeyboard } from '../keyboard'
 import { NumberField } from './NumberField'
 import { SettingsList } from './SettingsList'
@@ -32,7 +31,7 @@ export function FlushEditor() {
         usage={(f) => {
           const b = flushBreakdown(job, f.id)
           const users = flushesUsages(job, [f.id]).parts
-          return `${b ? flushThicknessText(b) : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
+          return `${b ? `厚み ${flushBreakdownText(b)}` : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
         }}
         warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '表面材がありません（編集で選んでください）' : null)}
         add={<FlushForm flush={null} done={() => {}} />}
@@ -201,7 +200,7 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
       >
         ＋ 表面材を足す
       </button>
-      {preview && core !== null && <p className="thick-auto" style={{ margin: 0 }}>{flushThicknessText(preview)}</p>}
+      {preview && core !== null && <p className="thick-auto" style={{ margin: 0 }}>厚み {flushBreakdownText(preview)}</p>}
       {error && (
         <p className="msg err" role="alert" style={{ margin: 0 }}>
           {error}
