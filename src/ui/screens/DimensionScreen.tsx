@@ -52,6 +52,7 @@ export function DimensionScreen() {
               part={p}
               dims={dims.parts[i]}
               board={job.boards.find((b) => b.id === p.boardId) ?? null}
+            flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
               onCheck={(patch) => run((j) => setPartChecks(j, p.id, patch))}
             />
           ))}
@@ -65,10 +66,12 @@ interface CardProps {
   part: Part
   dims: PartDimensions
   board: Board | null
+  /** フラッシュを選んだ部材ならその名前 */
+  flushName: string | null
   onCheck: (patch: Partial<PartChecks>) => void
 }
 
-function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
+function DimensionCard({ part, dims: d, board, flushName, onCheck }: CardProps) {
   const cutting = part.quantity > 0
   const finDone = cutting && part.checks.finished
   const cutDone = cutting && part.checks.cut
@@ -84,7 +87,13 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
       </header>
       {cutting && (
         <div className="tags">
-          {board ? <span className="chip">{boardLabel(board)}</span> : <span className="chip warn">材料が未設定</span>}
+          {board ? (
+            <span className="chip">{boardLabel(board)}</span>
+          ) : flushName ? (
+            <span className="chip">{flushName}</span>
+          ) : (
+            <span className="chip warn">材料が未設定</span>
+          )}
           {d.errors.some((e) => e.kind === 'thicknessMismatch') && <span className="chip err">厚みが合わない</span>}
         </div>
       )}
@@ -165,7 +174,7 @@ function DimensionCard({ part, dims: d, board, onCheck }: CardProps) {
                 </>
               ) : (
                 <p className="band-note">
-                  {board ? '厚みが決まらないため出せません（部材の画面で選んでください）' : '材料を選ぶと出ます'}
+                  {board || flushName ? '厚みが決まらないため出せません（部材の画面で選んでください）' : '材料を選ぶと出ます'}
                 </p>
               )}
             </section>

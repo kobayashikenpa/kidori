@@ -7,15 +7,10 @@ import type { Flush, Job } from '../../engine/types'
 import { addFlush, flushesUsages, removeFlushes, updateFlush } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
+import { flushThicknessText } from '../flushText'
 import { closeKeyboard } from '../keyboard'
 import { NumberField } from './NumberField'
 import { SettingsList } from './SettingsList'
-
-/** 「厚み 25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）」 */
-export function flushThicknessText(b: FlushBreakdown): string {
-  const words = [`芯材${fmt(b.core)}`, ...b.faces.map((f) => `${f.label}×${f.count}`)]
-  return `厚み ${fmt(b.total)}（${words.join(' ＋ ')}）`
-}
 
 /** 入力中のフラッシュの内訳（engine の flushBreakdown を、仮の id で呼ぶ） */
 function draftBreakdown(job: Job, core: number, faces: Flush['faces']): FlushBreakdown | null {
