@@ -340,6 +340,7 @@ src/engine/
     usages.ts            材料の厚み・逃げを使っている部材の一覧、id のつけ替え
   dimensions/finished.ts 逃げの処理をなくし、仕上がり寸法 = 式の計算結果 にする
   migrate/clearance.ts   以前の版の部材ごとの逃げを、設定の逃げ＋式に移す
+  migrate/v1Dimensions.ts 以前の版の寸法の計算（移し替えの前後で寸法が変わらないかを確かめるためだけに使う）
   hints/saving.ts        材料を減らせるときのお知らせ
 src/store/
   storage.ts             保存データ第2版（キー kidori.jobs.v2）と第1版からの移し替え
@@ -466,24 +467,26 @@ export type DimensionErrorKind =
 
 仕様書 10：以前の版で部材ごとに入れていた逃げは、設定の逃げへ移し、その部材の式から引く形に書き換える。
 
-`migrateClearance(job: LegacyJob, makeId: () => string): Job`（`LegacyJob` は `clearance` を持つ古い形。この関数の中だけで使う。engine は store の `newId` を import しないので、id の作り方は引数で受け取る）
+`migrateClearanceChecked(job: LegacyJob, makeId: () => string): { job: Job; changed: { partId; name }[] }`、仕事だけ欲しいときは `migrateClearance(job, makeId): Job`（`LegacyJob` は `clearance` を持つ古い形。この関数の中だけで使う。engine は store の `newId` を import しないので、id の作り方は引数で受け取る）
 1. 設定に `nige` が無ければ `defaultNige()` を入れる
-2. 各部材の逃げのうち値が 0 より大きい軸について、同じ値（小数第1位で比較）の逃げが設定に無ければ足す（id は `makeId()`、値の小さい順に足す）
-3. どの軸に引くか：以前の計算と同じく **厚みの寸法の軸には引かない**。厚みの軸は、逃げをすべて外した仕事を新しい `computeDimensions` で計算して決める（手で選んだ軸はそれ、自動なら板の厚みと同じ値の軸。決まらなければ3軸とも引く＝以前と同じ）
+2. 各部材の逃げのうち値が 0 より大きい軸について、同じ値の逃げが設定に無ければ足す（id は `makeId()`、値の小さい順に足す）。**値は丸めない**（0.25 は 0.25 のまま、名前は「逃げ0.25mm」）。同じ値かどうかは浮動小数の誤差（1e-9）だけ見のがして比べる（3 と 3.04、0.25 と 0.3 は別の逃げ）
+3. どの軸に引くか：以前の計算と同じく **厚みの寸法の軸には引かない**。厚みの軸は `migrate/v1Dimensions.ts` の `computeV1Dimensions`（以前の版の `dimensions/finished.ts` をそのまま残したもの）で求める。以前の版は、厚みの自動判定をその部材自身の逃げを引く前の値で、ほかの部材の値は逃げを引いた後の値で行っていたので、逃げをすべて外した仕事では同じ軸にならないことがある。決まらなければ3軸とも引く＝以前と同じ
 4. 式の書き換え：式が数値1つか部材の参照1つなら `元の式 - {n:id}`、それ以外は `(元の式) - {n:id}`。元の式が空ならそのまま（エラーのまま）
-5. `memo: ''`、`checks: { finished: false, cut: false }` を足す
+5. 書き換えた後の自動判定で厚みの軸が以前と変わる部材（例：材料 18・W `19`・H 600・D `18`・逃げ W1 → 今は W が 18 になり W が選ばれる）は、以前の軸を手で選んだことにする（`thicknessAxis` に入れる）
+6. 確かめ：以前の計算と書き換えた後の計算で、部材ごとに仕上がり寸法・厚みの軸・木取り寸法を比べ、違う部材を `changed` に入れる（部材はそのまま残す）。「厚みが決まらない（自動）」は今の形では表せないので、以前は決まらなかった部材が、逃げを引いた値で今は決まるときがこれに当たる
+7. `memo: ''`、`checks: { finished: false, cut: false }` を足す
 - 同じ仕事を2回移し替えても結果が変わらない（`clearance` が無い部材は何もしない）
-- 注意：ほかの部材の逃げによって自分の厚みの判定が変わる、というまれな場合だけ、以前の版と厚みの軸が変わりうる（テストで想定しない）
 
 ### 6.6 保存データ第2版（`storage.ts`）— 決定（planner）
 
 - 新しいキー `kidori.jobs.v2` に `{ version: 2, jobs: Job[] }` で書く。`kidori.currentJobId` はそのまま
 - 読み込み
   1. `kidori.jobs.v2` があればそれを読む（第2版の形で検査・修復）
-  2. 無くて `kidori.jobs.v1`（version 1）があれば、第1版の形で検査・修復したあと `migrateClearance` で移し替える。結果は次の保存で v2 に書く
+  2. 無くて `kidori.jobs.v1`（version 1）があれば、第1版の形で検査・修復したあと `migrateClearanceChecked` で移し替える。結果は次の保存で v2 に書く
+  - 移し替えで寸法が変わった部材（`changed`）があれば、読み込みの知らせ（`LoadResult` の `message`。`ok` でも付く）に「以前の版から移したときに寸法が変わった部材：{仕事名}の {部材名・…}（寸法表で確かめてください）」を出す。画面では `loadError` と同じ帯に出す。保存は続ける
   3. **`kidori.jobs.v1` は消さず、書き換えもしない**（移し替えがうまくいかなかったときの控え）
 - 第2版の検査・修復で足すもの
-  - `settings.nige`：配列でなければ `defaultNige()`。id が空・重複、値が 0 以下・数でない、値が前の逃げと同じ、のものは外す（外したら直した数に数える）
+  - `settings.nige`：配列でなければ `defaultNige()`。id が空・重複、値が 0 以下・数でない、値が前の逃げと同じ（丸めずに比べる。移し替えで足した 0.25 と 0.3 を両方残すため）、のものは外す（外したら直した数に数える）
   - `part.memo`：文字列でなければ `''`
   - `part.checks`：`finished`・`cut` が真偽値でなければ false
   - `part.clearance` が残っていても読み捨てずに、`migrateClearance` を通す（v2 に古い形が混ざっても値が変わらないように）

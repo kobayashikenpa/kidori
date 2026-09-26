@@ -1,7 +1,7 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
 import { defaultNige, defaultSettings } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
-import { migrateClearance, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
+import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -48,8 +48,8 @@ export interface SavedData {
 }
 
 export type LoadResult =
-  /** 読めた */
-  | { status: 'ok'; data: SavedData }
+  /** 読めた。message は知らせ（以前の版から移したときに寸法が変わった部材があるとき） */
+  | { status: 'ok'; data: SavedData; message?: string }
   /** まだ何も保存されていない */
   | { status: 'empty'; data: SavedData }
   /**
@@ -125,7 +125,8 @@ function sanitizeSettings(v: unknown, fx: Fixes): LegacyJob['settings'] {
 
 /**
  * 逃げ。配列でなければ初期値（第1版で無いときは undefined にして、移し替えで初期値を入れる）。
- * id が空・前の逃げと同じ、値が 0 以下・数でない・前の逃げと同じ寸法（小数第1位で比較）のものは外す
+ * id が空・前の逃げと同じ、値が 0 以下・数でない・前の逃げと同じ寸法のものは外す。
+ * 寸法は丸めずに比べる（以前の版から移した 0.25 と 0.3 は別の逃げとして残す）
  */
 function sanitizeNige(v: unknown, fx: Fixes): Nige[] | undefined {
   if (v === undefined && fx.version === 1) return undefined
@@ -139,7 +140,7 @@ function sanitizeNige(v: unknown, fx: Fixes): Nige[] | undefined {
       isRecord(x) &&
       isId(x.id) &&
       isPositive(x.value) &&
-      !out.some((n) => n.id === x.id || eq1(n.value, x.value as number))
+      !out.some((n) => n.id === x.id || Math.abs(n.value - (x.value as number)) < 1e-9)
     if (good) out.push({ id: x.id as string, value: x.value as number })
     else fx.count++
   }
@@ -266,15 +267,30 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
  * 仕事の一覧を検査し、読めるものだけを返す。fixes は直した・外した数。
  * 以前の版の部材ごとの逃げは migrateClearance で設定の逃げ＋式に移す（第2版に古い形が混ざっていても同じ。寸法は変わらない）
  */
-export function sanitizeJobs(list: readonly unknown[], version: 1 | 2 = 2): { jobs: Job[]; fixes: number } {
+export function sanitizeJobs(
+  list: readonly unknown[],
+  version: 1 | 2 = 2,
+): { jobs: Job[]; fixes: number; changed: string[] } {
   const fx: Fixes = { count: 0, version }
   const jobs: Job[] = []
+  const changed: string[] = []
   for (const raw of list) {
     const legacy = sanitizeJob(raw, fx)
-    if (!legacy || jobs.some((j) => j.id === legacy.id)) fx.count++
-    else jobs.push(migrateClearance(legacy, () => newId('nige')))
+    if (!legacy || jobs.some((j) => j.id === legacy.id)) {
+      fx.count++
+      continue
+    }
+    const m = migrateClearanceChecked(legacy, () => newId('nige'))
+    jobs.push(m.job)
+    if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
-  return { jobs, fixes: fx.count }
+  return { jobs, fixes: fx.count, changed }
+}
+
+/** 移し替えで寸法が変わった部材の知らせ。無ければ null */
+function changedMessage(changed: readonly string[]): string | null {
+  if (changed.length === 0) return null
+  return `以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
@@ -371,7 +387,7 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
       canSave,
     }
   }
-  let sanitized: { jobs: Job[]; fixes: number }
+  let sanitized: ReturnType<typeof sanitizeJobs>
   try {
     sanitized = sanitizeJobs(list, version)
   } catch {
@@ -380,14 +396,16 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   const { jobs, fixes } = sanitized
   const currentJobId = current !== null && jobs.some((j) => j.id === current) ? current : null
-  if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId } }
+  const notice = changedMessage(sanitized.changed)
+  if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId }, ...(notice ? { message: notice } : {}) }
   const canSave = backupBroken(storage, raw, now)
+  const repaired = canSave
+    ? '保存データの一部が読めなかったので、読めるところだけ読み込みました（元のデータは別の場所に残してあります）'
+    : '保存データの一部が読めなかったので、読めるところだけ読み込みました（データを守るため、このままでは保存しません）'
   return {
     status: 'repaired',
     data: { jobs, currentJobId },
-    message: canSave
-      ? '保存データの一部が読めなかったので、読めるところだけ読み込みました（元のデータは別の場所に残してあります）'
-      : '保存データの一部が読めなかったので、読めるところだけ読み込みました（データを守るため、このままでは保存しません）',
+    message: notice ? `${repaired}。${notice}` : repaired,
     canSave,
   }
 }

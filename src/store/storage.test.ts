@@ -435,4 +435,37 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     expect(job.parts.find((p) => p.name === '棚板')!.expr.W).toBe('天地板.W - {n:nige-1}')
     expect(computeDimensions(job).parts.find((d) => d.name === '棚板')!.finished?.W).toBe(863)
   })
+
+  it('移し替えで寸法が変わった部材があれば、ok のまま部材名を知らせる', () => {
+    const legacy = legacyBookshelf()
+    legacy.parts = [
+      ...legacy.parts,
+      { ...legacy.parts[1], id: 'a', name: 'A', expr: { W: '400', H: '19', D: '300' }, clearance: { H: 1 }, quantity: 1 },
+      { ...legacy.parts[1], id: 'b', name: 'B', expr: { W: 'A.H', H: '500', D: '300' }, clearance: { W: 1 }, quantity: 1 },
+    ]
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacy] }) })
+    const r = loadSaved(s, T1)
+    expect(r.status).toBe('ok')
+    expect(r.status === 'ok' && r.message).toBe(`以前の版から移したときに寸法が変わった部材：${legacy.name}の A（寸法表で確かめてください）`)
+  })
+
+  it('寸法の変わらない移し替えでは知らせない', () => {
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacyBookshelf()] }) })
+    const r = loadSaved(s, T1)
+    expect(r.status === 'ok' && r.message).toBeFalsy()
+  })
+
+  it('移し替えで足した逃げ 0.25 と 0.3 は、保存して読み直しても両方残る（同じ値だけを重なりとみなす）', () => {
+    const legacy = legacyBookshelf()
+    legacy.parts.find((p: any) => p.name === '側板').clearance = { D: 0.25 }
+    legacy.parts.find((p: any) => p.name === '背板').clearance = { W: 0.3 }
+    const s = memoryStorage({ [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacy] }) })
+    const r = loadSaved(s, T1)
+    expect(r.data.jobs[0]!.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 0.25, 0.3])
+    saveSaved(s, r.data)
+    const again = loadSaved(s, T1)
+    expect(again.status).toBe('ok')
+    expect(again.data).toEqual(r.data)
+  })
 })
+

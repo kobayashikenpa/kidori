@@ -22,11 +22,12 @@ describe('defaultNige（新しい仕事の逃げ）', () => {
 })
 
 describe('nigeName（逃げの名前）', () => {
-  it('小数第1位まで、末尾の .0 は付けない', () => {
+  it('寸法を丸めずに出す（浮動小数の誤差だけ消す）。末尾の .0 は付けない', () => {
     expect(nigeName(0.5)).toBe('逃げ0.5mm')
     expect(nigeName(1)).toBe('逃げ1mm')
     expect(nigeName(2.0)).toBe('逃げ2mm')
-    expect(nigeName(1.25)).toBe('逃げ1.3mm')
+    expect(nigeName(1.25)).toBe('逃げ1.25mm')
+    expect(nigeName(0.25)).toBe('逃げ0.25mm')
     expect(nigeName(0.1 + 0.2)).toBe('逃げ0.3mm')
   })
 })

@@ -40,9 +40,12 @@ function mm(v: number): string {
   return String(round1(v))
 }
 
-/** 逃げの名前（例：逃げ0.5mm、逃げ1mm） */
+/**
+ * 逃げの名前（例：逃げ0.5mm、逃げ1mm、逃げ0.25mm）。
+ * 逃げは寸法そのものを式で引くので、名前も丸めない（0.25 を 0.3 と見せない）。浮動小数の誤差（0.1 + 0.2 など）だけ消す
+ */
 export function nigeName(value: number): string {
-  return `逃げ${mm(value)}mm`
+  return `逃げ${Number(value.toFixed(6))}mm`
 }
 
 /** 式の中の材料の厚みの表示（例：ラワン4mm。間に空白なし） */

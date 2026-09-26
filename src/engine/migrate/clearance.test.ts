@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { nigeName } from '../defaults'
 import { computeDimensions } from '../dimensions'
-import { bookshelfJob } from '../fixtures/bookshelf'
-import { migrateClearance, type LegacyJob } from './clearance'
+import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
+import type { Axis } from '../types'
+import { migrateClearance, migrateClearanceChecked, type LegacyJob, type LegacyPart } from './clearance'
+import { computeV1Dimensions } from './v1Dimensions'
 
 /** 以前の版（第1版）の形の見本：棚板 W = 天地板.W・逃げ W1、設定に逃げなし、メモ・チェックなし */
 function legacyBookshelf(): LegacyJob {
@@ -58,19 +61,36 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     expect(computeDimensions(job).parts.find((p) => p.name === '天地板')!.finished!.W).toBe(862)
   })
 
-  it('足す逃げは値の小さい順。同じ値（小数第1位で比較）は1つにまとめる', () => {
+  it('足す逃げは値の小さい順。同じ値だけを1つにまとめる（3 と 3.04 は別の逃げ）', () => {
     const legacy = legacyBookshelf()
     ;(find(legacy, '側板')).clearance = { D: 3 }
     ;(find(legacy, '天地板')).clearance = { D: 2, W: 3.04 }
+    ;(find(legacy, '背板')).clearance = { W: 3 }
     const job = migrateClearance(legacy, ids())
     expect(job.settings.nige.map((n) => [n.id, n.value])).toEqual([
       ['nige-0.5', 0.5],
       ['nige-1', 1],
       ['nige-new-1', 2],
       ['nige-new-2', 3],
+      ['nige-new-3', 3.04],
     ])
     expect(find(job, '側板').expr.D).toBe('全体.D - {n:nige-new-2}')
-    expect(find(job, '天地板').expr.W).toBe('(全体.W - 側板.W * 2) - {n:nige-new-2}')
+    expect(find(job, '背板').expr.W).toBe('全体.W - {n:nige-new-2}')
+    expect(find(job, '天地板').expr.W).toBe('(全体.W - 側板.W * 2) - {n:nige-new-3}')
+    expect(computeDimensions(job).parts.find((p) => p.name === '天地板')!.finished!.W).toBeCloseTo(860.96, 9)
+  })
+
+  it('逃げの値は丸めない：0.25 は 0.25 のまま（名前は 逃げ0.25mm）。0.25 と 0.3 は別の逃げ', () => {
+    const legacy = legacyBookshelf()
+    ;(find(legacy, '側板')).clearance = { D: 0.25 }
+    ;(find(legacy, '背板')).clearance = { W: 0.3, H: 0.25 }
+    const { job, changed } = migrateClearanceChecked(legacy, ids())
+    expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 0.25, 0.3])
+    expect(nigeName(0.25)).toBe('逃げ0.25mm')
+    const d = computeDimensions(job)
+    expect(d.parts.find((p) => p.name === '側板')!.finished!.D).toBe(399.75)
+    expect(d.parts.find((p) => p.name === '背板')!.finished).toEqual({ W: 899.7, H: 1799.75, D: 4 })
+    expect(changed).toEqual([])
   })
 
   it('厚みの寸法の軸に入っていた逃げは式に足さない（棚板 H 18 は厚み）', () => {
@@ -141,5 +161,78 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
     p.expr.D = '４００'
     p.clearance = { D: 1 }
     expect(find(migrateClearance(legacy, ids()), '側板').expr.D).toBe('４００ - {n:nige-1}')
+  })
+
+  // ---------- 以前の版の計算と寸法が変わらないこと ----------
+
+  function legacyJob(parts: LegacyPart[]): LegacyJob {
+    const { settings, ...rest } = legacyBookshelf()
+    return { ...rest, settings, parts }
+  }
+
+  function lp(p: Partial<LegacyPart> & Pick<LegacyPart, 'id' | 'name' | 'expr'>): LegacyPart {
+    return { boardId: LUMBER_18_ID, thicknessAxis: null, quantity: 1, grain: 'any', allowance: null, ...p }
+  }
+
+  /** 以前の版の計算（部材ごとの逃げ）と、移し替えた後の今の計算の、部材ごとの寸法・厚みの軸・木取り寸法 */
+  function beforeAfter(legacy: LegacyJob) {
+    const { job, changed } = migrateClearanceChecked(legacy, ids())
+    const clr = new Map(legacy.parts.map((p) => [p.id, p.clearance ?? {}] as [string, Partial<Record<Axis, number>>]))
+    const v1 = computeV1Dimensions(migrateClearance({ ...legacy, parts: legacy.parts.map(({ clearance: _c, ...p }) => p) }, ids()), clr)
+    const now = computeDimensions(job)
+    const before = legacy.parts.map((p) => ({ name: p.name, ...v1.get(p.id)! }))
+    const after = now.parts.map((d) => ({
+      name: d.name,
+      finished: d.finished,
+      thicknessAxis: d.thicknessAxis,
+      cutSize: d.cutSize,
+    }))
+    return { job, changed, before, after }
+  }
+
+  it('見本（棚板 逃げ W1）は、以前の計算と寸法・厚みの軸・木取り寸法がすべて同じ', () => {
+    const { before, after, changed } = beforeAfter(legacyBookshelf())
+    expect(after).toEqual(before)
+    expect(changed).toEqual([])
+  })
+
+  it('W 19・H 600・D 18・逃げ W1（材料 18）：式は 19 - 逃げ1mm、厚みは D に固定し、以前と同じ（W 18・厚み D・木取り 28×610）', () => {
+    const legacy = legacyJob([lp({ id: 'p', name: 'P', expr: { W: '19', H: '600', D: '18' }, clearance: { W: 1 } })])
+    const { job, before, after, changed } = beforeAfter(legacy)
+    expect(find(job, 'P').expr.W).toBe('19 - {n:nige-1}')
+    expect(find(job, 'P').thicknessAxis).toBe('D')
+    expect(before).toEqual([{ name: 'P', finished: { W: 18, H: 600, D: 18 }, thicknessAxis: 'D', cutSize: { W: 28, H: 610, D: 18 } }])
+    expect(after).toEqual(before)
+    expect(changed).toEqual([])
+  })
+
+  it('A（W400・H19・D300・逃げ H1）と B（W = A.H・H500・D300・逃げ W1）：B は厚みの W に逃げを引かず、以前と同じ', () => {
+    const legacy = legacyJob([
+      lp({ id: 'a', name: 'A', expr: { W: '400', H: '19', D: '300' }, clearance: { H: 1 } }),
+      lp({ id: 'b', name: 'B', expr: { W: 'A.H', H: '500', D: '300' }, clearance: { W: 1 } }),
+    ])
+    const { job, before, after, changed } = beforeAfter(legacy)
+    expect(find(job, 'A').expr.H).toBe('19 - {n:nige-1}')
+    expect(find(job, 'B').expr.W).toBe('A.H')
+    // 仕上がり寸法は2つとも以前と同じ
+    expect(after.map((a) => a.finished)).toEqual(before.map((b) => b.finished))
+    // B は厚みの軸・木取り寸法も同じ
+    expect(after[1]).toEqual(before[1])
+    expect(after[1]).toEqual({ name: 'B', finished: { W: 18, H: 500, D: 300 }, thicknessAxis: 'W', cutSize: { W: 18, H: 510, D: 310 } })
+    // A は以前は厚みが決まらなかった（どの軸も 18 でない）が、今は H が 18 になり厚みが H に決まる。
+    // 「厚みが決まらない」は今の形では残せないので、変わった部材として知らせる
+    expect(before[0]!.thicknessAxis).toBeNull()
+    expect(after[0]!.thicknessAxis).toBe('H')
+    expect(changed).toEqual([{ partId: 'a', name: 'A' }])
+  })
+
+  it('手で選んだ厚みの軸はそのまま（固定し直さない）', () => {
+    const legacy = legacyJob([
+      lp({ id: 'p', name: 'P', expr: { W: '19', H: '600', D: '18' }, thicknessAxis: 'D', clearance: { W: 1 } }),
+    ])
+    const { job, before, after, changed } = beforeAfter(legacy)
+    expect(find(job, 'P').thicknessAxis).toBe('D')
+    expect(after).toEqual(before)
+    expect(changed).toEqual([])
   })
 })
