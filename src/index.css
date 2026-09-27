@@ -710,13 +710,32 @@ select.input {
   gap: 8px;
 }
 .pad-refs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  /* 数字のボタンまで画面に入るよう低めにする（多いときは中でスクロール） */
-  max-height: 26vh;
+  /* 部材が多くても数字のボタンまで画面に入るよう、部材名は2段ほどにする（3段目を少しのぞかせ、多いときは中でスクロール） */
+  max-height: 104px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+.pad-parts,
+.pad-axes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.pad-ref.part {
+  align-items: center;
+  text-align: center;
+}
+.pad-ref.part .ref-name {
+  font-size: 13px;
+}
+.pad-ref.back {
+  background: var(--sunk);
+}
+.pad-ref.back .ref-name {
+  font-size: 13px;
 }
 .pad-ref {
   appearance: none;

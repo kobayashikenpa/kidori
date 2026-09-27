@@ -61,6 +61,12 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
   const [cursorRaw, setCursor] = useState(units.length)
   const cursor = Math.min(cursorRaw, units.length)
   const fieldRef = useRef<HTMLDivElement>(null)
+  // 部材の参照は2段階：まず部材名、次に W・H・D（部材が多くても式の欄とボタンが画面に収まるように）
+  const [refPartId, setRefPartId] = useState<string | null>(null)
+  const refPart = open ? (parts.find((p) => p.id === refPartId) ?? null) : null
+  // 2段階目に切り替えても下のボタンの位置がずれないよう、部材名の並びの高さを保つ
+  const [refHeight, setRefHeight] = useState<number | null>(null)
+  const refsRef = useRef<HTMLDivElement>(null)
   const padRef = useRef<HTMLDivElement>(null)
 
   // ボタンの並びを開いたら、式の欄とボタンが見やすい位置に来るようにスクロールする（キーボードは出ないので、それを待たない）
@@ -94,6 +100,7 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
 
   const openAtEnd = () => {
     setCursor(units.length)
+    setRefPartId(null)
     onOpenChange(true)
   }
 
@@ -151,27 +158,64 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
 
       {open && (
         <div className="pad" id={`${id}-pad`} ref={padRef}>
-          {parts.length > 0 && (
-            <div className="pad-refs" aria-label="部材の寸法">
-              {parts.map((p) => {
-                const f = finishedOf(p.id)
-                return AXES.map((a) => (
+          {parts.length > 0 &&
+            (refPart ? (
+              // 2段階目：選んだ部材の W・H・D。押すと式に入れて、部材名の並びに戻る
+              <div className="pad-refs" aria-label={`${refPart.name} の寸法`} style={refHeight ? { minHeight: refHeight } : undefined}>
+                <div className="pad-axes">
                   <button
-                    key={`${p.id}-${a}`}
                     type="button"
-                    className="pad-ref"
+                    className="pad-ref back"
+                    aria-label={`${refPart.name} の選択をやめて部材の一覧に戻る`}
                     onPointerDown={keep}
-                    onClick={() => put(`${p.name}.${a}`)}
+                    onClick={() => setRefPartId(null)}
                   >
-                    <span className="ref-name">
-                      {p.name}.{a}
-                    </span>
-                    <span className="ref-val num">{f ? fmt(f[a]) : '―'}</span>
+                    <span className="ref-name">{refPart.name}</span>
+                    <span className="ref-val">◀ 戻る</span>
                   </button>
-                ))
-              })}
-            </div>
-          )}
+                  {AXES.map((a) => {
+                    const f = finishedOf(refPart.id)
+                    return (
+                      <button
+                        key={a}
+                        type="button"
+                        className="pad-ref"
+                        aria-label={`${refPart.name}.${a}（${f ? fmt(f[a]) : '計算できない'}）を入れる`}
+                        onPointerDown={keep}
+                        onClick={() => {
+                          put(`${refPart.name}.${a}`)
+                          setRefPartId(null)
+                        }}
+                      >
+                        <span className="ref-name">{a}</span>
+                        <span className="ref-val num">{f ? fmt(f[a]) : '―'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              // 1段階目：部材名の並び（多いときは中でスクロール）
+              <div className="pad-refs" aria-label="部材の寸法：部材を選ぶ" ref={refsRef}>
+                <div className="pad-parts">
+                  {parts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="pad-ref part"
+                      aria-label={`${p.name} の寸法を選ぶ`}
+                      onPointerDown={keep}
+                      onClick={() => {
+                        setRefHeight(refsRef.current?.offsetHeight ?? null)
+                        setRefPartId(p.id)
+                      }}
+                    >
+                      <span className="ref-name">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           {thicknessId !== null && thickLabel !== null && (
             <div className="pad-group">
               <span className="pad-title">材料の厚み</span>
