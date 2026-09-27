@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
 import type { Job } from '../types'
 import { computeFinished } from './finished'
-import { explainDimension, explanationText } from './explain'
+import { explainDimension, explanationText, type DimensionExplanation } from './explain'
 
 function withPart(job: Job, name: string, W: string): Job {
   const base = job.parts[1]
@@ -34,10 +34,20 @@ describe('explainDimension（寸法表の内訳）', () => {
     expect(explanationText(e)).toBe('天地板.W 864 − 逃げ1 = 863')
   })
 
-  it('数だけの式は 数 = 結果（全体.W：900 = 900）', () => {
+  it('数だけの式は「= 結果」を付けない（全体.W：900）', () => {
     const e = explainDimension(bookshelfJob(), 'part-zentai', 'W')!
     expect(e.pieces).toEqual([{ kind: 'number', value: 900 }])
-    expect(explanationText(e)).toBe('900 = 900')
+    expect(explanationText(e)).toBe('900')
+    expect(explanationText({ pieces: [{ kind: 'number', value: 12.5 }], result: 12.5, errors: [] })).toBe('12.5')
+  })
+
+  it('数と記号の式には「= 結果」を付ける（900 − 36 = 864）', () => {
+    const e: DimensionExplanation = {
+      pieces: [{ kind: 'number', value: 900 }, { kind: 'op', text: '−' }, { kind: 'number', value: 36 }],
+      result: 864,
+      errors: [],
+    }
+    expect(explanationText(e)).toBe('900 − 36 = 864')
   })
 
   it('括弧・÷・符号・材料の厚みもそのままの順に並ぶ', () => {

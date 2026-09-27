@@ -2,6 +2,7 @@
 // 行を押すと切り出しの完了を付け外しする（setCutChecklistRow）。完了した行はグレーにして、そのまま残す。
 // 中身は engine の cuttingChecklist の結果をそのまま並べる
 import type { CutChecklistRow } from '../../engine/checklist'
+import { Help } from './Help'
 
 interface Props {
   label: string
@@ -19,10 +20,11 @@ export function CutChecklist({ label, rows, onToggle }: Props) {
   return (
     <div className="card cl">
       <div className="cl-head">
-        <h4>切り出しチェック</h4>
+        <h4>
+          <Help title="切り出しチェック">木取り寸法（mm）×枚数。行を押すと切り出しの完了を付け外しします。完了にした部材は、木取りの計算から除きます。</Help>
+        </h4>
         <span className="cl-count num">{left === 0 ? 'すべて完了' : `残り ${left}行`}</span>
       </div>
-      <p className="band-note">木取り寸法（mm）×枚数。完了にした部材は、木取りの計算から除きます。</p>
       <ul className="cl-list">
         {rows.map((r) => {
           const key = checklistRowKey(r)

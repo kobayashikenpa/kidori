@@ -8,6 +8,7 @@ import {
   isAutoFlushName,
   flushBreakdown,
   flushBreakdownText,
+  flushCompositionText,
   flushesEmptiedByBoards,
   flushesUsingBoards,
   flushThickness,
@@ -119,6 +120,12 @@ describe('flushBreakdown（厚みの内訳）', () => {
     ])
     expect(b.total).toBe(25)
     expect(flushBreakdownText(b)).toBe('芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
+  })
+
+  it('寸法表の厚みの内訳：フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）', () => {
+    const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
+    expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）')
+    expect(flushCompositionText('フラッシュ16', { core: 15.5, faces: [], total: 15.5 })).toBe('フラッシュ16（芯材15.5）')
   })
 
   it('無いフラッシュは null', () => {
