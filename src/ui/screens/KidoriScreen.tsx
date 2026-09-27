@@ -189,7 +189,7 @@ export function KidoriScreen() {
         </Help>
       </h2>
       <p className="lead num">
-        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm
+        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代（フラッシュ） {fmt(s.allowance)}mm
       </p>
       {own.length > 0 && (
         <p className="lead num">
