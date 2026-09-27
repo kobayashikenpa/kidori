@@ -7,8 +7,9 @@
 // - 横切り優先（横長）：帯は妻手の幅いっぱいの縦長（図の上では縦）。帯の幅＝片の長辺方向の大きさ
 import { round1 } from '../round'
 import type { Placement, Rect } from '../types'
-import type { Orientation, Piece } from './pieces'
-import type { StripMode } from './sheet'
+import { orientationsFor, type Orientation, type Piece } from './pieces'
+import { usableRect, type StripMode } from './sheet'
+import type { StockKind } from './stock'
 
 export type { StripMode } from './sheet'
 
@@ -75,6 +76,28 @@ export interface GuillotineResult {
   unplaced: Piece[]
 }
 
+/** 手持ちの1行（第2.2版。architecture.md 14.4）：大きさ・木目・枚数と、その大きさの使える範囲・帯の座標 */
+export interface SheetSpec {
+  stock: StockKind
+  usable: Rect
+  frame: Frame
+}
+
+/** 手持ちで並べた1枚：どの手持ちの行を使ったかと、その1枚の帯の座標 */
+export interface StockRawSheet extends RawSheet {
+  stock: StockKind
+  frame: Frame
+}
+
+export interface StockPackResult {
+  /** 並べた順（1枚目から） */
+  sheets: StockRawSheet[]
+  /** 手持ちが尽きた・どの手持ちにも入らない片 */
+  unplaced: Piece[]
+  /** 行ごとに使った枚数（stock の並び） */
+  used: number[]
+}
+
 interface Cand {
   o: Orientation
   pw: number
@@ -90,37 +113,66 @@ interface WorkStrip {
 }
 
 interface WorkSheet {
+  spec: number
   strips: WorkStrip[]
   /** 最後の帯の反対側の端（帯がなければ 0） */
   pEnd: number
 }
 
+interface CoreSpec {
+  count: number
+  /** 面積（新しい1枚を選ぶときに小さいほうから） */
+  area: number
+  frame: Frame
+}
+
+interface CoreSheet {
+  spec: number
+  strips: StripLayout[]
+}
+
 /**
- * 片を帯詰めで板に並べる。
- * 1. 帯の幅（p 方向）の大きい順 → 長さ（q 方向）の大きい順に並べる
+ * 帯詰めの本体。specs は手持ちの行（サイズを選んだ材料は1行・無限）、orient はその行に置いてよい片の向き。
+ * 1. 帯の幅（p 方向）の大きい順 → 長さ（q 方向）の大きい順に並べる（基準の向きは、入る行のうち一番大きい値）
  * 2. 開いている板の帯を先頭から見て、幅が収まり残りの長さに刃厚込みで入る最初の帯に置く
- * 3. なければ、残りの幅がある板に新しい帯を作る。それもなければ新しい板を出す
- * 計算量は 片の数 × 帯の数。片はどれも使える範囲に入る向きを1つ以上持つこと（pieces.ts で確認済み）
+ * 3. なければ、残りの幅がある板に新しい帯を作る
+ * 4. それもなければ新しい板を出す：残りの枚数が 1 以上で、その片が入る行のうち面積が一番小さい行（同じなら登録順で前）
+ * 計算量は 片の数 × 帯の数 ＋ 片の数 × 行の数
  */
-export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: number, mode: StripMode): GuillotineResult {
-  const frame = frameOf(mode, usable)
-  const pCap = round1(frame.pCap)
-  const qCap = round1(frame.qCap)
-
+function packCore(
+  pieces: readonly Piece[],
+  specs: readonly CoreSpec[],
+  kerf: number,
+  orient: (piece: Piece, spec: number) => Orientation[],
+): { sheets: CoreSheet[]; unplaced: Piece[]; used: number[] } {
   const items = pieces.map((piece, idx) => {
-    const cands: Cand[] = piece.orientations.map((o) => ({ o, ...frame.sizes(o) }))
-    // 並べ替えの基準にする向き：帯の中の方向に長く置く向き
-    let main = cands[0]
-    for (const c of cands) if (c.qh > main.qh) main = c
-    return { piece, idx, tryOrder: [main, ...cands.filter((c) => c !== main)], main }
+    // 行ごとの試す順：帯の中の方向に長く置く向き（main）を先に
+    const tries = specs.map((sp, k) => {
+      const cands: Cand[] = orient(piece, k).map((o) => ({ o, ...sp.frame.sizes(o) }))
+      if (cands.length === 0) return []
+      let main = cands[0]
+      for (const c of cands) if (c.qh > main.qh) main = c
+      return [main, ...cands.filter((c) => c !== main)]
+    })
+    let key: Cand | null = null
+    for (const t of tries) {
+      const m = t[0]
+      if (m && (!key || m.pw > key.pw || (m.pw === key.pw && m.qh > key.qh))) key = m
+    }
+    return { piece, idx, tries, key: key ?? { pw: 0, qh: 0 } }
   })
-  items.sort((a, b) => b.main.pw - a.main.pw || b.main.qh - a.main.qh || a.idx - b.idx)
+  items.sort((a, b) => b.key.pw - a.key.pw || b.key.qh - a.key.qh || a.idx - b.idx)
 
+  const caps = specs.map((sp) => ({ p: round1(sp.frame.pCap), q: round1(sp.frame.qCap) }))
+  const used = specs.map(() => 0)
   const sheets: WorkSheet[] = []
   const unplaced: Piece[] = []
 
-  const placeInStrips = (piece: Piece, tryOrder: Cand[]): boolean => {
+  const placeInStrips = (piece: Piece, tries: Cand[][]): boolean => {
     for (const sh of sheets) {
+      const tryOrder = tries[sh.spec]
+      if (tryOrder.length === 0) continue
+      const qCap = caps[sh.spec].q
       for (const st of sh.strips) {
         for (const c of tryOrder) {
           const q = round1(st.used + kerf)
@@ -136,9 +188,10 @@ export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: num
   }
 
   const openStrip = (sh: WorkSheet, piece: Piece, tryOrder: Cand[]): boolean => {
+    const cap = caps[sh.spec]
     const p = sh.strips.length === 0 ? 0 : round1(sh.pEnd + kerf)
     for (const c of tryOrder) {
-      if (round1(p + c.pw) <= pCap && round1(c.qh) <= qCap) {
+      if (round1(p + c.pw) <= cap.p && round1(c.qh) <= cap.q) {
         sh.strips.push({ p, pw: c.pw, used: round1(c.qh), items: [{ piece, c, q: 0 }] })
         sh.pEnd = round1(p + c.pw)
         return true
@@ -147,39 +200,113 @@ export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: num
     return false
   }
 
-  for (const { piece, tryOrder } of items) {
-    if (placeInStrips(piece, tryOrder)) continue
-    if (sheets.some((sh) => openStrip(sh, piece, tryOrder))) continue
-    const sh: WorkSheet = { strips: [], pEnd: 0 }
-    if (openStrip(sh, piece, tryOrder)) sheets.push(sh)
-    else unplaced.push(piece)
+  for (const { piece, tries } of items) {
+    if (placeInStrips(piece, tries)) continue
+    if (sheets.some((sh) => openStrip(sh, piece, tries[sh.spec]))) continue
+    let placed = false
+    // 新しい1枚：入る行のうち面積が一番小さい行（同じなら登録順）
+    const order = specs.map((_, k) => k).sort((a, b) => specs[a].area - specs[b].area || a - b)
+    for (const k of order) {
+      if (specs[k].count - used[k] < 1 || tries[k].length === 0) continue
+      const sh: WorkSheet = { spec: k, strips: [], pEnd: 0 }
+      if (openStrip(sh, piece, tries[k])) {
+        sheets.push(sh)
+        used[k]++
+        placed = true
+        break
+      }
+    }
+    if (!placed) unplaced.push(piece)
   }
 
   return {
-    frame,
     unplaced,
-    sheets: sheets.map((sh) => ({
-      strips: sh.strips.map((st) => {
-        const local: LocalRect = { p: st.p, q: 0, pw: st.pw, qh: qCap }
-        return {
-          local,
-          rect: frame.toBoard(local),
-          items: st.items.map(({ piece, c, q }) => {
-            // 帯より細い片は帯の右端に寄せる
-            const l: LocalRect = { p: st.p, q, pw: c.pw, qh: c.qh }
-            const r = frame.toBoard(l)
-            const placement: Placement = {
-              ...r,
-              pieceId: piece.pieceId,
-              partId: piece.partId,
-              name: piece.name,
-              rotated: c.o.rotated,
-              sizeLabel: piece.sizeLabel,
-            }
-            return { local: l, placement }
-          }),
-        }
-      }),
-    })),
+    used,
+    sheets: sheets.map((sh) => {
+      const frame = specs[sh.spec].frame
+      const qCap = caps[sh.spec].q
+      return {
+        spec: sh.spec,
+        strips: sh.strips.map((st) => {
+          const local: LocalRect = { p: st.p, q: 0, pw: st.pw, qh: qCap }
+          return {
+            local,
+            rect: frame.toBoard(local),
+            items: st.items.map(({ piece, c, q }) => {
+              // 帯より細い片は帯の右端に寄せる
+              const l: LocalRect = { p: st.p, q, pw: c.pw, qh: c.qh }
+              const r = frame.toBoard(l)
+              const placement: Placement = {
+                ...r,
+                pieceId: piece.pieceId,
+                partId: piece.partId,
+                name: piece.name,
+                rotated: c.o.rotated,
+                sizeLabel: piece.sizeLabel,
+              }
+              return { local: l, placement }
+            }),
+          }
+        }),
+      }
+    }),
+  }
+}
+
+/**
+ * 片を帯詰めで1つの大きさの板（無限にある）に並べる。片の向きは piece.orientations。
+ * 片はどれも使える範囲に入る向きを1つ以上持つこと（pieces.ts で確認済み）
+ */
+export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: number, mode: StripMode): GuillotineResult {
+  const frame = frameOf(mode, usable)
+  const r = packCore(pieces, [{ count: Infinity, area: 0, frame }], kerf, (piece) => piece.orientations)
+  return { frame, unplaced: r.unplaced, sheets: r.sheets.map((sh) => ({ strips: sh.strips })) }
+}
+
+/** 手持ちの行ごとの使える範囲と帯の座標 */
+export function sheetSpecs(stock: readonly StockKind[], trim: number, mode: StripMode): SheetSpec[] {
+  return stock.map((k) => {
+    const usable = usableRect(k, trim, mode)
+    return { stock: k, usable, frame: frameOf(mode, usable) }
+  })
+}
+
+/**
+ * 手持ちの材料で帯詰め（第2.2版。architecture.md 14.4）。1枚ごとにその大きさの使える範囲で並べる。
+ * 片の向きは手持ちの行ごとに piece.shape から決め直す（shape の無い片は piece.orientations を使う）。
+ * 新しい1枚は、残りが1以上でその片が入る行のうち面積が一番小さい行（同じなら登録順）。
+ * サイズを選んだ材料（1行・無限）なら packGuillotine と同じ配置になる
+ */
+export function packOnStock(
+  pieces: readonly Piece[],
+  stock: readonly StockKind[],
+  trim: number,
+  kerf: number,
+  mode: StripMode,
+): StockPackResult {
+  const specs = sheetSpecs(stock, trim, mode)
+  // 向きは行ごと・片の形ごとに1回だけ計算する
+  const cache = specs.map(() => new Map<string, Orientation[]>())
+  const orient = (piece: Piece, k: number): Orientation[] => {
+    const shape = piece.shape
+    if (!shape) return piece.orientations
+    const key = `${shape.s0}|${shape.s1}|${shape.grain}`
+    let o = cache[k].get(key)
+    if (!o) {
+      o = orientationsFor(shape, specs[k].stock, trim, mode)
+      cache[k].set(key, o)
+    }
+    return o
+  }
+  const core = packCore(
+    pieces,
+    specs.map((sp) => ({ count: sp.stock.count, area: sp.stock.width * sp.stock.length, frame: sp.frame })),
+    kerf,
+    orient,
+  )
+  return {
+    sheets: core.sheets.map((sh) => ({ strips: sh.strips, stock: specs[sh.spec].stock, frame: specs[sh.spec].frame })),
+    unplaced: core.unplaced,
+    used: core.used,
   }
 }
