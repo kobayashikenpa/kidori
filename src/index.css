@@ -1666,3 +1666,6 @@ h3 > .help {
   grid-column: 4;
   grid-row: 3 / span 2;
 }
+.dim-table thead th.c-qty {
+  white-space: nowrap;
+}
