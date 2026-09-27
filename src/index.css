@@ -987,6 +987,7 @@ select.input {
   --dg-scrap: #6b6456;
   --dg-scrap-fill: #faf6ee;
   --dg-trim: #d4331f;
+  --dg-done: #d9d6cf;
   --pc0: #bcd9ee;
   --pc1: #f6cfa8;
   --pc2: #c6e3c0;
@@ -1003,6 +1004,7 @@ select.input {
     --dg-scrap: #bdb4a2;
     --dg-scrap-fill: #3d382d;
     --dg-trim: #ff7a66;
+    --dg-done: #3a3a38;
     --pc0: #24506e;
     --pc1: #6e4424;
     --pc2: #2f5a36;
@@ -1019,6 +1021,7 @@ select.input {
   --dg-scrap: #bdb4a2;
   --dg-scrap-fill: #3d382d;
   --dg-trim: #ff7a66;
+  --dg-done: #3a3a38;
   --pc0: #24506e;
   --pc1: #6e4424;
   --pc2: #2f5a36;
@@ -1058,6 +1061,19 @@ select.input {
 .dg-piece.pc3 { fill: var(--pc3); }
 .dg-piece.pc4 { fill: var(--pc4); }
 .dg-piece.pc5 { fill: var(--pc5); }
+.dg-piece.done {
+  fill: var(--dg-done);
+}
+.dg-text.done {
+  fill: var(--muted);
+}
+.dg-remain {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3px;
+  stroke-dasharray: 8 4;
+  vector-effect: non-scaling-stroke;
+}
 .dg-scrap {
   fill: var(--dg-scrap-fill);
   stroke: var(--dg-scrap);
@@ -1114,6 +1130,18 @@ select.input {
 .dg-key.trim {
   width: 5px;
   background: var(--dg-trim);
+}
+.dg-key.remain {
+  border: 2px dashed var(--accent);
+}
+.dg-key.done {
+  background: var(--dg-done);
+  border: 1px solid var(--dg-line);
+}
+.kd-remain {
+  margin: 6px 0 0;
+  font-weight: 700;
+  color: var(--accent);
 }
 .dg-key.scrap {
   border: 1.5px dashed var(--dg-scrap);

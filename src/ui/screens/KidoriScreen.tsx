@@ -312,6 +312,9 @@ function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCa
   const landscape = sheet.orientation === 'landscape'
   // 図の上で木目の線が横に通るか（横長で長手方向、または縦長で妻手方向）
   const grainAcross = (grain === 'long') === landscape
+  // 残りの材料（まだ切っていない部材の入っているもの）は、チェックのある1枚だけに出す
+  const remaining =
+    entry.view && entry.checked.length > 0 ? entry.view.progress.remaining.filter((q) => q.pieceIds.length > 0).map((q) => q.rect) : []
   const rowKey = (r: SheetChecklistRow) =>
     entry.target.kind === 'frozen' ? `${entry.target.sheetId}:${r.pieceId}` : `${entry.key}:${r.pieceId}`
   return (
@@ -326,12 +329,29 @@ function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCa
         材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
         {sheet.scraps.length}枚
       </p>
-      <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} />
+      <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
+      {remaining.length > 0 && (
+        <p className="kd-remain num">
+          残りの材料 {remaining.map((r) => `${fmt(r.w)}×${fmt(r.h)}`).join('・')}
+        </p>
+      )}
       <p className="dg-legend">
         {sheet.trims.length > 0 && (
           <span>
             <i className="dg-key trim" />
             端切り {fmt(trim)}mm（{landscape ? '上・右' : '右'}）
+          </span>
+        )}
+        {entry.checked.length > 0 && (
+          <span>
+            <i className="dg-key done" />
+            済（切った部材）
+          </span>
+        )}
+        {remaining.length > 0 && (
+          <span>
+            <i className="dg-key remain" />
+            残りの材料（横×縦）
           </span>
         )}
         <span>
