@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版・第2.0版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版・第2.0版・第2.2版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -9,6 +9,7 @@
 > **第1.3版の変更は 8章にまとめている。** 7章までと食い違うところは 8章が正。
 > **第1.8版（切りながら進める木取り）の変更は 11章にまとめている。** 切り出しのチェック（8.5・10.3・`checklist.ts`）と食い違うところは 11章が正。
 > **第2.0版（フラッシュの重ね切り）の変更は 12章にまとめている。** 木取りの材料の分け方（3.3・10.3）・固定した1枚（11章）と食い違うところは 12章が正。
+> **第2.2版（手持ちの材料）の変更は 14章にまとめている。** 帯詰め（3.3）・重ね切りの組（12.3・12.4）・まとめ（11.5・13.3）と食い違うところは 14章が正。
 
 ## 1. 全体の構成
 
@@ -1196,3 +1197,151 @@ stackLabel(job, boardIds): string     // 「メラミン1＋ラワン4（重ね�
 - **組の行**は今までどおり（`stackedCount` は `sheetCount` と同じ）。並びも今までどおり（材料の保存の並びで、a の位置の直後。a の行が無ければ a の位置に組の行だけ）
 - `totalYieldRate` は変えない（組の1枚は a・b の両方の材料を使うので2回数える）
 - 例：重ね切りオンの見本 → 組 5枚・ラワン 4 1枚（背板 97.8%）・メラミン 1 の行は無い。全体 86.4%
+
+## 14. 第2.2版の変更（手持ちの材料 第1段階）— 決定（planner）
+
+仕様書 9「手持ちの材料（第1段階）」（コミット 5e7ea2f）に対応する。1〜13章と食い違うところは 14章が正。
+方針は「**どの材料も“手持ち”で木取りする。サイズを1つ選んだ材料は、そのサイズが無限にある手持ちとみなす**」。帯詰めは1つの処理のまま、新しい1枚を出すときに「どの大きさの材料を使うか」を選ぶところだけ足す。手持ちを登録しない材料は今までとまったく同じ結果になる（今のテストがそのまま通ること）。保存データ（`kidori.jobs.v2`）の版は上げない（足すだけ）。
+
+### 14.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts               StockSheet・Board.stockOn・Board.stock・SheetLayout.sheet・Unplaced の 'noStock'・StackMismatch の理由
+  packing/stock.ts       stockKinds（材料の手持ち）・stockSizeLabel・availableStock（固定した1枚を引いた残り）・commonStock（組の手持ち）
+  packing/pieces.ts      Piece.shape（手持ちの大きさごとに向きを決め直すため）・Piece.twin（組の片の b の id）
+  packing/guillotine.ts  1枚ごとに大きさ（frame）を持つ。新しい1枚は「入る一番小さい手持ち」を選ぶ
+  packing/index.ts       手持ちで木取り・組 → 材料の順に手持ちを使う・組に置けなかった片を a・b に回す
+  packing/sizes.ts       比較の写しでも手持ちの材料はそのまま（サイズを替えない）
+  hints/saving.ts        手持ちが足りない材料はお知らせを試さない
+  hints/shortage.ts      stockShortage（足りないときの解決策）
+  progress/frozen.ts     freezeSheet の木目を layout.sheet から・materialSummaries の bySize・stockUsage
+src/store/
+  jobs.ts                setStockMode・addStockSheet・updateStockSheet・removeStockSheet
+  storage.ts             Board.stockOn・Board.stock の検査・修復
+src/ui/
+  components/StockEditor.tsx   手持ちの材料の編集（材料ごと）
+  screens/KidoriScreen.tsx     「手持ちの材料」の段・まとめのサイズ別の枚数・1枚ごとのサイズ・足りない知らせ
+```
+
+### 14.2 データの形（`types.ts`）
+
+```ts
+/** 手持ちの材料の1行（第2.2版）。例：4×8 ×3枚 */
+export interface StockSheet {
+  id: string              // その材料の中で重複しない（newId('stock')）
+  sizeKind: BoardSizeKind // 3×6／4×8／自由入力
+  width: number           // 短辺（3×6・4×8 は決まった値）
+  length: number          // 長辺
+  grain: BoardGrain       // 3×6・4×8 は 'long'
+  count: number           // 枚数（1以上の整数）
+}
+
+export interface Board {
+  …今のまま（sizeKind・width・length・grain は「サイズを選ぶ」ときのサイズ）
+  /** 手持ちで木取りする（第2.2版）。オンのときだけ true を持つ */
+  stockOn?: true
+  /** 手持ちの材料（登録順）。オフにしても消さずに残す（切り替えて戻せるように） */
+  stock?: StockSheet[]
+}
+
+export interface SheetLayout {
+  …今のまま（boardWidth・boardLength はその1枚の大きさ）
+  /** 手持ちで木取りした1枚（第2.2版）：使った手持ちの行と木目。サイズを選んだ材料では持たない */
+  sheet?: { stockId: string; sizeKind: BoardSizeKind; grain: BoardGrain }
+}
+
+// MaterialResult.unplaced の reason に 'noStock'（手持ちが足りない・手持ちのどれにも入らない）を足す
+// PackingResult.stackMismatches の各組に reason: 'size' | 'stock' を足す
+```
+
+- **手持ちで木取りするか** は `stockOn === true` だけで決める。手持ちが0行のままオンにはしない（14.8 の `setStockMode` が最初の1行を入れる）
+- 手持ちは材料（`Board`）に持つ（8.2 と同じ理由：材料の削除・仕事のコピー・保存の検査でずれない）。ひな形（8.3）には入れない（新しい仕事は手持ちなしで始まる）
+
+### 14.3 材料の手持ち（`packing/stock.ts`）
+
+```ts
+export interface StockKind {
+  stockId: string | null   // サイズを選んだ材料は null
+  sizeKind: BoardSizeKind
+  width: number; length: number; grain: BoardGrain
+  count: number            // 使える枚数。サイズを選んだ材料は Infinity
+}
+stockKinds(board): StockKind[]              // stockOn なら stock の行（登録順）、そうでなければ選んだサイズ1つ（count: Infinity）
+stockSizeLabel(s): string                   // 3×6 → "3×6"、4×8 → "4×8"、自由入力 → "900×450"（短辺×長辺）
+availableStock(job, boardId): StockKind[]   // 固定した1枚の分を引いた残り（14.6）
+commonStock(a: StockKind[], b: StockKind[]): StockKind[] // 大きさ・木目（sameSheet）がそろう行どうし、枚数は少ないほう。並びは a の順
+```
+
+### 14.4 手持ちで並べる（`packing/guillotine.ts`）
+
+- `packGuillotine(pieces, stock: SheetSpec[], kerf, mode)` にする。`SheetSpec` は手持ちの1行（`StockKind`）＋ その大きさの `usable`・`frame`（`usableRect`・`frameOf` を1行ごとに作る）。**1枚ごとに自分の frame を持ち**、帯の幅・長さの上限はその1枚のものを使う
+- 片の向きは1枚ごと（大きさ・木目）に決める：`Piece.shape`（面の2軸の木取り寸法 s0・s1 と、どちらの軸に木目を通すか 0／1／'any'）から、pieces.ts の `orientationsOn` と同じ規則で求める（手持ちの行ごとに1回だけ計算して持っておく）
+- 並べる順：今までどおり「帯の幅の大きい順 → 長さの大きい順」。基準の向きは、その片が入るどの手持ちの行でも同じ規則（帯の中の方向に長く置く向き）で、一番大きい値を使う（サイズを選んだ材料では今と同じ順になる）
+- 1片ずつ：① 開いている1枚の帯に First Fit ② 開いている1枚に新しい帯 ③ **新しい1枚を出す：残りの枚数が 1 以上で、その片が入る手持ちの行のうち、面積（短辺×長辺）が一番小さい行**（同じ面積なら登録順で前）を1枚使う（仕様書 9「大きい部材から順に、それが収まる一番小さい材料」）④ どの行にも入らない → 入らない片
+- 入らない片の理由：サイズを選んだ材料は今までどおり `tooLarge`。手持ちの材料は **すべて `noStock`**（手持ちが尽きた・手持ちのどの大きさにも入らない。どちらも「足りない」として 14.7 で解決策を出す）
+- サイズを選んだ材料（1行・無限）では、今の `packGuillotine` と同じ結果になること（今のテストがそのまま通る）
+- 計算量は 片 × 帯 ＋ 片 × 手持ちの行数。部材150枚・手持ち3行・おまかせで `packJob` が 1秒以内
+
+### 14.5 木取りの入口（`packing/index.ts`）
+
+- 材料ごとに `availableStock` で並べる。1枚ごとの `SheetLayout` は、その1枚の大きさで `trims`・`usable`・`cuts`・`scraps`・歩留まりを出す（端切りは1枚ごとの大きさに当てる）。手持ちの材料の1枚には `sheet`（手持ちの行・木目）を付ける
+- **おまかせ**：縦切り優先・横切り優先をそれぞれ手持ち全体で並べて比べる。入らない片が少ない → 枚数が少ない → **使った材料の面積の合計が小さい**（大きさが混ざるときのため。1つの大きさなら枚数が同じなら面積も同じなので今と変わらない。未決事項 41）→ 一番大きい端材が大きい → 縦切り優先
+- `sheetCount` はその材料で使った1枚の数（大きさを問わない）。歩留まりの分母は使った1枚それぞれの面積の合計（3.3 と同じ考え方）
+
+### 14.6 固定した1枚と手持ち
+
+- 固定した1枚（**切り終わりを含む**。未決事項 40）は、その材料の手持ちの行のうち、大きさ（`layout.boardWidth`・`boardLength`、小数第1位）と木目（`FrozenSheet.grain`）がそろう最初の行（残りが 1 以上）から1枚引く。そろう行が無ければ引かない（手持ちを書き換えた後など）
+- 組の固定した1枚（`stackWith`）は a・b の両方から1枚ずつ引く
+- `freezeSheet` の `grain` は `layout.sheet?.grain ?? 材料の grain`（手持ちの1枚は、その行の木目を写す）
+
+### 14.7 重ね切りの組と手持ち（`packing/stack.ts`・`packing/index.ts`）
+
+- 組の手持ち ＝ `commonStock(a の availableStock, b の availableStock)`。サイズを選んだ材料は「そのサイズが無限」なので、手持ちを使わない2つの材料では今の `sameSheet` と同じ判定になる。片方だけ手持ちでも同じ規則（手持ちの側の、相手の選んだサイズとそろう行が組の手持ちになる）
+- `stackPlan`：登録した手持ちどうし（`commonStock(stockKinds(a), stockKinds(b))`。固定した1枚は引かない）がそろう行が1つも無い組は `mismatches`（固定で使い切っただけなら組のまま。並べる片が無ければ組の結果も出ない）。理由は、どちらも手持ちを使わないなら `'size'`（今の知らせ「サイズがそろっていないので…」）、どちらかが手持ちなら `'stock'`（「同じサイズの手持ちが無いので、重ねずに木取りしています」）
+- 計算の順：**組（plan の並び）を先に並べ、使った1枚を a・b の手持ちから引いてから**、材料ごとのふつうの片を残りの手持ちで並べる（A＋B と B＋C のように1つの材料が2つの組に入るときも、組の並びで順に引く）
+- **組に置けなかった片**（組の手持ちが尽きた）は、組が手持ちを使っている（どちらかが `stockOn`）ときだけ、a・b それぞれのふつうの片に回す（仕様書「重ねられる枚数は、そのサイズの手持ちの少ないほう」。重ねられない分は別々に切る）。b の片の id は `Piece.twin`（expandPieces が組の片を作るときに b の表面材の番号で振っておく）。どちらも手持ちを使わない組は今までどおり（組の `unplaced` に `tooLarge`）
+
+### 14.8 足りないときの解決策（`hints/shortage.ts`）
+
+```ts
+export interface StockShortage {
+  boardId: string
+  label: string                          // 「シナランバー 18mm」
+  missing: string[]                      // 入らない部材の名前（部材の並び）
+  add: { kind: 'saburoku' | 'shihachi'; count: number | null }[] // 3×6、4×8 の順。null ＝ 足しても入らない
+  change: { kind: 'allowance' | 'trim'; value: number } | null   // 手持ちのままで入る設定（一番大きい値）
+  message: string                        // 「シナランバー 18mm が足りません（入らない部材：棚板）」
+}
+export function stockShortage(job: Job, dims: DimensionResult): StockShortage[]
+```
+
+- 対象：`stockOn` の材料で、その材料のふつうの結果に `noStock` の片がある材料（材料の保存の並び）。無ければ `packJob` を追加で呼ばずに `[]`
+- **足す枚数**：3×6・4×8（木目 長手方向）それぞれについて、足りない材料すべてに同じ n 枚の行を足した写しで `packJob` し、n = 1 から増やして、その材料の `noStock` が無くなった最初の n を記録する。上限は足りない片の数（それで無くならなければ null）。入らない片のうち1つでもそのサイズに入らない（向き・端切り込み）材料は、そのサイズは試さず null
+- **設定を変えて手持ちで入るか**：お知らせ（6.7・E-25）と同じ試し方。切り代（設定の切り代を使う部材があるときだけ）を `smallerSteps` で大きい値から → 切り代で入らなかった材料だけ端切り。その材料の `noStock` が無くなる一番大きい値。組み合わせは試さない
+- 計算の回数は 最大で（3×6 の n）＋（4×8 の n）＋ 切り代 ＋ 端切り の `packJob`。部材150枚で 1秒以内
+- お知らせ（`findSavingHints`）は、`noStock` のある材料（とその材料の入る組）を「減らせる」の対象から外す（足りないときは解決策だけを出す）
+
+### 14.9 比較・まとめ（`packing/sizes.ts`・`progress/frozen.ts`）
+
+- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない
+- `MaterialSummary.bySize: { label: string; count: number }[]`：その行の1枚（固定した1枚（切り終わりを除く）＋計算した1枚）を大きさごとに数えたもの。並びは大きい面積から（例：`4×8 ×2`・`3×6 ×1`）。サイズを選んだ材料でも1つ出す（画面は手持ちの材料のときだけ出す）
+- `stockUsage(job, result): { boardId; rows: { stockId; label; count; used; left }[] }[]`：`stockOn` の材料ごとに、手持ちの行ごとの 使った枚数（固定した1枚（切り終わりを含む）＋組の1枚＋計算した1枚）と残り（count − used。0 未満にしない）。手持ちの編集欄に出す
+
+### 14.10 保存・操作（`src/store`）
+
+- 読み込み（`sanitizeBoard`）：`stockOn` は `true` のときだけ残す。`stock` は配列でなければ外す。行ごとに、id が文字で重複しない・`sizeKind` が3つのどれか・枚数が1以上の整数・自由入力は短辺・長辺が 0 より大きい数、でなければ行を外す（直した数に数える）。3×6・4×8 の寸法と木目は決まった値に直す。自由入力の短辺＞長辺は入れ替える。`stockOn` で行が0になったら `stockOn` を外す
+- `setStockMode(job, boardId, on)`：オンにするとき行が無ければ、今選んでいるサイズ ×1 の行を1つ入れる。オフは `stockOn` を外すだけ（行は残す）
+- `addStockSheet(job, boardId, draft, id?)`・`updateStockSheet(job, boardId, stockId, draft)`・`removeStockSheet(job, boardId, stockId)`：3×6・4×8 は寸法と木目を決まった値にする。自由入力は短辺・長辺が 0 より大きい（短辺≦長辺に並べ直す）。枚数は1以上の整数（「枚数は1以上の整数にしてください」）。最後の1行を消すと `stockOn` も外す
+- 仕事のコピー（`copyJob`）は材料ごと写すので手持ちも写る。ひな形（`templateOf`）は変わらない（手持ちを変えても最後に使った設定は更新しない）
+- 重ね切りの組の相手の手持ちはそろえない（`setBoardSize` の相手をそろえる処理は「サイズを選ぶ」ときだけ）
+
+### 14.11 画面（`src/ui`）
+
+| 画面 | 変更 |
+|---|---|
+| 木取り：手持ちの材料 | まとめの下に「手持ちの材料」の段。木取りする片のある材料（組だけで使う材料を含む）ごとに、「サイズを選ぶ／手持ちで木取り」の切り替え（44px 以上）。手持ちのときは行ごとに サイズ（3×6／4×8／自由入力。自由入力は短辺・長辺・木目）・枚数（数字キー）・「使う ◯／残り ◯」（`stockUsage`）・削除、下に「手持ちを足す」。説明は見出しの ⓘ |
+| 木取り：まとめ | 手持ちの材料の行は、サイズの選択のかわりに `bySize`（「4×8 ×2・3×6 ×1」）。組の行は、a・b のどちらかが手持ちならサイズの選択を出さず `bySize` |
+| 木取り：足りない知らせ | まとめの上に `stockShortage` ごとに「シナランバー 18mm が足りません（入らない部材：棚板）」と解決策（「3×6 を 1枚 足すと入ります」「4×8 を 1枚 足すと入ります」「端切りを 3mm にすると手持ちで入ります」。null のサイズは出さない）。設定・手持ちは自動では変えない |
+| 木取り：1枚ごとの段 | 手持ちの1枚は「1枚目 / 3枚（4×8）」のように大きさを添える（`stockSizeLabel`）。配置図の木目は `layout.sheet?.grain` |
+| 木取り：組の知らせ | `stackMismatches` の理由が `'stock'` なら「メラミン1＋ラワン4：同じサイズの手持ちが無いので、重ねずに木取りしています」 |

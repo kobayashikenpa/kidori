@@ -82,6 +82,26 @@ export interface Board {
    * 画面の並び順（boards.ts の orderedBoards）に使う。第1.1版までのデータには無い
    */
   builtIn?: true
+  /** 手持ちで木取りする（第2.2版）。オンのときだけ true を持つ */
+  stockOn?: true
+  /** 手持ちの材料（登録順）。オフにしても消さずに残す（切り替えて戻せるように） */
+  stock?: StockSheet[]
+}
+
+/** 手持ちの材料の1行（第2.2版）。例：4×8 ×3枚 */
+export interface StockSheet {
+  /** その材料の中で重複しない */
+  id: string
+  /** 3×6／4×8／自由入力 */
+  sizeKind: BoardSizeKind
+  /** 短辺（3×6・4×8 は決まった値） */
+  width: number
+  /** 長辺 */
+  length: number
+  /** 3×6・4×8 は 'long' */
+  grain: BoardGrain
+  /** 枚数（1以上の整数） */
+  count: number
 }
 
 /** 部材の木目：板の面になる2つの軸のどちらか、または「どちらでもよい」 */
@@ -298,7 +318,15 @@ export interface SheetLayout {
   usedArea: number
   /** 歩留まり 0〜1 */
   yieldRate: number
+  /** 手持ちで木取りした1枚（第2.2版）：使った手持ちの行と木目。サイズを選んだ材料では持たない */
+  sheet?: { stockId: string; sizeKind: BoardSizeKind; grain: BoardGrain }
 }
+
+/**
+ * 入らない部材の理由。tooLarge：選んだサイズのどの向きにも入らない。
+ * noStock（第2.2版）：手持ちで木取りする材料で、手持ちが足りない・手持ちのどの大きさにも入らない
+ */
+export type UnplacedReason = 'tooLarge' | 'noStock'
 
 export interface MaterialResult {
   boardId: string
@@ -312,13 +340,19 @@ export interface MaterialResult {
   /** この材料全体の歩留まり */
   yieldRate: number
   /** 板に入らない部材 */
-  unplaced: { partId: string; name: string; reason: 'tooLarge' }[]
+  unplaced: { partId: string; name: string; reason: UnplacedReason }[]
   /**
    * 重ね切りの組の結果（第2.0版）。このとき boardId は stackKey(a, b)、material・thickness は1つ目の材料 a のもの。
    * 1枚は a・b の両方の1枚として数える
    */
   stack?: { boardIds: [string, string] }
 }
+
+/**
+ * 重ねなかった理由（第2.2版）。size：サイズ・木目がそろっていない（どちらも手持ちを使わない）。
+ * stock：どちらかが手持ちで、同じサイズの手持ちが無い。今までの結果と同じ形にするため、size のときは持たない（無ければ size）
+ */
+export type StackMismatchReason = 'size' | 'stock'
 
 export interface PackingResult {
   /** 板の登録順 */
@@ -340,7 +374,7 @@ export interface PackingResult {
    * サイズ・木目がそろっていないので重ねずに木取りした組（第2.0版）。重ねる片があった組だけ。
    * 並びは 1つ目の材料の保存の並び → 2つ目の材料の保存の並び
    */
-  stackMismatches: { boardIds: [string, string]; flushIds: string[] }[]
+  stackMismatches: { boardIds: [string, string]; flushIds: string[]; reason?: StackMismatchReason }[]
 }
 
 // ---------- 切りながら進める木取り（第1.8版） ----------

@@ -26,6 +26,7 @@ import {
   type PartChecks,
   type Settings,
   type SheetLayout,
+  type StockSheet,
 } from '../engine/types'
 import { defaultTemplate, type SettingsTemplate } from './template'
 
@@ -127,7 +128,8 @@ export function copyJob(
   const boards = job.boards.map((b) => {
     const nid = newId('board')
     boardIds.set(b.id, nid)
-    return { ...b, id: nid }
+    // 手持ち（第2.2版）も写す（行は別のオブジェクトにする）
+    return b.stock ? { ...b, id: nid, stock: b.stock.map((s) => ({ ...s })) } : { ...b, id: nid }
   })
   const flushIds = new Map<string, string>()
   const flushes = job.flushes.map((f) => {
@@ -361,6 +363,80 @@ export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpRes
 export function setBoardsSize(job: Job, boardIds: readonly string[], size: BoardSheet): OpResult {
   if (boardIds.length === 0 || boardIds.some((id) => !job.boards.some((b) => b.id === id))) return fail('材料が見つかりません')
   return applySize(job, stackPartners(job, boardIds), size)
+}
+
+// ---------- 手持ちの材料（第2.2版。architecture.md 14.10） ----------
+
+/** 手持ちの行の下書き（id 以外） */
+export type StockDraft = Omit<StockSheet, 'id'>
+
+const STOCK_COUNT_MESSAGE = '枚数は1以上の整数にしてください'
+
+/** 手持ちの行をそろえる：3×6・4×8 は寸法と木目を決まった値に、自由入力は短辺≦長辺に並べ直す。おかしければ理由 */
+function normalizeStock(s: StockSheet): StockSheet | string {
+  if (!(Number.isInteger(s.count) && s.count >= 1)) return STOCK_COUNT_MESSAGE
+  if (s.sizeKind === 'custom') {
+    if (!(Number.isFinite(s.width) && s.width > 0 && Number.isFinite(s.length) && s.length > 0)) {
+      return '材料の大きさは 0 より大きい数を入れてください'
+    }
+    const grain = s.grain === 'short' ? 'short' : 'long'
+    return { ...s, width: Math.min(s.width, s.length), length: Math.max(s.width, s.length), grain }
+  }
+  const [width, length] = BOARD_SIZES[s.sizeKind]
+  return { ...s, width, length, grain: 'long' }
+}
+
+/** 材料の手持ちを変える（stockOn・stock を渡した値にする。行が0になれば stockOn を外し、stock も持たない） */
+function withBoardStock(job: Job, boardId: string, stockOn: boolean, stock: StockSheet[] | undefined): OpResult {
+  const cur = job.boards.find((b) => b.id === boardId)
+  if (!cur) return fail('材料が見つかりません')
+  const { stockOn: _on, stock: _stock, ...rest } = cur
+  const next: Board = { ...rest }
+  if (stock && stock.length > 0) next.stock = stock
+  if (stockOn && next.stock) next.stockOn = true
+  return ok({ ...job, boards: job.boards.map((b) => (b.id === boardId ? next : b)) })
+}
+
+/**
+ * 「サイズを選ぶ／手持ちで木取り」の切り替え。オンにするとき行が無ければ、今選んでいるサイズ ×1 の行を1つ入れる。
+ * オフは stockOn を外すだけ（行は残す。もう一度オンにすると同じ行）
+ */
+export function setStockMode(job: Job, boardId: string, on: boolean, id: string = newId('stock')): OpResult {
+  const cur = job.boards.find((b) => b.id === boardId)
+  if (!cur) return fail('材料が見つかりません')
+  if (!on) return withBoardStock(job, boardId, false, cur.stock)
+  if (cur.stock && cur.stock.length > 0) return withBoardStock(job, boardId, true, cur.stock)
+  const first = normalizeStock({ id, sizeKind: cur.sizeKind, width: cur.width, length: cur.length, grain: cur.grain, count: 1 })
+  if (typeof first === 'string') return fail(first)
+  return withBoardStock(job, boardId, true, [first])
+}
+
+/** 手持ちの行を足す（最後に）。枚数は1以上の整数。stockOn は変えない */
+export function addStockSheet(job: Job, boardId: string, draft: StockDraft, id: string = newId('stock')): OpResult {
+  const cur = job.boards.find((b) => b.id === boardId)
+  if (!cur) return fail('材料が見つかりません')
+  const row = normalizeStock({ ...draft, id })
+  if (typeof row === 'string') return fail(row)
+  return withBoardStock(job, boardId, cur.stockOn === true, [...(cur.stock ?? []), row])
+}
+
+/** 手持ちの行を変える（渡した項目だけ）。サイズの種類を変えたら 3×6・4×8 は寸法と木目を決まった値にする */
+export function updateStockSheet(job: Job, boardId: string, stockId: string, patch: Partial<StockDraft>): OpResult {
+  const cur = job.boards.find((b) => b.id === boardId)
+  if (!cur) return fail('材料が見つかりません')
+  const old = cur.stock?.find((s) => s.id === stockId)
+  if (!old) return fail('手持ちの行が見つかりません')
+  const row = normalizeStock({ ...old, ...patch, id: stockId })
+  if (typeof row === 'string') return fail(row)
+  return withBoardStock(job, boardId, cur.stockOn === true, cur.stock!.map((s) => (s.id === stockId ? row : s)))
+}
+
+/** 手持ちの行を消す。最後の1行を消すと stockOn も外す */
+export function removeStockSheet(job: Job, boardId: string, stockId: string): OpResult {
+  const cur = job.boards.find((b) => b.id === boardId)
+  if (!cur) return fail('材料が見つかりません')
+  if (!cur.stock?.some((s) => s.id === stockId)) return fail('手持ちの行が見つかりません')
+  return withBoardStock(job, boardId, cur.stockOn === true, cur.stock.filter((s) => s.id !== stockId))
 }
 
 // ---------- 逃げ ----------

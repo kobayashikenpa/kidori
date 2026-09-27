@@ -42,11 +42,20 @@ export function KeypadField({ text, onText, onClose, onDone, onOpen, integer = f
     setFresh(false)
   }
   const pressRef = useRef(press)
+  const openRef = useRef(open)
   useEffect(() => {
     closeRef.current = onClose
     doneRef.current = onDone
     pressRef.current = press
+    openRef.current = open
   })
+  // 数字キーを開いたまま入力欄が消えた（行の削除・画面の切り替えなど）ときも、閉じたときと同じく打った値を確定する
+  useEffect(
+    () => () => {
+      if (openRef.current) closeRef.current?.()
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!open) return

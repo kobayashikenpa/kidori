@@ -80,8 +80,13 @@ export function findSavingHints(job: Job): SavingHint[] {
   if (allowances.length === 0 && trims.length === 0) return []
 
   const base = pack(job)
+  // 手持ちが足りない材料（noStock のある材料）とその材料の入る組は、減らせるお知らせの対象にしない（第2.2版。解決策だけを出す）
+  const shortIds = new Set(base.materials.filter((m) => !m.stack && m.unplaced.some((u) => u.reason === 'noStock')).map((m) => m.boardId))
+  const excluded = new Set(
+    base.materials.filter((m) => shortIds.has(m.boardId) || m.stack?.boardIds.some((id) => shortIds.has(id))).map((m) => m.boardId),
+  )
   // 1枚以下の材料はそれ以上減らない
-  const reducible = base.materials.filter((m) => m.sheetCount >= 2).map((m) => m.boardId)
+  const reducible = base.materials.filter((m) => m.sheetCount >= 2 && !excluded.has(m.boardId)).map((m) => m.boardId)
   if (reducible.length === 0) return []
 
   const hints: SavingHint[] = []
@@ -90,7 +95,7 @@ export function findSavingHints(job: Job): SavingHint[] {
     for (const value of values) {
       if (reducible.every((id) => shown.has(id))) return
       const trial = pack({ ...job, settings: { ...job.settings, [kind]: value } })
-      const materials = reduced(job, base, trial).filter((m) => only(m.boardId))
+      const materials = reduced(job, base, trial).filter((m) => only(m.boardId) && !excluded.has(m.boardId))
       if (!materials.some((m) => !shown.has(m.boardId))) continue
       for (const m of materials) shown.add(m.boardId)
       hints.push({ change: { kind, value }, materials, message: messageOf(kind, value, materials) })

@@ -1,9 +1,10 @@
 // 固定した1枚（第1.8版。architecture.md 11.3〜11.5）：画面に出ていた1枚をまるごと写して持つ。
 // 写しから描き、写しから進み具合を計算するので、部材や設定が変わっても固定した1枚は動かない
 import { stackKey, stackLabel } from '../packing/stack'
+import { sameStockSize, stockSizeLabel, usesStock } from '../packing/stock'
 import { combineYield } from '../packing/yield'
 import { round1 } from '../round'
-import type { DimensionResult, FrozenSheet, Job, PackingResult, Part, PartDimensions, SheetLayout } from '../types'
+import { BOARD_SIZES, type BoardGrain, type DimensionResult, type FrozenSheet, type Job, type PackingResult, type Part, type PartDimensions, type SheetLayout } from '../types'
 import { sheetProgress, type SheetProgress } from './sheetProgress'
 
 /** frozenDemand のキー */
@@ -39,7 +40,8 @@ export function freezeSheet(
     boardId,
     material: board.material,
     thickness: board.thickness,
-    grain: board.grain,
+    // 手持ちの1枚は、その行の木目を写す（第2.2版。14.6）
+    grain: layout.sheet?.grain ?? board.grain,
     mode,
     kerf: job.settings.kerf,
     trim: job.settings.trim,
@@ -191,6 +193,98 @@ export function materialSummaries(
   result: PackingResult,
   views: readonly FrozenSheetView[],
 ): { materials: MaterialSummary[]; totalYieldRate: number } {
+  const { rows, all } = summaryRows(job, result, views)
+  return { materials: rows.map((r) => r.summary), totalYieldRate: combineYield(all.map(areasOf)).yieldRate }
+}
+
+/** まとめの行の、大きさごとの枚数（第2.2版。例：4×8 ×2・3×6 ×1） */
+export interface SizeCount {
+  /** 「4×8」「3×6」「450×900」（stockSizeLabel） */
+  label: string
+  count: number
+}
+
+/** 1枚の大きさの表示。手持ちの1枚は行の選び方、サイズを選んだ1枚は大きさ（910×1820 → 3×6、1220×2440 → 4×8）から */
+export function layoutSizeLabel(layout: SheetLayout): string {
+  const w = round1(layout.boardWidth)
+  const l = round1(layout.boardLength)
+  if (layout.sheet) return stockSizeLabel({ sizeKind: layout.sheet.sizeKind, width: w, length: l })
+  const kind = (['saburoku', 'shihachi'] as const).find((k) => BOARD_SIZES[k][0] === w && BOARD_SIZES[k][1] === l)
+  return stockSizeLabel({ sizeKind: kind ?? 'custom', width: w, length: l })
+}
+
+/**
+ * まとめの行（materialSummaries と同じ並び・同じ boardId）ごとの、大きさごとの枚数（architecture.md 14.9 の bySize）。
+ * 数える1枚は sheetCount と同じ（固定した1枚（切り終わりを除く）＋計算した1枚）。並びは面積の大きい順（同じなら先に出た順）。
+ * サイズを選んだ材料でも1つ出す（画面は手持ちの材料のときだけ出す）。
+ * 今までの MaterialSummary の形を変えないため、別の関数にしている
+ */
+export function materialSizeCounts(
+  job: Job,
+  result: PackingResult,
+  views: readonly FrozenSheetView[],
+): { boardId: string; bySize: SizeCount[] }[] {
+  return summaryRows(job, result, views).rows.map(({ summary, sheets }) => {
+    const counts: (SizeCount & { area: number })[] = []
+    for (const s of sheets) {
+      const label = layoutSizeLabel(s)
+      const c = counts.find((x) => x.label === label)
+      if (c) c.count++
+      else counts.push({ label, count: 1, area: s.boardWidth * s.boardLength })
+    }
+    counts.sort((a, b) => b.area - a.area)
+    return { boardId: summary.boardId, bySize: counts.map(({ label, count }) => ({ label, count })) }
+  })
+}
+
+/** 手持ちの行ごとの使った枚数と残り（第2.2版。architecture.md 14.9） */
+export interface StockUsage {
+  boardId: string
+  rows: { stockId: string; label: string; count: number; used: number; left: number }[]
+}
+
+/**
+ * 手持ちで木取りする材料（保存の並び）ごとに、手持ちの行ごとの 使った枚数 と 残り（count − used。0 未満にしない）。
+ * 使った枚数 ＝ 固定した1枚（切り終わりを含む。未決事項 40）＋ 組の1枚 ＋ 計算した1枚。
+ * 固定した1枚・組の1枚は、木取りと同じく大きさ・木目のそろう最初の行（残り1以上）に数える。計算した1枚は layout.sheet の行
+ */
+export function stockUsage(job: Job, result: PackingResult): StockUsage[] {
+  const out: StockUsage[] = []
+  for (const board of job.boards) {
+    if (!usesStock(board)) continue
+    const rows = board.stock!.map((s) => ({ stockId: s.id, label: stockSizeLabel(s), count: s.count, used: 0, left: s.count }))
+    const src = board.stock!
+    const takeMatching = (size: { width: number; length: number; grain: BoardGrain }) => {
+      const i = src.findIndex((s, k) => rows[k].used < s.count && sameStockSize(s, size))
+      if (i >= 0) rows[i].used++
+    }
+    for (const f of job.frozenSheets) {
+      if (f.boardId !== board.id && f.stackWith?.boardId !== board.id) continue
+      takeMatching({ width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain })
+    }
+    for (const m of result.materials) {
+      if (!m.stack?.boardIds.includes(board.id)) continue
+      for (const s of m.sheets) takeMatching({ width: s.boardWidth, length: s.boardLength, grain: s.sheet?.grain ?? board.grain })
+    }
+    for (const m of result.materials) {
+      if (m.stack || m.boardId !== board.id) continue
+      for (const s of m.sheets) {
+        const r = rows.find((x) => x.stockId === s.sheet?.stockId)
+        if (r) r.used++
+      }
+    }
+    for (const r of rows) r.left = Math.max(0, r.count - r.used)
+    out.push({ boardId: board.id, rows })
+  }
+  return out
+}
+
+/** まとめの行と、その行で数える1枚たち（materialSummaries・materialSizeCounts で使う）。all は全体の歩留まりの1枚たち */
+function summaryRows(
+  job: Job,
+  result: PackingResult,
+  views: readonly FrozenSheetView[],
+): { rows: { summary: MaterialSummary; sheets: SheetLayout[] }[]; all: SheetLayout[] } {
   const ids = [...job.boards.map((b) => b.id)]
   for (const v of views) {
     if (!ids.includes(v.sheet.boardId)) ids.push(v.sheet.boardId)
@@ -220,34 +314,36 @@ export function materialSummaries(
   for (const m of computedStacks) stackOf(m.boardId, m.stack!.boardIds).active.push(...m.sheets)
 
   const all: SheetLayout[] = []
-  const materials: MaterialSummary[] = []
+  const rows: { summary: MaterialSummary; sheets: SheetLayout[] }[] = []
   for (const boardId of ids) {
     const computed = result.materials.find((m) => m.boardId === boardId && !m.stack)
     const mine = views.filter((v) => v.sheet.boardId === boardId && !v.sheet.stackWith)
     if (computed || mine.length > 0) {
       const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? [])]
       all.push(...sheets)
-      materials.push({
+      const summary: MaterialSummary = {
         boardId,
         sheetCount: sheets.length,
         stackedCount: 0,
         yieldRate: combineYield(sheets.map(areasOf)).yieldRate,
         completedCount: mine.filter((v) => v.complete).length,
-      })
+      }
+      rows.push({ summary, sheets })
     }
     for (const s of stacks) {
       if (s.boardIds[0] !== boardId) continue
       // 組の1枚は a・b の2種類の材料を1枚ずつ使うので、全体の歩留まりには2回数える
       all.push(...s.active, ...s.active)
-      materials.push({
+      const summary: MaterialSummary = {
         boardId: s.key,
         stack: { boardIds: [s.boardIds[0], s.boardIds[1]] },
         sheetCount: s.active.length,
         stackedCount: s.active.length,
         yieldRate: combineYield(s.active.map(areasOf)).yieldRate,
         completedCount: s.completed,
-      })
+      }
+      rows.push({ summary, sheets: s.active })
     }
   }
-  return { materials, totalYieldRate: combineYield(all.map(areasOf)).yieldRate }
+  return { rows, all }
 }
