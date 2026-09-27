@@ -1,5 +1,6 @@
 // 固定した1枚（第1.8版。architecture.md 11.3〜11.5）：画面に出ていた1枚をまるごと写して持つ。
 // 写しから描き、写しから進み具合を計算するので、部材や設定が変わっても固定した1枚は動かない
+import { stackKey, stackLabel } from '../packing/stack'
 import { combineYield } from '../packing/yield'
 import { round1 } from '../round'
 import type { DimensionResult, FrozenSheet, Job, PackingResult, Part, PartDimensions, SheetLayout } from '../types'
@@ -17,7 +18,8 @@ function copyLayout(layout: SheetLayout): SheetLayout {
 
 /**
  * 画面に出ている1枚を写して、固定した1枚を作る（チェックは空）。
- * 材料名・厚み・木目は job.boards から、刃厚・端切りは job.settings から写す。材料が無ければ例外
+ * 材料名・厚み・木目は job.boards から、刃厚・端切りは job.settings から写す。材料が無ければ例外。
+ * 重ね切りの組の1枚（第2.0版）は boardId に1つ目の材料 a、stackWith に2つ目の材料 b を渡す（b の材料名・厚みも写す）
  */
 export function freezeSheet(
   job: Job,
@@ -26,10 +28,13 @@ export function freezeSheet(
   layout: SheetLayout,
   id: string,
   now: Date,
+  stackWith?: string,
 ): FrozenSheet {
   const board = job.boards.find((b) => b.id === boardId)
   if (!board) throw new Error(`材料が見つかりません: ${boardId}`)
-  return {
+  const other = stackWith === undefined ? undefined : job.boards.find((b) => b.id === stackWith)
+  if (stackWith !== undefined && !other) throw new Error(`材料が見つかりません: ${stackWith}`)
+  const sheet: FrozenSheet = {
     id,
     boardId,
     material: board.material,
@@ -42,6 +47,8 @@ export function freezeSheet(
     checked: [],
     frozenAt: now.toISOString(),
   }
+  if (other) sheet.stackWith = { boardId: other.id, material: other.material, thickness: other.thickness }
+  return sheet
 }
 
 /**
@@ -72,8 +79,12 @@ export interface FrozenDrift {
 
 export interface FrozenSheetView {
   sheet: FrozenSheet
-  /** 「ラワン 4mm」（材料があれば今の名前、無ければ写し） */
+  /**
+   * 「ラワン 4mm」（材料があれば今の名前、無ければ写し）。
+   * 重ね切りの1枚（stackWith あり）は「メラミン1＋ラワン4（重ね切り）」
+   */
   label: string
+  /** 材料がある（重ね切りの1枚は2つとも） */
   boardExists: boolean
   progress: SheetProgress
   /** 空なら変わっていない。写しの片の並びで、部材ごとに1つ */
@@ -106,18 +117,21 @@ export function frozenSheetViews(job: Job, dims: DimensionResult): FrozenSheetVi
   const dimById = new Map(dims.parts.map((d) => [d.partId, d]))
   return job.frozenSheets.map((sheet): FrozenSheetView => {
     const board = job.boards.find((b) => b.id === sheet.boardId)
+    const other = sheet.stackWith ? job.boards.find((b) => b.id === sheet.stackWith?.boardId) : undefined
+    /** 片を切った材料（重ね切りの1枚は2つ。どちらでも判定し、部材ごとに1つにまとめる） */
+    const boardIds = sheet.stackWith ? [sheet.boardId, sheet.stackWith.boardId] : [sheet.boardId]
     const drift: FrozenDrift[] = []
     const seen = new Set<string>()
     for (const pl of sheet.layout.placements) {
       if (seen.has(pl.partId)) continue
       seen.add(pl.partId)
       const part = partById.get(pl.partId)
-      const quantity = part ? currentQuantity(job, part, sheet.boardId) : null
+      const quantities = boardIds.map((b) => (part ? currentQuantity(job, part, b) : null))
       const name = part?.name ?? pl.name
       let reason: FrozenDrift['reason'] | null = null
       // 1つの部材に理由が重なったら removed → count → size の順で1つにする（枚数0 の行は寸法が出ないことがあるため count を先に）
-      if (!part || quantity === null) reason = 'removed'
-      else if ((demand.get(demandKey(pl.partId, sheet.boardId)) ?? 0) > quantity) reason = 'count'
+      if (!part || quantities.some((q) => q === null)) reason = 'removed'
+      else if (boardIds.some((b, i) => (demand.get(demandKey(pl.partId, b)) ?? 0) > quantities[i]!)) reason = 'count'
       else {
         const label = currentSizeLabel(dimById.get(part.id))
         const labels = sheet.layout.placements.filter((x) => x.partId === pl.partId).map((x) => x.sizeLabel)
@@ -125,10 +139,13 @@ export function frozenSheetViews(job: Job, dims: DimensionResult): FrozenSheetVi
       }
       if (reason) drift.push({ partId: pl.partId, name, reason })
     }
+    const stackWith = sheet.stackWith
     return {
       sheet,
-      label: `${board?.material ?? sheet.material} ${board?.thickness ?? sheet.thickness}mm`,
-      boardExists: board !== undefined,
+      label: stackWith
+        ? stackLabel(job, [sheet.boardId, stackWith.boardId], [sheet, stackWith])
+        : `${board?.material ?? sheet.material} ${board?.thickness ?? sheet.thickness}mm`,
+      boardExists: board !== undefined && (stackWith === undefined || other !== undefined),
       progress: sheetProgress(sheet.layout, sheet.kerf, sheet.checked),
       drift,
       complete: sheet.completedAt !== undefined,
@@ -137,21 +154,36 @@ export function frozenSheetViews(job: Job, dims: DimensionResult): FrozenSheetVi
 }
 
 export interface MaterialSummary {
+  /** 材料の id。重ね切りの組の行（第2.0版）は stackKey(a, b) */
   boardId: string
-  /** 画面に出す材料の枚数 ＝ 固定した1枚（切り終わりを除く）＋ 計算した1枚 */
+  /** 重ね切りの組の行（第2.0版）なら、組の2つの材料 */
+  stack?: { boardIds: [string, string] }
+  /**
+   * 画面に出す材料の枚数 ＝ 固定した1枚（切り終わりを除く）＋ 計算した1枚。
+   * 材料の行には、その材料が入っている組の1枚（固定・計算とも、切り終わりを除く）も足す
+   */
   sheetCount: number
+  /** sheetCount のうち重ね切りの組の1枚の数（組の行は sheetCount と同じ） */
+  stackedCount: number
   /** 同じ1枚たちの歩留まり */
   yieldRate: number
-  /** 切り終わった1枚の数 */
+  /** 切り終わった1枚の数（材料の行はその材料だけで切った1枚、組の行はその組の1枚） */
   completedCount: number
 }
 
 const areasOf = (s: SheetLayout) => ({ usedArea: s.usedArea, boardArea: s.boardWidth * s.boardLength })
 
+/** 固定した1枚の組の id（重ね切りでなければ null） */
+function sheetStackKey(sheet: FrozenSheet): string | null {
+  return sheet.stackWith ? stackKey(sheet.boardId, sheet.stackWith.boardId) : null
+}
+
 /**
  * 木取り画面の「必要な材料」「歩留まり」「全体の歩留まり」（暫定。未決事項 31）。
  * 並びは材料の保存の並び。固定した1枚しか無い材料・切り終わりしか無い材料も入れる。
- * 削除した材料の固定した1枚は最後に（固定した順）
+ * 削除した材料の固定した1枚は最後に（固定した順）。
+ * 重ね切り（第2.0版。architecture.md 12.5）：組の行を a の行の直後に足す（固定した組の1枚しか無い組も）。
+ * 材料の行には組の1枚も数える。全体の歩留まりは材料の行の1枚たちで出す（組の1枚は a・b で2回数える）
  */
 export function materialSummaries(
   job: Job,
@@ -159,21 +191,61 @@ export function materialSummaries(
   views: readonly FrozenSheetView[],
 ): { materials: MaterialSummary[]; totalYieldRate: number } {
   const ids = [...job.boards.map((b) => b.id)]
-  for (const v of views) if (!ids.includes(v.sheet.boardId)) ids.push(v.sheet.boardId)
+  for (const v of views) {
+    if (!ids.includes(v.sheet.boardId)) ids.push(v.sheet.boardId)
+    const b = v.sheet.stackWith?.boardId
+    if (b !== undefined && !ids.includes(b)) ids.push(b)
+  }
+
+  // 組：計算した組の結果の並び → 固定した組の1枚しか無い組（固定した順）
+  const stacks: { key: string; boardIds: [string, string]; active: SheetLayout[]; completed: number }[] = []
+  const stackOf = (key: string, boardIds: [string, string]) => {
+    let x = stacks.find((s) => s.key === key)
+    if (!x) {
+      x = { key, boardIds, active: [], completed: 0 }
+      stacks.push(x)
+    }
+    return x
+  }
+  const computedStacks = result.materials.filter((m) => m.stack)
+  for (const m of computedStacks) stackOf(m.boardId, m.stack!.boardIds)
+  for (const v of views) {
+    const key = sheetStackKey(v.sheet)
+    if (key === null) continue
+    const x = stackOf(key, [v.sheet.boardId, v.sheet.stackWith!.boardId])
+    if (v.complete) x.completed++
+    else x.active.push(v.sheet.layout)
+  }
+  for (const m of computedStacks) stackOf(m.boardId, m.stack!.boardIds).active.push(...m.sheets)
+
   const all: SheetLayout[] = []
   const materials: MaterialSummary[] = []
   for (const boardId of ids) {
-    const computed = result.materials.find((m) => m.boardId === boardId)
-    const mine = views.filter((v) => v.sheet.boardId === boardId)
-    if (!computed && mine.length === 0) continue
-    const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? [])]
-    all.push(...sheets)
-    materials.push({
-      boardId,
-      sheetCount: sheets.length,
-      yieldRate: combineYield(sheets.map(areasOf)).yieldRate,
-      completedCount: mine.filter((v) => v.complete).length,
-    })
+    const computed = result.materials.find((m) => m.boardId === boardId && !m.stack)
+    const mine = views.filter((v) => v.sheet.boardId === boardId && !v.sheet.stackWith)
+    const stacked = stacks.filter((s) => s.boardIds.includes(boardId)).flatMap((s) => s.active)
+    if (computed || mine.length > 0 || stacked.length > 0) {
+      const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? []), ...stacked]
+      all.push(...sheets)
+      materials.push({
+        boardId,
+        sheetCount: sheets.length,
+        stackedCount: stacked.length,
+        yieldRate: combineYield(sheets.map(areasOf)).yieldRate,
+        completedCount: mine.filter((v) => v.complete).length,
+      })
+    }
+    for (const s of stacks) {
+      if (s.boardIds[0] !== boardId) continue
+      materials.push({
+        boardId: s.key,
+        stack: { boardIds: [s.boardIds[0], s.boardIds[1]] },
+        sheetCount: s.active.length,
+        stackedCount: s.active.length,
+        yieldRate: combineYield(s.active.map(areasOf)).yieldRate,
+        completedCount: s.completed,
+      })
+    }
   }
   return { materials, totalYieldRate: combineYield(all.map(areasOf)).yieldRate }
 }

@@ -111,7 +111,7 @@ describe('materialSummaries（画面の枚数・歩留まり）', () => {
     const job = bookshelfJob()
     const r = packJob(job, computeDimensions(job))
     const s = materialSummaries(job, r, views(job))
-    expect(s.materials).toEqual(r.materials.map((m) => ({ boardId: m.boardId, sheetCount: m.sheetCount, yieldRate: m.yieldRate, completedCount: 0 })))
+    expect(s.materials).toEqual(r.materials.map((m) => ({ boardId: m.boardId, sheetCount: m.sheetCount, stackedCount: 0, yieldRate: m.yieldRate, completedCount: 0 })))
     expect(s.totalYieldRate).toBeCloseTo(r.totalYieldRate, 10)
   })
 
