@@ -111,13 +111,16 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
     setCursor(units.length)
     setTab(null)
     setRefPartId(null)
+    setErrFullFor(null)
     onOpenChange(true)
   }
 
   const spoken = labels.length > 0 ? labels.join(' ') : '空'
   const errorText = errors.map((e) => e.message).join('。')
   // エラーの全文を出しているか（押したときだけ。ふだんは1行に切り詰める）
-  const [errFull, setErrFull] = useState(false)
+  // 全文を出したときのエラーの文を覚えておき、文が変わったり消えたりしたら自動で1行に戻す
+  const [errFullFor, setErrFullFor] = useState<string | null>(null)
+  const errFull = errors.length > 0 && errFullFor === errorText
 
   return (
     <div className="field" ref={fieldRef}>
@@ -131,12 +134,12 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
           <button
             type="button"
             className={`expr-err${errFull ? ' full' : ''}`}
-            id={`${id}-err`}
-            role="alert"
             aria-expanded={errFull}
-            onClick={() => setErrFull((v) => !v)}
+            onClick={() => setErrFullFor(errFull ? null : errorText)}
           >
-            {errorText}
+            <span id={`${id}-err`} role="alert">
+              {errorText}
+            </span>
           </button>
         ) : (
           finished !== null && (

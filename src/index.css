@@ -1585,9 +1585,6 @@ select.input {
   flex: none;
   white-space: nowrap;
 }
-.cl-qty {
-  font-weight: 400;
-}
 .cl-row.done {
   background: var(--bg);
   color: var(--muted);
