@@ -1,17 +1,20 @@
 // 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
-// 入らない部材・計算できない部材の一覧、材料ごとの切り出しチェックと板ごとの結果。計算はすべて engine（computeDimensions → packJob）
+// 入らない部材・計算できない部材の一覧、材料ごとに 固定した1枚 → 計算した1枚 の順で1枚ごとの配置図とチェックリスト（第1.8版）。
+// 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetChecklist）
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { cuttingChecklist, type CutChecklistRow } from '../../engine/checklist'
+import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
+import { frozenSheetViews, materialSummaries, type FrozenSheetView, type MaterialSummary } from '../../engine/progress/frozen'
+import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
-import { boardLabel, setCutChecklistRow, updateSettings } from '../../store/jobs'
+import { boardLabel, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
-import { CutChecklist } from '../components/CutChecklist'
 import { ScrapList } from '../components/ScrapList'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
+import { SheetChecklist } from '../components/SheetChecklist'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { SheetSizePicker } from '../components/SheetSizePicker'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
@@ -25,59 +28,122 @@ const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = 
   noThickness: '厚みが決まらない（部材の画面で厚みを選んでください）',
 }
 
+/** 画面に出す1枚（固定した1枚、または計算した1枚） */
+interface SheetEntry {
+  /** React のキー */
+  key: string
+  layout: SheetLayout
+  target: SheetTarget
+  checked: readonly string[]
+  grain: BoardGrain
+  trim: number
+  /** 固定した1枚なら表示用のまとめ */
+  view: FrozenSheetView | null
+}
+
+/** 材料ごとの段 */
+interface Section {
+  boardId: string
+  label: string
+  summary: MaterialSummary
+  mode: 'vertical' | 'horizontal' | null
+  sheets: SheetEntry[]
+}
+
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
-  // 今の結果と、3×6・4×8 の比較（材料のサイズの選択）。どちらも仕事が変わったときだけ計算し直す
-  const { result, compare, checklist } = useMemo(() => {
+  // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
+  const { result, compare, views, summaries } = useMemo(() => {
     const dims = computeDimensions(job)
-    return {
-      result: packJob(job, dims),
-      compare: compareStandardSizes(job, dims),
-      checklist: cuttingChecklist(job, dims),
-    }
+    const result = packJob(job, dims)
+    const views = frozenSheetViews(job, dims)
+    return { result, compare: compareStandardSizes(job, dims), views, summaries: materialSummaries(job, result, views) }
   }, [job])
-  // 切り出しの完了を付け外すと上の集計や配置図が変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す
-  const anchor = useRef<{ key: string; top: number } | null>(null)
+  // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
+  // 押した行が消えたとき（その1枚が切り終わり）は、材料の段の見出しを同じ位置に残す
+  const anchor = useRef<{ keys: string[]; tops: number[] } | null>(null)
   useLayoutEffect(() => {
     const a = anchor.current
     if (!a) return
     anchor.current = null
-    const el = document.querySelector<HTMLElement>(`[data-cl-key="${CSS.escape(a.key)}"]`)
-    if (!el) return
-    const delta = el.getBoundingClientRect().top - a.top
-    if (Math.abs(delta) > 1) window.scrollBy(0, delta)
+    for (let i = 0; i < a.keys.length; i++) {
+      const el = document.querySelector<HTMLElement>(`[data-cl-key="${CSS.escape(a.keys[i])}"]`)
+      if (!el) continue
+      const delta = el.getBoundingClientRect().top - a.tops[i]
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta)
+      return
+    }
   }, [job])
-  const toggleRow = (row: CutChecklistRow, key: string, el: HTMLElement) => {
-    anchor.current = { key, top: el.getBoundingClientRect().top }
-    run((j) => setCutChecklistRow(j, row, !row.done))
+  const toggle = (boardId: string, entry: SheetEntry, row: SheetChecklistRow, key: string, el: HTMLElement) => {
+    // 計算した1枚は、ここで決めた id で固定される（押した行のキーが、固定した1枚の行のキーになる）
+    const id = entry.target.kind === 'frozen' ? entry.target.sheetId : newId('sheet')
+    const after = `${id}:${row.pieceId}`
+    const sec = document.querySelector<HTMLElement>(`[data-cl-key="${CSS.escape(`sec:${boardId}`)}"]`)
+    const top = el.getBoundingClientRect().top
+    anchor.current = {
+      keys: [after, key, `sec:${boardId}`],
+      tops: [top, top, sec?.getBoundingClientRect().top ?? 0],
+    }
+    const r = run((j) => setPieceCheck(j, entry.target, row.pieceId, !row.done, new Date(), id))
+    if (!r.ok) anchor.current = null
   }
   const s = job.settings
   // 部材ごとに切り代を入れた部材（設定の切り代を変えても変わらないことを見せる）
   const own = job.parts.filter((p) => p.quantity > 0 && p.allowance !== null)
   const unplaced = result.materials.flatMap((m) => m.unplaced.map((u) => ({ ...u, board: boardLabel(m) })))
-  const empty = result.materials.length === 0
+  const empty = summaries.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
-  // 材料ごとの段：チェックリストの材料（orderedBoards の順）に、配置図のある材料を足す
-  const sections: { board: Board; rows: CutChecklistRow[]; m: MaterialResult | null }[] = [
-    ...checklist.flatMap((g) =>
-      g.board ? [{ board: g.board, rows: g.rows, m: result.materials.find((x) => x.boardId === g.board?.id) ?? null }] : [],
-    ),
-    ...result.materials
-      .filter((m) => m.sheets.length > 0 && !checklist.some((g) => g.board?.id === m.boardId))
-      .flatMap((m) => {
-        const board = job.boards.find((b) => b.id === m.boardId)
-        return board ? [{ board, rows: [], m }] : []
-      }),
+  const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
+  const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
+
+  // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で
+  const order = [
+    ...orderedBoards(job).map((b) => b.id),
+    ...summaries.materials.map((m) => m.boardId).filter((id) => !job.boards.some((b) => b.id === id)),
   ]
-  // 材料が未設定の完了の行（完了を外せるように、最後に出す）
-  const noBoardRows = checklist.find((g) => g.board === null)?.rows ?? []
-  const grainOf = (boardId: string): BoardGrain => job.boards.find((b) => b.id === boardId)?.grain ?? 'long'
+  const sections: Section[] = order.flatMap((boardId) => {
+    const summary = summaries.materials.find((m) => m.boardId === boardId)
+    if (!summary) return []
+    const board = boardOf(boardId)
+    const m = resultOf(boardId)
+    const mine = views.filter((v) => v.sheet.boardId === boardId)
+    const frozen: SheetEntry[] = mine
+      .filter((v) => !v.complete)
+      .map((v) => ({
+        key: v.sheet.id,
+        layout: v.sheet.layout,
+        target: { kind: 'frozen', sheetId: v.sheet.id },
+        checked: v.sheet.checked,
+        grain: v.sheet.grain,
+        trim: v.sheet.trim,
+        view: v,
+      }))
+    const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
+      key: `c${sh.index}`,
+      layout: sh,
+      target: { kind: 'computed', boardId, mode: m?.mode ?? 'vertical', layout: sh },
+      checked: [],
+      grain: board?.grain ?? 'long',
+      trim: s.trim,
+      view: null,
+    }))
+    return [
+      {
+        boardId,
+        label: board ? boardLabel(board) : (mine[0]?.label ?? ''),
+        summary,
+        mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
+        sheets: [...frozen, ...computed],
+      },
+    ]
+  })
 
   return (
     <section>
       <h2>
         <Help title="木取り">
           刃厚・端切り・切り代は設定の画面で変えられます。部材ごとに切り代を入れた部材は、設定の切り代を変えてもその値のままです。
+          部材を切ったら、配置図の下のチェックを押します。1つ目のチェックで、その1枚の並びは固定されます。
         </Help>
       </h2>
       <p className="lead num">
@@ -104,11 +170,7 @@ export function KidoriScreen() {
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
-          <p style={{ margin: '6px 0 0' }}>
-            {result.done.length > 0 && result.skipped.length === 0
-              ? 'すべての部材が切り出し済みです（下のチェックで外すと、木取りに戻ります）。'
-              : '部材の画面で、枚数と材料を入れてください。'}
-          </p>
+          <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と材料を入れてください。</p>
         </div>
       ) : (
         <SavingHints job={job} />
@@ -118,16 +180,19 @@ export function KidoriScreen() {
         <div className="card kd-summary" style={{ marginTop: 14 }}>
           <div className="kd-total">
             <span className="kd-total-label">全体の歩留まり</span>
-            <span className="kd-total-value num">{pct(result.totalYieldRate)}</span>
+            <span className="kd-total-value num">{pct(summaries.totalYieldRate)}</span>
           </div>
           <ul className="kd-mats">
-            {result.materials.map((m) => (
+            {sections.map((sec) => (
               <MaterialRow
-                key={m.boardId}
-                m={m}
+                key={sec.boardId}
+                label={sec.label}
+                summary={sec.summary}
+                mode={sec.mode}
+                m={resultOf(sec.boardId)}
                 auto={s.cutMode === 'auto'}
-                board={job.boards.find((b) => b.id === m.boardId) ?? null}
-                comparison={compare.find((c) => c.boardId === m.boardId) ?? null}
+                board={boardOf(sec.boardId)}
+                comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
               />
             ))}
           </ul>
@@ -162,93 +227,98 @@ export function KidoriScreen() {
         </div>
       )}
 
-      {sections.map(({ board, rows, m }) => (
-        <section key={board.id} aria-label={boardLabel(board)}>
-          <h3>
-            {boardLabel(board)}
+      {sections.map((sec) => (
+        <section key={sec.boardId} aria-label={sec.label}>
+          <h3 data-cl-key={`sec:${sec.boardId}`}>
+            {sec.label}
             <span className="kd-h3-sub num">
-              {m && m.sheets.length > 0 ? `${m.sheetCount}枚・${cutModeLabel(m.mode)}` : '切り出す板はありません'}
+              {sec.sheets.length > 0
+                ? `${sec.summary.sheetCount}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
+                : '切り出す板はありません'}
             </span>
           </h3>
-          {rows.length > 0 && <CutChecklist label={boardLabel(board)} rows={rows} onToggle={toggleRow} />}
-          {m && m.sheets.length > 0 && (
+          {sec.sheets.length > 0 && (
             <div className="stack">
-              {m.sheets.map((sh) => (
+              {sec.sheets.map((e, i) => (
                 <SheetCard
-                  key={sh.index}
-                  sheet={sh}
-                  count={m.sheetCount}
-                  grain={grainOf(board.id)}
-                  trim={s.trim}
+                  key={e.key}
+                  entry={e}
+                  no={i + 1}
+                  count={sec.sheets.length}
+                  label={sec.label}
+                  rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
+                  onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
                 />
               ))}
             </div>
           )}
         </section>
       ))}
-      {noBoardRows.length > 0 && (
-        <section aria-label="材料が未設定">
-          <h3>
-            材料が未設定
-            <span className="kd-h3-sub">完了を外すと、材料を入れたときに木取りに戻ります</span>
-          </h3>
-          <CutChecklist label="材料が未設定" rows={noBoardRows} onToggle={toggleRow} />
-        </section>
-      )}
     </section>
   )
 }
 
 interface MaterialRowProps {
-  m: MaterialResult
+  label: string
+  summary: MaterialSummary
+  mode: 'vertical' | 'horizontal' | null
+  /** 計算した結果（固定した1枚しか無い材料は null のことがある） */
+  m: MaterialResult | null
   auto: boolean
   board: Board | null
   comparison: MaterialSizeComparison | null
 }
 
-function MaterialRow({ m, auto, board, comparison }: MaterialRowProps) {
+function MaterialRow({ label, summary, mode, m, auto, board, comparison }: MaterialRowProps) {
+  const n = summary.sheetCount
   return (
     <li className="kd-mat">
-      <div className="kd-mat-name">{boardLabel(m)}</div>
+      <div className="kd-mat-name">{label}</div>
       <div className="kd-mat-nums">
         <span>
           <span className="kd-k">必要な材料</span>
-          <span className="kd-v num">{m.sheetCount}枚</span>
+          <span className="kd-v num">{n}枚</span>
         </span>
         <span>
           <span className="kd-k">歩留まり</span>
-          <span className="kd-v num">{m.sheetCount > 0 ? pct(m.yieldRate) : '―'}</span>
+          <span className="kd-v num">{n > 0 ? pct(summary.yieldRate) : '―'}</span>
         </span>
       </div>
-      {m.sheetCount > 0 && (
+      {n > 0 && mode && (
         <div className="kd-mat-mode">
-          切り方：<b>{cutModeLabel(m.mode)}</b>
-          {auto && <span className="chip ok">おまかせで選択</span>}
+          切り方：<b>{cutModeLabel(mode)}</b>
+          {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
-      {board && <SheetSizePicker board={board} compare={comparison} current={m} />}
+      {board && m && <SheetSizePicker board={board} compare={comparison} current={m} />}
     </li>
   )
 }
 
 interface SheetCardProps {
-  sheet: SheetLayout
+  entry: SheetEntry
+  /** 材料の中の通しの番号（固定した1枚 → 計算した1枚） */
+  no: number
   count: number
-  grain: BoardGrain
-  trim: number
+  label: string
+  rows: SheetChecklistRow[]
   colorOf: (partId: string) => number
+  onToggle: (row: SheetChecklistRow, key: string, el: HTMLElement) => void
 }
 
-function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
+function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCardProps) {
+  const { layout: sheet, grain, trim } = entry
   const landscape = sheet.orientation === 'landscape'
   // 図の上で木目の線が横に通るか（横長で長手方向、または縦長で妻手方向）
   const grainAcross = (grain === 'long') === landscape
+  const rowKey = (r: SheetChecklistRow) =>
+    entry.target.kind === 'frozen' ? `${entry.target.sheetId}:${r.pieceId}` : `${entry.key}:${r.pieceId}`
   return (
     <article className="card kd-sheet">
       <header className="kd-sheet-head">
         <span className="kd-sheet-no">
-          {sheet.index}枚目<span className="kd-of"> / {count}枚</span>
+          {no}枚目<span className="kd-of"> / {count}枚</span>
         </span>
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
       </header>
@@ -256,7 +326,7 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
         材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
         {sheet.scraps.length}枚
       </p>
-      <SheetDiagram sheet={sheet} grain={grain} colorOf={colorOf} />
+      <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} />
       <p className="dg-legend">
         {sheet.trims.length > 0 && (
           <span>
@@ -274,6 +344,7 @@ function SheetCard({ sheet, count, grain, trim, colorOf }: SheetCardProps) {
         </span>
         <span>部材は右上から詰める・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>
+      <SheetChecklist label={`${label} の ${no}枚目`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
       <ScrapList sheet={sheet} />
     </article>
   )

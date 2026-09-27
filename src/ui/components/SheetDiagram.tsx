@@ -8,6 +8,8 @@ import { fmt } from '../format'
 
 interface Props {
   sheet: SheetLayout
+  /** 材料の中の通しの番号（固定した1枚の写しの index は使わない） */
+  no: number
   grain: BoardGrain
   /** 部材ごとの色の番号（0〜5） */
   colorOf: (partId: string) => number
@@ -74,7 +76,7 @@ function LabelText({ r, label, className }: { r: Rect; label: Label; className: 
   )
 }
 
-export function SheetDiagram({ sheet, grain, colorOf }: Props) {
+export function SheetDiagram({ sheet, no, grain, colorOf }: Props) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const landscape = sheet.orientation === 'landscape'
   // 図の横（W）と縦（L）。横長なら長辺が横
@@ -94,7 +96,7 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
       className={landscape ? 'diagram landscape' : 'diagram'}
       viewBox={`0 0 ${W} ${L}`}
       role="img"
-      aria-label={`${sheet.index}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
+      aria-label={`${no}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
     >
       <defs>
         <pattern
