@@ -3,6 +3,7 @@ import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
 import type { Axis, Board, DimensionResult, Job, PackingResult, Part, PartDimensions, PartGrain } from '../types'
 import { usableSides } from './sheet'
+import { stackPlan, type StackGroup, type StackMismatch, type StackPlan } from './stack'
 
 /**
  * 板の辺に対する片の向き（置き方＝縦長／横長によらない）。x：短辺（妻手）方向の大きさ、y：長辺（長手）方向の大きさ。
@@ -33,7 +34,10 @@ export interface Piece {
 export type Unplaced = { partId: string; name: string; reason: 'tooLarge' }
 
 export interface BoardPieces {
+  /** 片の向き・配置に使う材料。重ね切りの組では1つ目の材料 a（sameSheet なので b も同じ大きさ・木目） */
   board: Board
+  /** 重ね切りの組（第2.0版）。あれば、この片たちは a・b を重ねて切る */
+  stack?: { key: string; boardIds: [string, string] }
   pieces: Piece[]
   /** どう置いても使える範囲に入らない部材（部材ごとに1つ） */
   unplaced: Unplaced[]
@@ -46,6 +50,8 @@ export interface ExpandResult {
   skipped: PackingResult['skipped']
   /** 木取り済み（checks.cut。フラッシュは表面材ごとの checks.cutByBoard）で除いた部材 */
   done: PackingResult['done']
+  /** 重ねる片があったのに、サイズ・木目がそろっていないので重ねなかった組（plan.mismatches の並び） */
+  stackMismatches: PackingResult['stackMismatches']
 }
 
 function fmt(v: number): string {
@@ -77,15 +83,23 @@ function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[
  * 部材を片に展開する。フラッシュの部材（第1.5版）は表面材ごとにその材料の片にする（芯材は入れない）。
  * 片の id の連番は部材ごとの通し番号（表面材をまたいで続ける。固定した片のぶんも番号を取っておく）。
  * 固定した1枚（第1.8版）の片の数は、部材（表面材）の枚数から数だけで引く（寸法は見ない。0 未満にはしない）。
- * 引いて 0 になった部材（表面材）は片にせず、done にも skipped にも入れない
+ * 引いて 0 になった部材（表面材）は片にせず、done にも skipped にも入れない。
+ * 重ね切り（第2.0版。architecture.md 12.4）：plan の組のフラッシュの部材は、残りの枚数から
+ * 重ねる数＝min(a の残り, b の残り) だけ組の“材料”に入れ（片の id は a の番号）、差はそれぞれの材料にふつうに入れる
  */
-export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
+export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = stackPlan(job)): ExpandResult {
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
   const partById = new Map(job.parts.map((p) => [p.id, p]))
   const byBoard = new Map<string, BoardPieces>()
+  const byStack = new Map<string, BoardPieces>()
   const skipped: ExpandResult['skipped'] = []
   const done: ExpandResult['done'] = []
   const frozen = frozenDemand(job)
+  const groupOf = new Map<string, StackGroup>()
+  for (const g of plan.groups) for (const f of g.flushIds) groupOf.set(f, g)
+  const mismatchOf = new Map<string, StackMismatch>()
+  for (const m of plan.mismatches) for (const f of m.flushIds) mismatchOf.set(f, m)
+  const mismatched = new Set<StackMismatch>()
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
@@ -99,7 +113,7 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
     // 木取り済みの部材（表面材）は、ほかの判定より先に除く（エラーがあっても直さずに済むように。仕様書 8）
     // start：片の id の連番の始まり。表面材ごとに、固定した片を引く前の枚数ぶん取っておく
     // （ある表面材の固定で、ほかの表面材の片の id がずれないように。以前の木取り済みの表面材は今までどおり取らない）
-    const rest: { board: Board; quantity: number; start: number }[] = []
+    const rest: { board: Board; quantity: number; start: number; used: number }[] = []
     let offset = 0
     let missing = false
     /** 以前の木取り済み、または固定した1枚で全部切った表面材の数 */
@@ -118,7 +132,7 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
         continue
       }
       const board = boardById.get(t.boardId)
-      if (board) rest.push({ board, quantity, start })
+      if (board) rest.push({ board, quantity, start, used: 0 })
       else missing = true
     }
     if (targets !== null && targets.length > 0 && settled === targets.length) continue
@@ -145,25 +159,63 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
     const s1 = d.cutSize[a1]
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
     const grain = part?.grain ?? 'any'
-    for (const { board, quantity, start } of rest) {
+    const place = (g: BoardPieces, board: Board, from: number, count: number) => {
       const orientations = orientationsOn(board, s0, s1, a0, a1, grain, job)
+      if (orientations.length === 0) {
+        if (!g.unplaced.some((u) => u.partId === d.partId)) g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
+        return
+      }
+      for (let i = 1; i <= count; i++) {
+        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations })
+      }
+    }
+    // 重ね切り：a・b の両方に残りがあるぶんだけ組に入れる
+    const flushId = part?.flushId
+    const stacked = (boardIds: readonly [string, string]) => {
+      const ra = rest.find((r) => r.board.id === boardIds[0])
+      const rb = rest.find((r) => r.board.id === boardIds[1])
+      return ra && rb ? { ra, rb, n: Math.min(ra.quantity, rb.quantity) } : null
+    }
+    const group = flushId === undefined ? undefined : groupOf.get(flushId)
+    const pair = group ? stacked(group.boardIds) : null
+    if (group && pair && pair.n > 0) {
+      let g = byStack.get(group.key)
+      if (!g) {
+        g = { board: pair.ra.board, stack: { key: group.key, boardIds: group.boardIds }, pieces: [], unplaced: [] }
+        byStack.set(group.key, g)
+      }
+      place(g, pair.ra.board, pair.ra.start, pair.n)
+      pair.ra.used = pair.n
+      pair.rb.used = pair.n
+    }
+    const mismatch = flushId === undefined ? undefined : mismatchOf.get(flushId)
+    if (mismatch && (stacked(mismatch.boardIds)?.n ?? 0) > 0) mismatched.add(mismatch)
+
+    for (const { board, quantity, start, used } of rest) {
+      if (quantity - used <= 0) continue
       let g = byBoard.get(board.id)
       if (!g) {
         g = { board, pieces: [], unplaced: [] }
         byBoard.set(board.id, g)
       }
-      if (orientations.length === 0) {
-        g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
-        continue
-      }
-      for (let i = 1; i <= quantity; i++) {
-        g.pieces.push({ pieceId: `${d.partId}#${start + i}`, partId: d.partId, name: d.name, sizeLabel, orientations })
-      }
+      place(g, board, start + used, quantity - used)
     }
   }
 
-  const groups = job.boards.map((b) => byBoard.get(b.id)).filter((g): g is BoardPieces => g !== undefined)
-  return { groups, skipped, done }
+  // 並び：材料の保存の並び。組は a の材料の直後（plan の並び）
+  const groups: BoardPieces[] = []
+  for (const b of job.boards) {
+    const g = byBoard.get(b.id)
+    if (g) groups.push(g)
+    for (const sg of plan.groups) {
+      const x = sg.boardIds[0] === b.id ? byStack.get(sg.key) : undefined
+      if (x) groups.push(x)
+    }
+  }
+  const stackMismatches = plan.mismatches
+    .filter((m) => mismatched.has(m))
+    .map((m) => ({ boardIds: m.boardIds, flushIds: [...m.flushIds] }))
+  return { groups, skipped, done, stackMismatches }
 }
 
 /** 板に置いてよい向き（木目と、使える範囲に入るか） */

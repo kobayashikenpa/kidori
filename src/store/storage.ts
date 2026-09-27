@@ -2,6 +2,7 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
+import { canStack } from '../engine/packing/stack'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -236,7 +237,11 @@ function sanitizeFlushes(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): 
       }
       faces.push({ boardId, count: f.count })
     }
-    out.push({ id: x.id, name, core: x.core, faces })
+    const flush: Flush = { id: x.id, name, core: x.core, faces }
+    // 重ね切り（第2.0版）：true で canStack のときだけ残す。それ以外で stack があれば外して数える
+    if (x.stack === true && canStack(flush)) flush.stack = true
+    else if (x.stack !== undefined) fx.count++
+    out.push(flush)
   }
   return out
 }
@@ -412,6 +417,12 @@ function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): Froz
     const checked = [...new Set(rawChecked.filter((x): x is string => typeof x === 'string' && ids.has(x)))]
     if (!Array.isArray(raw.checked) || checked.length !== rawChecked.length || checked.length === 0) fx.count++
     if (checked.length === 0) continue
+    // 重ね切りの1枚（第2.0版）：もう1つの材料の id が読めない・自分と同じなら、どの材料から引くか分からないので1枚ごと外す
+    const sw = raw.stackWith
+    if (sw !== undefined && (!isRecord(sw) || !isId(sw.boardId) || sw.boardId === raw.boardId)) {
+      fx.count++
+      continue
+    }
     const frozenAt = pick(raw.frozenAt, isDateText, fallbackDate, fx)
     const sheet: FrozenSheet = {
       id: raw.id,
@@ -425,6 +436,13 @@ function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): Froz
       layout,
       checked,
       frozenAt,
+    }
+    if (isRecord(sw) && isId(sw.boardId)) {
+      sheet.stackWith = {
+        boardId: sw.boardId,
+        material: pick(sw.material, isStr, '', fx),
+        thickness: pick(sw.thickness, isPositive, 1, fx),
+      }
     }
     const complete = checked.length === ids.size
     if (complete) sheet.completedAt = pick(raw.completedAt, isDateText, frozenAt, fx)
@@ -675,7 +693,9 @@ function sanitizeFlushSpecs(v: unknown): FlushSpec[] {
       if (!isRecord(x) || typeof x.material !== 'string' || !x.material.trim() || !isPositive(x.thickness) || !isCount(x.count)) continue
       faces.push({ material: x.material.trim(), thickness: x.thickness, count: x.count })
     }
-    out.push({ name, core: f.core, faces })
+    const spec: FlushSpec = { name, core: f.core, faces }
+    if (f.stack === true && faces.length === 2 && faces[0].count === faces[1].count) spec.stack = true
+    out.push(spec)
   }
   return out
 }

@@ -3,6 +3,7 @@
 // 厚みは engine の flushBreakdown で出す。見た目・操作は材料・調整寸法と同じ（SettingsList）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
+import { canStack } from '../../engine/packing/stack'
 import {
   autoFlushName,
   defaultFlushFaces,
@@ -36,7 +37,7 @@ export function FlushEditor() {
         usage={(f) => {
           const b = flushBreakdown(job, f.id)
           const users = flushesUsages(job, [f.id]).parts
-          return `${b ? `厚み ${flushBreakdownText(b)}` : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
+          return `${b ? `厚み ${flushBreakdownText(b)}` : ''}${f.stack ? '　重ね切り' : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
         }}
         warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '表面材がありません（編集で選んでください）' : null)}
         add={<FlushForm flush={null} done={() => {}} />}
@@ -99,12 +100,16 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
   const [faces, setFaces] = useState<FaceRow[]>(firstFaces)
   const [nextKey, setNextKey] = useState(100)
   const [error, setError] = useState<string | null>(null)
+  const [stack, setStack] = useState(flush?.stack === true)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
   const pre = flush ? `flush-edit-${flush.id}` : 'flush-add'
 
+  /** 重ね切りの条件（表面材が2種類で枚数が同じ）。入力途中の枚数は 0 として見る */
+  const stackable = (fs: FaceRow[]) => canStack({ faces: fs.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })) })
   const changeFaces = (next: FaceRow[]) => {
     setFaces(next)
+    if (!stackable(next)) setStack(false)
     follow(core, next)
     setError(null)
   }
@@ -119,7 +124,12 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
   const save = () => {
     if (core === null) return setError('芯材の厚みを入れてください（例：15）')
     if (faces.some((f) => f.count === null)) return setError('表面材の枚数を入れてください')
-    const draft = { name: name.trim() === '' ? autoName(core, faces) : name, core, faces: faces.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })) }
+    const draft = {
+      name: name.trim() === '' ? autoName(core, faces) : name,
+      core,
+      faces: faces.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })),
+      ...(stack && stackable(faces) ? { stack: true as const } : {}),
+    }
     const r = run((j) => (flush ? updateFlush(j, flush.id, draft) : addFlush(j, draft)))
     if (!r.ok) return setError(r.message)
     closeKeyboard()
@@ -128,6 +138,7 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
       setNameAuto(true)
       setCore(null)
       setFaces(firstFaces())
+      setStack(false)
       setError(null)
       setRound((n) => n + 1)
     }
@@ -209,6 +220,29 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
       >
         ＋ 表面材を足す
       </button>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={stack}
+        aria-disabled={!stackable(faces)}
+        aria-describedby={stackable(faces) ? undefined : `${pre}-stack-why`}
+        className={`opt-check${stack ? ' on' : ''}`}
+        onClick={() => {
+          if (!stackable(faces)) return
+          setStack((v) => !v)
+          setError(null)
+        }}
+      >
+        <span className="check-box" aria-hidden="true">
+          {stack ? '✓' : ''}
+        </span>
+        <span>表面材を重ねて切る（2枚重ね）</span>
+      </button>
+      {!stackable(faces) && (
+        <p id={`${pre}-stack-why`} className="lead" style={{ margin: 0 }}>
+          表面材が2種類で、枚数が同じときに選べます
+        </p>
+      )}
       {preview && core !== null && <p className="thick-auto" style={{ margin: 0 }}>厚み {flushBreakdownText(preview)}</p>}
       <div className="field" style={{ margin: 0 }}>
         <label className="label" htmlFor={`${pre}-name`}>

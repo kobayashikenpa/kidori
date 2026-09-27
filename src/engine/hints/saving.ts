@@ -3,12 +3,13 @@
 // 設定は変えない（知らせるだけ）
 import { computeDimensions } from '../dimensions'
 import { packJob } from '../packing'
+import { stackLabel } from '../packing/stack'
 import { round1 } from '../round'
 import type { Job, PackingResult } from '../types'
 
 export interface SavingHint {
   change: { kind: 'allowance' | 'trim'; value: number }
-  /** 減る材料（板の登録順）。label は「ラワン 4mm」 */
+  /** 減る材料（板の登録順）。label は「ラワン 4mm」。重ね切りの組（boardId が stackKey）は「メラミン1＋ラワン4（重ね切り）」 */
   materials: { boardId: string; label: string; from: number; to: number }[]
   message: string
 }
@@ -50,12 +51,13 @@ function messageOf(kind: 'allowance' | 'trim', value: number, materials: SavingH
 }
 
 /** 候補の設定で減る材料。必要枚数が減り、入らない部材が増えない材料だけ */
-function reduced(base: PackingResult, trial: PackingResult): SavingHint['materials'] {
+function reduced(job: Job, base: PackingResult, trial: PackingResult): SavingHint['materials'] {
   const out: SavingHint['materials'] = []
   for (const m of base.materials) {
     const t = trial.materials.find((x) => x.boardId === m.boardId)
     if (!t || t.sheetCount >= m.sheetCount || t.unplaced.length > m.unplaced.length) continue
-    out.push({ boardId: m.boardId, label: `${m.material} ${mm(m.thickness)}mm`, from: m.sheetCount, to: t.sheetCount })
+    const label = m.stack ? stackLabel(job, m.stack.boardIds) : `${m.material} ${mm(m.thickness)}mm`
+    out.push({ boardId: m.boardId, label, from: m.sheetCount, to: t.sheetCount })
   }
   return out
 }
@@ -85,7 +87,7 @@ export function findSavingHints(job: Job): SavingHint[] {
     for (const value of values) {
       if (reducible.every((id) => shown.has(id))) return
       const trial = pack({ ...job, settings: { ...job.settings, [kind]: value } })
-      const materials = reduced(base, trial).filter((m) => only(m.boardId))
+      const materials = reduced(job, base, trial).filter((m) => only(m.boardId))
       if (!materials.some((m) => !shown.has(m.boardId))) continue
       for (const m of materials) shown.add(m.boardId)
       hints.push({ change: { kind, value }, materials, message: messageOf(kind, value, materials) })

@@ -1774,3 +1774,42 @@ button.dim-name {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* 設定のフラッシュ：表面材を重ねて切る（第2.0版） */
+.opt-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.opt-check .check-box {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-color: var(--accent);
+}
+.opt-check.on .check-box {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.opt-check[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.opt-check[aria-disabled='true'] .check-box {
+  border-color: var(--muted);
+  opacity: 0.5;
+}
+
+/* 木取り：重ね切りの組の行（第2.0版） */
+.kd-mat-stack {
+  border-left: 4px solid var(--accent);
+}

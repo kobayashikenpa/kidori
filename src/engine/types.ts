@@ -144,6 +144,11 @@ export interface Flush {
   core: number
   /** 表面材（同じ材料を重ねない。1つ以上） */
   faces: FlushFace[]
+  /**
+   * 表面材を重ねて切る（第2.0版）。オンのときだけ true を持つ（オフは持たない）。
+   * 表面材がちょうど2つで枚数が同じとき（packing/stack.ts の canStack）だけ持てる
+   */
+  stack?: true
 }
 
 /** 仕事 */
@@ -308,6 +313,11 @@ export interface MaterialResult {
   yieldRate: number
   /** 板に入らない部材 */
   unplaced: { partId: string; name: string; reason: 'tooLarge' }[]
+  /**
+   * 重ね切りの組の結果（第2.0版）。このとき boardId は stackKey(a, b)、material・thickness は1つ目の材料 a のもの。
+   * 1枚は a・b の両方の1枚として数える
+   */
+  stack?: { boardIds: [string, string] }
 }
 
 export interface PackingResult {
@@ -326,6 +336,11 @@ export interface PackingResult {
    * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
+  /**
+   * サイズ・木目がそろっていないので重ねずに木取りした組（第2.0版）。重ねる片があった組だけ。
+   * 並びは 1つ目の材料の保存の並び → 2つ目の材料の保存の並び
+   */
+  stackMismatches: { boardIds: [string, string]; flushIds: string[] }[]
 }
 
 // ---------- 切りながら進める木取り（第1.8版） ----------
@@ -359,4 +374,9 @@ export interface FrozenSheet {
   frozenAt: string
   /** すべての片にチェックした時刻（ISO）。あれば「切り終わり」 */
   completedAt?: string
+  /**
+   * 重ね切りの1枚（第2.0版）：boardId（組の1つ目の材料）と一緒に重ねて切った、もう1つの材料（固定したときの写し）。
+   * 片は両方の材料から切ったものとして数える
+   */
+  stackWith?: { boardId: string; material: string; thickness: number }
 }

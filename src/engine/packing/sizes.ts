@@ -2,6 +2,7 @@
 import { BOARD_SIZES, type DimensionResult, type Job } from '../types'
 import { round1 } from '../round'
 import { packJob } from './index'
+import { stackPlan } from './stack'
 
 export type StandardSize = 'saburoku' | 'shihachi'
 
@@ -19,7 +20,10 @@ export interface SizeSummary {
 }
 
 export interface MaterialSizeComparison {
+  /** 材料の id。重ね切りの組（第2.0版）は stackKey(a, b) */
   boardId: string
+  /** 重ね切りの組なら、組の2つの材料（選んだサイズは2つともに当てる） */
+  stack?: { boardIds: [string, string] }
   /** 3×6、4×8 の順 */
   options: [SizeSummary, SizeSummary]
   /** 枚数が少ない方。入らない部材が出るサイズ・枚数 0 のサイズがあれば比べない。同じ枚数なら null */
@@ -50,11 +54,14 @@ function withAllBoards(job: Job, kind: StandardSize): Job {
 /**
  * 材料ごとに 3×6 と 4×8 で木取りした結果を返す。材料の並びと対象は packJob(job, dims).materials と同じ
  * （片か入らない部材のある材料だけ）。切り方・刃厚・端切り・切り代は今の設定のまま。
- * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない
+ * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。
+ * 重ね切り（第2.0版。architecture.md 12.7）：今の仕事で重ねている組だけを重ねる（今の stackPlan を渡す。
+ * すべての材料を同じサイズにすると組は必ずそろうため）。組にも比較が出る（boardId が stackKey）
  */
 export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialSizeComparison[] {
   const kinds: StandardSize[] = ['saburoku', 'shihachi']
-  const results = kinds.map((kind) => ({ kind, materials: packJob(withAllBoards(job, kind), dims).materials }))
+  const plan = stackPlan(job)
+  const results = kinds.map((kind) => ({ kind, materials: packJob(withAllBoards(job, kind), dims, plan).materials }))
   // 対象と並びは、サイズによらず expandPieces で決まる（部材のある材料・板の登録順）ので、3×6 の結果に合わせる
   return results[0].materials.map((m): MaterialSizeComparison => {
     const options = results.map(({ kind, materials }): SizeSummary => {
@@ -70,6 +77,8 @@ export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialS
       }
     })
     const pair: [SizeSummary, SizeSummary] = [options[0], options[1]]
-    return { boardId: m.boardId, options: pair, ...pickBetterSize(pair) }
+    const c: MaterialSizeComparison = { boardId: m.boardId, options: pair, ...pickBetterSize(pair) }
+    if (m.stack) c.stack = { boardIds: [m.stack.boardIds[0], m.stack.boardIds[1]] }
+    return c
   })
 }

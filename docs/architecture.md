@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版・第2.0版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -8,6 +8,7 @@
 > **第1.2版の変更は 7章にまとめている。** 6章までと食い違うところは 7章が正。
 > **第1.3版の変更は 8章にまとめている。** 7章までと食い違うところは 8章が正。
 > **第1.8版（切りながら進める木取り）の変更は 11章にまとめている。** 切り出しのチェック（8.5・10.3・`checklist.ts`）と食い違うところは 11章が正。
+> **第2.0版（フラッシュの重ね切り）の変更は 12章にまとめている。** 木取りの材料の分け方（3.3・10.3）・固定した1枚（11章）と食い違うところは 12章が正。
 
 ## 1. 全体の構成
 
@@ -1035,3 +1036,138 @@ export function sheetChecklist(job: Job, layout: SheetLayout, checked: readonly 
 - 「部材が変わっています」（11.5）：1つの部材に理由が重なったら removed → count → size の順で1つにする（枚数0 の行は寸法が出ないことがあるため count を先に見る）
 - `sheetProgress`（11.6）：チェックが無い1枚の残りの材料は「板全体（すべての片が入っている）」の1つ。画面はチェックがあるときだけ出す
 - 読み込み（11.8）：固定した1枚の `material`・`thickness`・`grain`・`kerf`・`trim`・`frozenAt` が読めなければ初期値（''・1・long・刃厚3・端切り5・仕事の更新日）に直して数える。`layout` は数・片・切る順番のどれかが壊れていれば1枚ごと外す（片の id の重なりも外す）
+
+## 12. 第2.0版の変更（フラッシュの重ね切り）— 決定（planner）
+
+仕様書 4「フラッシュの重ね切り」（コミット 23fc3ba）に対応する。1〜11章と食い違うところは 12章が正。
+方針は「**重ねる2つの材料の組を、木取りの上では1つの“材料”として扱う**」。配置・切る順番・歩留まり・固定した1枚・チェックリスト・残りの材料の仕組みはそのまま使い、変えるのは「どの片をどの組に入れるか」と「枚数を両方の材料に数える」ところだけにする。保存データ（`kidori.jobs.v2`）の版は上げない（足すだけ）。
+
+### 12.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts               Flush.stack・FrozenSheet.stackWith・MaterialResult.stack・PackingResult.stackMismatches
+  packing/stack.ts       canStack・sameSheet・stackKey・stackPlan（どの組を重ねるか・そろっていない組）・stackLabel
+  packing/pieces.ts      重ねるフラッシュの片を組の“材料”に入れる（12.3）
+  packing/index.ts       packJob(job, dims, plan?)。組の結果は MaterialResult.stack 付き。全体の歩留まりは組の1枚を2回数える
+  packing/sizes.ts       今の仕事の stackPlan を比較の計算にも渡す
+  hints/saving.ts        組の表示名（stackLabel）
+  progress/frozen.ts     freezeSheet の stackWith、frozenDemand は両方の材料に数える、frozenSheetViews・materialSummaries
+src/store/
+  jobs.ts                validateFlush・cleanFlush（stack）、removeBoards（組が崩れたら stack を外す）、setPieceCheck（stackWith）、setBoardsSize
+  storage.ts             Flush.stack・FrozenSheet.stackWith の検査・修復、ひな形の FlushSpec.stack
+  template.ts            FlushSpec.stack（引き継ぎ・見本）
+src/ui/
+  components/FlushEditor.tsx     「表面材を重ねて切る」のチェック
+  components/SheetSizePicker.tsx 組のときは2つの材料を同じサイズにする
+  screens/KidoriScreen.tsx       組の段・まとめの行・そろっていない知らせ
+```
+
+### 12.2 データの形（`types.ts`）
+
+```ts
+export interface Flush {
+  …今のまま
+  /** 表面材を重ねて切る（第2.0版）。オンのときだけ true を持つ（オフは持たない） */
+  stack?: true
+}
+
+export interface FrozenSheet {
+  …今のまま（boardId は組の1つ目の材料）
+  /** 重ね切りの1枚（第2.0版）：boardId と一緒に重ねて切った、もう1つの材料（固定したときの写し） */
+  stackWith?: { boardId: string; material: string; thickness: number }
+}
+
+export interface MaterialResult {
+  …今のまま
+  /** 重ね切りの組の結果（第2.0版）。このとき boardId は stackKey(a, b)、material・thickness は1つ目の材料のもの */
+  stack?: { boardIds: [string, string] }
+}
+
+export interface PackingResult {
+  …今のまま
+  /** サイズ・木目がそろっていないので重ねずに木取りした組（重ねる片があった組だけ。材料の保存の並び） */
+  stackMismatches: { boardIds: [string, string]; flushIds: string[] }[]
+}
+```
+
+- `stack` はオンのときだけ `true` を持つ（`Board.builtIn` と同じ書き方。以前のデータはそのままオフ）
+- **組の並び**：2つの材料は `job.boards` の保存の並び（追加した順。変わらない）で前を1つ目 a、後ろを2つ目 b にする。フラッシュの表面材の並びにはよらない。材料の保存の並びは変わらないので、固定した1枚の `boardId`＝a・`stackWith.boardId`＝b もずれない
+- `stackKey(a, b)` ＝ `` `stack:${a}+${b}` ``。組の結果・比較・まとめの id に使う。**文字列を分解して材料の id を取り出すことはしない**（いつも `boardIds` を一緒に持つ）
+
+### 12.3 どの組を重ねるか（`packing/stack.ts`）
+
+```ts
+canStack(flush): boolean              // 表面材がちょうど2つで、枚数が同じ（材料があるかは見ない）
+sameSheet(a: Board, b: Board): boolean // 短辺・長辺（小数第1位）と木目がそろっている
+stackKey(a: string, b: string): string
+interface StackGroup    { key: string; boardIds: [string, string]; flushIds: string[] }
+interface StackMismatch { boardIds: [string, string]; flushIds: string[] }
+stackPlan(job): { groups: StackGroup[]; mismatches: StackMismatch[] }
+stackLabel(job, boardIds): string     // 「メラミン1＋ラワン4（重ね切り）」（boardTokenLabel を ＋ でつなぐ。材料が無ければ写しの名前を使う側で渡す）
+```
+
+- `stackPlan`：`stack` がオンで `canStack` で、表面材の材料が2つとも仕事にあるフラッシュについて、組（a, b）を作る。`sameSheet` なら `groups`、そうでなければ `mismatches`。同じ組のフラッシュが複数あれば1つの組にまとめる（`flushIds` に並べる。**違うフラッシュでも同じ2つの材料なら同じ配置図に並べる**。暫定。未決事項 37）。並びは a の保存の並び → b の保存の並び
+- 「サイズがそろっている」は **短辺・長辺・木目が同じ** で判定する（3×6 と、自由入力の 910×1820 は同じとみなす。仕様書の「サイズ（3×6／4×8／自由入力）」を、実際の大きさで比べる形にした。暫定。未決事項 38）
+- 1つの材料がいくつかの組に入ってもよい（例：A＋B と B＋C）。組ごとに別の配置図になる
+
+### 12.4 片の展開（`packing/pieces.ts`・`packing/index.ts`）
+
+`packJob(job, dims, plan = stackPlan(job))`・`expandPieces(job, dims, plan = stackPlan(job))`。`plan` を引数にするのは、サイズの比較（12.7）で「今の仕事で重ねている組」を保ったまま計算するため。
+
+- 重ねるフラッシュ（`plan.groups` のどれかの `flushIds` に入っている）の部材は、今までどおり表面材ごとの残りの枚数（以前の木取り済み・固定した片を引いた後）を出してから：
+  - **重ねる片の数 ＝ min(a の残り, b の残り)**。この数だけ「重ねた片」を組の“材料”に入れる
+  - 残りの差（a の残り − 重ねる数、b も同じ）は、今までどおりそれぞれの材料にふつうの片として入れる（ふだんは 0。重ねる前に片方だけ固定したときや、以前の木取り済みが片方だけのときに出る）
+- 重ねた片の向きは a の材料（`sameSheet` なので b も同じ）で決める。寸法・木目・`sizeLabel` は部材のまま。片の id は a の表面材の番号（11.11 の連番の a の分）を使う（組の配置図の中で重ならなければよい）
+- 組の“材料”：`BoardPieces` に `stack?: { key; boardIds }` を足す。`board` は a（大きさ・木目に使う）。並びは、組の a の位置（`job.boards` の並び）の直後
+- 寸法のエラー・厚みの不一致・材料が無い（`skipped`）の判定は今までどおり部材ごとに1回
+- `packJob` の組の結果：`boardId: stackKey`、`material`・`thickness` は a のもの、`stack: { boardIds }`。配置・切る順番・歩留まり（1枚＝a の1枚の面積に対して）はふつうの材料と同じ計算。おまかせも組ごとに選ぶ
+- `PackingResult.totalYieldRate`：組の1枚は **2枚分（a と b）** として面積を数える
+- `stackMismatches`：`plan.mismatches` のうち、重ねるはずの片が1つ以上あった組（そろっていれば重ねていた数が 1 以上）。その組の片は今までどおりそれぞれの材料でふつうに木取りする
+- 重ねた配置図には重ねる片だけが入る（ほかの部材は入らない）＝仕様書「ほかの部材は並べない」
+
+### 12.5 固定した1枚とチェック（`progress/frozen.ts`・store の `setPieceCheck`）
+
+- `freezeSheet(job, boardId, mode, layout, id, now, stackWith?: string)`：`stackWith` があれば、その材料の材料名・厚みも写して `FrozenSheet.stackWith` に入れる（木目・大きさは a と同じなので a から写す）
+- store の `SheetTarget` の `computed` に `stackWith?: string` を足す。画面は組の結果なら `boardId: stack.boardIds[0]`、`stackWith: stack.boardIds[1]` を渡す
+- `frozenDemand`：`stackWith` のある1枚は、片1つにつき `partId|a` と `partId|b` の **両方に 1** を数える。これで **1回のチェックが2種類の両方に付く**（固定した1枚1つに `checked` が1つなので、チェックは1回）。12.4 の「残り」はこれを引いた後の数
+- チェックの付け外し・切り終わり・固定の外れ（11.4）はそのまま。全部外れると組の1枚が消え、片は（そのときの設定で）重ねて、またはふつうに並べ直す
+- **重ね切りをオフにしても、固定した組の1枚は消さない**（切った記録。両方の材料から引き続ける）。オフにした後の残りは、それぞれの材料でふつうに並ぶ（暫定。未決事項 39）
+- `frozenSheetViews`：
+  - `label` は組の表示名（`stackLabel`。材料が無ければ写しの材料名で「メラミン1＋ラワン4（重ね切り）」）
+  - 「部材が変わっています」は、a・b のそれぞれについて今までの判定（11.5）を行い、部材ごとに1つにまとめる：どちらかの材料から切らなくなった → `removed`、どちらかで 固定した片の数 ＞ 今の枚数 → `count`、寸法 → `size`。重ね切りのオン・オフや、サイズがそろっていないことは drift にしない
+- `materialSummaries(job, result, views)`：
+  - **材料ごとの行**（今まで）：`sheetCount` ＝ その材料の 固定した1枚（切り終わりを除く）＋ 計算した1枚 ＋ **その材料が入っている組の1枚（固定・計算とも、切り終わりを除く）**。歩留まりも同じ1枚たちで出す。`stackedCount`（そのうち組の1枚の数）を足す。`completedCount` はその材料だけの切り終わり
+  - **組の行**を足す：`boardId: stackKey`、`stack: { boardIds }`、その組の 固定した1枚＋計算した1枚 の枚数・歩留まり・切り終わりの数。組の固定した1枚しか無い（重ね切りをオフにした）組も出す（組の行の `stackedCount` は `sheetCount` と同じ）
+  - 並び：材料の保存の並びで、組の行は a の行の直後。組の行の後ろに、その組の材料の行が来ることもある（b）
+  - `totalYieldRate`：材料ごとの行の1枚たちで出す（組の1枚は a・b の行の両方に入るので2回数える。組の行は足さない）
+  - 例：見本で重ね切りオン → 組 5枚・メラミン 1 は 5枚（うち重ね切り 5）・ラワン 4 は 6枚（うち重ね切り 5）。全体の歩留まりは重ねないときと同じ 86.4%
+- `sheetProgress`・`sheetChecklist` は変えない（1枚の写しだけを見るため）
+
+### 12.6 保存・操作（`src/store`）
+
+- `validateFlush`：`stack` が true なら `canStack` であること。違えば「重ねて切れるのは、表面材が2種類で枚数が同じときだけです」。`cleanFlush` は `stack` が true のときだけ残す
+- `removeBoards`：表面材を外した結果 `canStack` でなくなったフラッシュは `stack` を外す
+- 読み込み（`sanitizeFlushes`）：`stack` は `true` で `canStack` のときだけ残す。それ以外で `stack` があれば外して直した数に数える
+- 読み込み（固定した1枚）：`stackWith` があれば、`boardId` が文字で自分の `boardId` と違うこと。`material`・`thickness` が読めなければ 11.11 と同じ初期値に直して数える。`boardId` が読めない・同じなら **1枚ごと外す**（どの材料から引くか分からないため。直した数に数える）
+- ひな形（`FlushSpec`）に `stack?: true` を足し、新しい仕事・見本に引き継ぐ（材料名＋厚みで材料を探した結果 `canStack` でなければ外す）。仕事のコピーはフラッシュごと写すので `stack` も写る（固定した1枚は写さない＝11.8 のまま）
+- `setBoardSize(job, boardId, size)`：重ね切りの組の材料なら、**相手の材料も同じサイズにする**（決定。未決事項 36）。相手は「重ね切りがオンで `canStack` のフラッシュの2つの表面材」をたどれるだけたどった材料（A＋B と B＋C なら A を選ぶと A・B・C）。重ね切りがオフの材料はその材料だけ
+- `setBoardsSize(job, boardIds, size)`：いくつかの材料を1回の操作で同じサイズにする（相手の材料も同じくそろえる。1回の保存）。組のサイズの選択で使う
+
+### 12.7 サイズの比較・お知らせ（`packing/sizes.ts`・`hints/saving.ts`）
+
+- `compareStandardSizes(job, dims)`：**今の仕事の `stackPlan(job)`** を求め、3×6・4×8 にそろえた写しの `packJob(写し, dims, plan)` に渡す。すべての材料を同じサイズにすると組は必ずそろうので、そのまま計算すると「今は重ねていない（そろっていない）組」まで重ねた結果になってしまうため
+  - 組にも比較が出る（`boardId: stackKey`、`stack: { boardIds }` 付き）。材料ごとの比較は、その材料のふつうの片がある材料だけ（今までどおり `packJob` の材料と同じ並び・対象）
+- お知らせ（`findSavingHints`）：組の結果もほかの材料と同じく比べる（`boardId` が stackKey）。表示名は `stackLabel`：「切り代を 7mm にすると、メラミン1＋ラワン4（重ね切り）が 1 枚減ります（5枚 → 4枚）」。切り代・端切りを変えても組の決まり方は変わらない（サイズ・木目で決まるため）
+
+### 12.8 画面（`src/ui`）
+
+| 画面 | 変更 |
+|---|---|
+| 設定のフラッシュ | 表面材の下に「表面材を重ねて切る（2枚重ね）」のチェック（44px 以上）。`canStack` でないときは押せず、「表面材が2種類で、枚数が同じときに選べます」を出す。表面材を変えて `canStack` でなくなったら、下書きのチェックを外す。説明（2種類を1枚ずつ重ねて1回で切る）は見出しの ⓘ に入れる（仕様書 9.1）。一覧の行に「重ね切り」と出す |
+| 木取り：まとめ | 組の行「メラミン1＋ラワン4（重ね切り）」（枚数・歩留まり・切り方・サイズの選択）。材料の行は、組の1枚を含んだ枚数に「うち重ね切り ◯枚」を添える。材料の行のサイズの選択は、その材料のふつうの片があるときだけ（今までどおり比較のある材料だけ） |
+| 木取り：組のサイズの選択 | 3×6・4×8・自由入力のどれを選んでも、`setBoardsSize` で **2つの材料を同じサイズにする**。比較の数は組の比較（`compare` の stackKey） |
+| 木取り：知らせ | `result.stackMismatches` の組ごとに、まとめの上に「メラミン1＋ラワン4：サイズがそろっていないので、重ねずに木取りしています」 |
+| 木取り：1枚ごとの段 | 組の段を、a の材料の段の直後に置く（見出し「メラミン1＋ラワン4（重ね切り）」）。固定した組の1枚（`stackWith` のあるもの）→ 計算した組の1枚 の順。配置図の木目・端切りは a。チェックは今までどおり1片1回（`setPieceCheck` に `stackWith` を渡す） |
+
+- 材料のサイズの選択を材料の行で変えても、重ね切りの組の相手の材料も同じサイズになる（`setBoardSize`。決定。未決事項 36）。サイズを設定の材料の編集で変えたときなど、組の相手とサイズが違えば重ねずに木取りし、上の知らせが出る
