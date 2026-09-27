@@ -7,6 +7,7 @@ import { canStack } from '../../engine/packing/stack'
 import {
   autoFlushName,
   defaultFlushFaces,
+  defaultFlushStack,
   flushBreakdown,
   flushBreakdownText,
   isAutoFlushName,
@@ -100,16 +101,22 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
   const [faces, setFaces] = useState<FaceRow[]>(firstFaces)
   const [nextKey, setNextKey] = useState(100)
   const [error, setError] = useState<string | null>(null)
-  const [stack, setStack] = useState(flush?.stack === true)
+  /** 表面材の欄 → engine に渡す形（入力途中の枚数は 0 として見る） */
+  const toFaces = (fs: FaceRow[]) => fs.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 }))
+  // 新しいフラッシュは、重ねられる表面材なら初期オン（defaultFlushStack）。変更のときは保存した値
+  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(faces))))
+  // 利用者がチェックを押したか（押していない新しいフラッシュは、表面材が重ねられるようになったらオンにする）
+  const [stackTouched, setStackTouched] = useState(flush !== null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
   const pre = flush ? `flush-edit-${flush.id}` : 'flush-add'
 
   /** 重ね切りの条件（表面材が2種類で枚数が同じ）。入力途中の枚数は 0 として見る */
-  const stackable = (fs: FaceRow[]) => canStack({ faces: fs.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })) })
+  const stackable = (fs: FaceRow[]) => canStack({ faces: toFaces(fs) })
   const changeFaces = (next: FaceRow[]) => {
     setFaces(next)
     if (!stackable(next)) setStack(false)
+    else if (!stackTouched) setStack(defaultFlushStack(toFaces(next)))
     follow(core, next)
     setError(null)
   }
@@ -137,8 +144,10 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
       setName('')
       setNameAuto(true)
       setCore(null)
-      setFaces(firstFaces())
-      setStack(false)
+      const init = firstFaces()
+      setFaces(init)
+      setStack(defaultFlushStack(toFaces(init)))
+      setStackTouched(false)
       setError(null)
       setRound((n) => n + 1)
     }
@@ -230,6 +239,7 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
         onClick={() => {
           if (!stackable(faces)) return
           setStack((v) => !v)
+          setStackTouched(true)
           setError(null)
         }}
       >

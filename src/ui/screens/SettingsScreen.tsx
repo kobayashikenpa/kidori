@@ -49,8 +49,8 @@ export function SettingsScreen() {
         </div>
 
         <div className="field">
-          <Help className="label" title="切り代（初期値）">
-            仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
+          <Help className="label" title="切り代（フラッシュのみ）">
+            フラッシュの部材だけに足します（ほかの部材は 0）。仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
           </Help>
           <div className="seg" role="group" aria-label="切り代のよく使う値">
             {ALLOWANCE_PRESETS.map((v) => (
@@ -60,7 +60,7 @@ export function SettingsScreen() {
             ))}
           </div>
           <NumberField
-            ariaLabel="切り代（初期値）"
+            ariaLabel="切り代（フラッシュのみ）"
             value={s.allowance}
             onChange={(v) => v !== null && set({ allowance: v })}
           />

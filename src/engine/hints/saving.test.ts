@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultBoards, defaultSettings } from '../defaults'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
-import type { Job, Part, Settings } from '../types'
+import type { Flush, Job, Part, Settings } from '../types'
 import { findSavingHints, smallerSteps } from './saving'
 
 function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
@@ -17,12 +17,26 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
   }
 }
 
-/** シナランバー 18 だけの仕事に、W×1800×18（厚み D・木目 H）の部材を置く */
+/**
+ * 切り代はフラッシュの部材だけに足す（第2.1版）ので、お知らせの切り代を試す部材はフラッシュにする。
+ * 表面材がその材料1枚だけ・芯材2 のフラッシュ（厚み＝材料の厚み＋2）。片はその材料にそのまま入る
+ */
+const flushIdOf = (boardId: string) => `fl-${boardId}`
+function flushOf(boardId: string): Flush {
+  return { id: flushIdOf(boardId), name: `F-${boardId}`, core: 2, faces: [{ boardId, count: 1 }] }
+}
+/** 材料 boardId の1枚表面のフラッシュの部材（厚みの寸法は D） */
+function fpart(boardId: string, p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
+  return part({ ...p, boardId: null, flushId: flushIdOf(boardId), expr: { ...p.expr, D: `{t:${flushIdOf(boardId)}}` } })
+}
+
+/** シナランバー 18 だけの仕事に、W×1800（厚み D・木目 H）のフラッシュの部材（表面材 シナランバー 18 ×1）を置く */
 function jobWith(w: number, quantity: number, settings: Partial<Settings> = {}): Job {
   const job = bookshelfJob()
   job.settings = { ...job.settings, ...settings }
   job.boards = job.boards.filter((b) => b.id === LUMBER_18_ID)
-  job.parts = [part({ id: 'p1', name: '側板', expr: { W: String(w), H: '1800', D: '18' }, quantity })]
+  job.flushes = [flushOf(LUMBER_18_ID), flushOf(VENEER_4_ID)]
+  job.parts = [fpart(LUMBER_18_ID, { id: 'p1', name: '側板', expr: { W: String(w), H: '1800', D: '' }, quantity })]
   return job
 }
 
@@ -150,9 +164,7 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
   it('同じ値で複数の材料が減るときは、材料ごとの枚数を「、」でつなぐ', () => {
     const job = jobWith(445, 4)
     job.boards = bookshelfJob().boards
-    job.parts.push(
-      part({ id: 'p2', name: '背板', boardId: VENEER_4_ID, expr: { W: '445', H: '1800', D: '4' }, quantity: 2 }),
-    )
+    job.parts.push(fpart(VENEER_4_ID, { id: 'p2', name: '背板', expr: { W: '445', H: '1800', D: '' }, quantity: 2 }))
     const hints = findSavingHints(job)
     expect(hints).toHaveLength(1)
     expect(hints[0].message).toBe(
@@ -164,7 +176,7 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
     // シナランバー W444 ×4：7mm 以下で 4→2。シナベニヤ W448 ×2：3mm 以下で 2→1（451+3+451=905）
     const job = jobWith(444, 4)
     job.boards = bookshelfJob().boards
-    job.parts.push(part({ id: 'p2', name: '背板', boardId: VENEER_4_ID, expr: { W: '448', H: '1800', D: '4' }, quantity: 2 }))
+    job.parts.push(fpart(VENEER_4_ID, { id: 'p2', name: '背板', expr: { W: '448', H: '1800', D: '' }, quantity: 2 }))
     const hints = findSavingHints(job)
     expect(hints.map((h) => h.change)).toEqual([
       { kind: 'allowance', value: 7 },
@@ -180,7 +192,7 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
 
   it('切り代で減る材料は端切りのお知らせに入れない。切り代で減らない材料だけ端切りで知らせる（切り代 → 端切りの順）', () => {
     // シナランバー W442 ×4（切り代10）：452+3+452=907 > 905 で 4枚。切り代9 で 905 に入り 2枚（端切り3 でも入る）
-    // シナベニヤ W453 ×2（部材の切り代 0 で上書き）：切り代を変えても変わらない。端切り1 で 909 に入り 1枚
+    // シナベニヤ W453 ×2（フラッシュでない。部材の切り代 0 で上書き）：切り代を変えても変わらない。端切り1 で 909 に入り 1枚
     const job = jobWith(442, 4)
     job.boards = bookshelfJob().boards
     job.parts.push(
@@ -197,11 +209,14 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
     const job = bookshelfJob()
     job.settings = { ...job.settings, trim: 5, allowance: 10, cutMode: 'auto' }
     job.boards = job.boards.filter((b) => b.id === LUMBER_18_ID)
+    job.flushes = [flushOf(LUMBER_18_ID)]
     job.parts = Array.from({ length: 15 }, (_, i) =>
       part({
         id: `q${i}`,
         name: `棚${i + 1}`,
-        expr: { W: String(100 + ((i * 131) % 780)), H: '18', D: String(80 + ((i * 71) % 600)) },
+        boardId: null,
+        flushId: flushIdOf(LUMBER_18_ID),
+        expr: { W: String(100 + ((i * 131) % 780)), H: `{t:${flushIdOf(LUMBER_18_ID)}}`, D: String(80 + ((i * 71) % 600)) },
         thicknessAxis: 'H',
         quantity: 10,
         grain: i % 2 === 0 ? 'any' : 'D',
@@ -210,6 +225,31 @@ describe('findSavingHints（材料を減らせるときのお知らせ）', () =
     const t = performance.now()
     findSavingHints(job)
     expect(performance.now() - t).toBeLessThan(3000)
+  })
+})
+
+describe('findSavingHints：切り代はフラッシュの部材だけ（第2.1版）', () => {
+  /** フラッシュでない シナランバー 18 の部材（W×1800×18、厚み D・木目 H・切り代は空欄） */
+  function plainJob(w: number, quantity: number, settings: Partial<Settings> = {}): Job {
+    const job = jobWith(w, quantity, settings)
+    job.flushes = []
+    job.parts = [part({ id: 'p1', name: '側板', expr: { W: String(w), H: '1800', D: '18' }, quantity })]
+    return job
+  }
+
+  it('フラッシュでない部材だけなら切り代のお知らせは出さない（切り代 10 でも W445 ×4 は 445+3+445=893 で初めから2枚）', () => {
+    expect(findSavingHints(plainJob(445, 4))).toEqual([])
+  })
+
+  it('フラッシュでない W452 ×2（452+3+452=907 > 905）：切り代では減らないので、端切り 3mm だけを知らせる', () => {
+    const hints = findSavingHints(plainJob(452, 2))
+    expect(hints.map((h) => h.message)).toEqual(['端切りを 3mm にすると、シナランバー 18mm が 1 枚減ります（2枚 → 1枚）'])
+  })
+
+  it('フラッシュでない部材で切り代を上書き（10）していても、設定の切り代を変えるお知らせにはならない', () => {
+    const job = plainJob(445, 4)
+    job.parts[0].allowance = 10
+    expect(findSavingHints(job).filter((h) => h.change.kind === 'allowance')).toEqual([])
   })
 })
 
@@ -224,17 +264,19 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
     seq = 0
     const boards = defaultBoards(newId)
     const lauan4 = boards[2].id
+    // 切り代を試すのはフラッシュの部材だけ（第2.1版）：表面材 ラワン 4 ×1 のフラッシュ（厚み 6）
     return {
       id: 'job-1',
       name: '棚',
       settings: { ...defaultSettings(), ...settings },
       boards,
-      flushes: [],
+      flushes: [flushOf(lauan4)],
       parts: parts.map((p, i) => ({
         id: `p${i + 1}`,
         name: `背板${i + 1}`,
-        boardId: lauan4,
-        expr: { W: '602', H: '1200', D: '4' },
+        boardId: null,
+        flushId: flushIdOf(lauan4),
+        expr: { W: '602', H: '1200', D: '6' },
         thicknessAxis: null,
         quantity: 4,
         grain: 'H',
@@ -287,6 +329,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
       ...job.parts[0],
       id: 'p2',
       name: '底板',
+      flushId: undefined,
       boardId: job.boards[3].id,
       expr: { W: '1210', H: '2000', D: '5.5' },
       quantity: 2,
@@ -299,7 +342,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
 describe('木取り済みの部材とお知らせ（第1.3版）', () => {
   it('W445 ×4 に木取りの完了をつけると、お知らせは出ない', () => {
     const job = jobWith(445, 4)
-    job.parts[0].checks.cut = true
+    job.parts[0].checks.cutByBoard = { [LUMBER_18_ID]: true }
     expect(findSavingHints(job)).toEqual([])
   })
 })

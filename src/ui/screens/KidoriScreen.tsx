@@ -189,7 +189,7 @@ export function KidoriScreen() {
         </Help>
       </h2>
       <p className="lead num">
-        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代 {fmt(s.allowance)}mm
+        刃厚 {fmt(s.kerf)}mm・端切り {fmt(s.trim)}mm・切り代（フラッシュ） {fmt(s.allowance)}mm
       </p>
       {own.length > 0 && (
         <p className="lead num">
@@ -311,7 +311,7 @@ export function KidoriScreen() {
       )}
 
       {/* ふつうの1枚の無い材料（組の1枚だけの材料）は、1枚ごとの段を出さない */}
-      {sections.filter(showSection).map((sec) => (
+      {sections.map((sec) => (
         <section key={sec.boardId} aria-label={sec.label}>
           <h3 data-cl-key={`sec:${sec.boardId}`}>
             {sec.label}
@@ -373,9 +373,6 @@ export function KidoriScreen() {
   )
 }
 
-const showSection = (sec: Section) =>
-  sec.stack !== null || sec.sheets.length > 0 || sec.finished.length > 0 || sec.summary.stackedCount === 0
-
 interface MaterialRowProps {
   label: string
   summary: MaterialSummary
@@ -398,7 +395,6 @@ function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison }
         <span>
           <span className="kd-k">必要な材料</span>
           <span className="kd-v num">{n}枚</span>
-          {!stack && summary.stackedCount > 0 && <span className="kd-k num">うち重ね切り {summary.stackedCount}枚</span>}
         </span>
         <span>
           <span className="kd-k">歩留まり</span>

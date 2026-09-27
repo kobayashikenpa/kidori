@@ -64,7 +64,8 @@ function reduced(job: Job, base: PackingResult, trial: PackingResult): SavingHin
 
 /**
  * 材料を減らせるときのお知らせ（仕様書 9）。仕事のデータは書き換えない。切り方・刃厚は今のまま。
- * 1. 切り代（仕事の切り代だけ。部材ごとの上書きはそのまま）を `smallerSteps` の値で大きい値から計算し直す。
+ * 1. 切り代（仕事の切り代だけ。部材ごとの上書きはそのまま。設定の切り代はフラッシュの部材だけに足すので、
+ *    上書きしていないフラッシュの部材が無ければ試さない）を `smallerSteps` の値で大きい値から計算し直す。
  *    材料ごとに、必要枚数が減る一番大きい値でお知らせを出す（その値で減る材料をすべて入れる）。
  *    まだ出していない材料が減らない値ではお知らせを出さない
  * 2. 切り代で減らなかった材料だけ、端切りを同じように試す（お知らせにはその材料だけ入れる）
@@ -72,7 +73,9 @@ function reduced(job: Job, base: PackingResult, trial: PackingResult): SavingHin
  * 計算は最大で 1 +（切り代の試す数）+（端切りの試す数）回。2枚以上使う材料がすべて出たら、そこで打ち切る
  */
 export function findSavingHints(job: Job): SavingHint[] {
-  const allowances = smallerSteps(job.settings.allowance)
+  // 設定の切り代を使う部材（フラッシュで上書きなし。第2.1版）が無ければ、切り代を変えても何も変わらないので試さない
+  const usesAllowance = job.parts.some((p) => p.quantity > 0 && p.allowance === null && p.flushId !== undefined)
+  const allowances = usesAllowance ? smallerSteps(job.settings.allowance) : []
   const trims = smallerSteps(job.settings.trim)
   if (allowances.length === 0 && trims.length === 0) return []
 

@@ -533,7 +533,7 @@ function validatePartFields(job: Job, part: Part): string | null {
 
   if (!(Number.isInteger(part.quantity) && part.quantity >= 0)) return '枚数は 0 以上の整数を入れてください'
   if (part.allowance !== null && !(Number.isFinite(part.allowance) && part.allowance >= 0)) {
-    return '切り代は 0 以上の数を入れてください（空欄なら仕事の初期値）'
+    return '切り代は 0 以上の数を入れてください（空欄ならフラッシュは初期値、ほかの部材は 0）'
   }
   return null
 }

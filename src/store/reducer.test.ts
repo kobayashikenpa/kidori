@@ -126,13 +126,20 @@ describe('removeJob', () => {
 })
 
 describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
-  /** 初期の材料の仕事で、ラワン4 W602 H1200 D4（木目 H）×4枚・部材の切り代は空欄・仕事の切り代 0 */
+  /**
+   * 初期の材料の仕事で、W602 H1200 D6（木目 H）×4枚・部材の切り代は空欄・仕事の切り代 0。
+   * 設定の切り代はフラッシュの部材だけに足す（第2.1版）ので、表面材 ラワン4 ×1・芯材2 のフラッシュにする
+   */
   function stateWithRawan(): StoreState {
     const r = updateSettings(createJob('お知らせ', undefined, NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
     if (!r.ok) throw new Error(r.message)
     let job = r.job
     const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
-    job = { ...job, parts: [newPart({ name: '棚', boardId: rawan4.id, expr: { W: '602', H: '1200', D: '4' }, quantity: 4, grain: 'H' })] }
+    job = {
+      ...job,
+      flushes: [{ id: 'fl', name: 'F6', core: 2, faces: [{ boardId: rawan4.id, count: 1 }] }],
+      parts: [newPart({ name: '棚', boardId: null, flushId: 'fl', expr: { W: '602', H: '1200', D: '6' }, quantity: 4, grain: 'H' })],
+    }
     return initialState({ status: 'ok', data: { jobs: [job], currentJobId: job.id } })
   }
   const apply = (s: StoreState, allowance: number) =>

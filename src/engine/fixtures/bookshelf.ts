@@ -1,9 +1,14 @@
 // 見本データ（本棚 W900）。テストで使う。期待する値は docs/tasks.md の「見本」の表を参照
+// 第2.1版から、設定の切り代はフラッシュの部材だけに足す（フラッシュでない部材は 0）。
+// この見本はシナランバー（フラッシュでない）なので、表の木取り寸法（切り代 10）のままにするため、
+// 側板・天地板・棚板に部材ごとの切り代 10（LUMBER_ALLOWANCE）を入れている
 import { defaultNige } from '../defaults'
 import { BOARD_SIZES, DEFAULT_SETTINGS, type Board, type Job, type Part } from '../types'
 
 export const LUMBER_18_ID = 'board-shina-lumber-18'
 export const VENEER_4_ID = 'board-shina-veneer-4'
+/** 側板・天地板・棚板の部材ごとの切り代（第2.1版から上書きで入れる） */
+export const LUMBER_ALLOWANCE = 10
 
 function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
   return {
@@ -34,6 +39,7 @@ export function bookshelfJob(): Job {
       expr: { W: '18', H: '全体.H', D: '全体.D' },
       quantity: 2,
       grain: 'H',
+      allowance: LUMBER_ALLOWANCE,
     }),
     part({
       id: 'part-tenchiita',
@@ -42,6 +48,7 @@ export function bookshelfJob(): Job {
       expr: { W: '全体.W - 側板.W * 2', H: '18', D: '全体.D' },
       quantity: 2,
       grain: 'W',
+      allowance: LUMBER_ALLOWANCE,
     }),
     part({
       id: 'part-tanaita',
@@ -50,6 +57,7 @@ export function bookshelfJob(): Job {
       expr: { W: '天地板.W - {n:nige-1}', H: '18', D: '全体.D - 20' },
       quantity: 4,
       grain: 'W',
+      allowance: LUMBER_ALLOWANCE,
     }),
     part({
       id: 'part-seita',

@@ -1,7 +1,7 @@
 // 以前の版（第1版）の寸法の計算を、移し替えの確かめのためだけに残したもの。
 // 第1版の src/engine/dimensions/finished.ts をもとに、式の lookup だけ今の形（材料の厚み・逃げ）にした。
 // 部材ごとの逃げを、厚みの寸法以外の軸で式の計算結果から引く。画面の計算には使わない
-import { cutSizeOf } from '../dimensions/cutSize'
+import { cutSizeOf, partAllowance } from '../dimensions/cutSize'
 import { dimKey, resolve, type DimRef } from '../dimensions/resolve'
 import { pickThicknessAxis } from '../dimensions/thickness'
 import { evaluate } from '../formula/evaluate'
@@ -309,7 +309,9 @@ export function computeV1Dimensions(
     const { axis } = pickThicknessAxis(p, board, (a) => f.thicknessInput[a] ?? null)
     const faces = AXES.filter((a) => a !== axis)
     const faceAxes: [Axis, Axis] | null = axis ? [faces[0], faces[1]] : null
-    const allowance = p.allowance ?? job.settings.allowance
+    // 切り代は今の決め方（第2.1版：フラッシュでない部材は上書きが無ければ 0）でそろえる。
+    // 逃げの移し替えで変わった部材だけを知らせるため（切り代の決め方の違いでは知らせない）
+    const allowance = partAllowance(p, job.settings)
     out.set(p.id, { finished: f.finished, thicknessAxis: axis, cutSize: cutSizeOf(f.finished, faceAxes, allowance) })
   }
   return out

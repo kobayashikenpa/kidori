@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { nigeName } from '../defaults'
 import { computeDimensions } from '../dimensions'
-import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
+import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID } from '../fixtures/bookshelf'
 import type { Axis } from '../types'
 import { migrateClearance, migrateClearanceChecked, type LegacyJob, type LegacyPart } from './clearance'
 import { computeV1Dimensions } from './v1Dimensions'
@@ -171,7 +171,8 @@ describe('migrateClearance（以前の版の部材ごとの逃げを移し替え
   }
 
   function lp(p: Partial<LegacyPart> & Pick<LegacyPart, 'id' | 'name' | 'expr'>): LegacyPart {
-    return { boardId: LUMBER_18_ID, thicknessAxis: null, quantity: 1, grain: 'any', allowance: null, ...p }
+    // 切り代は部材ごとに 10（第2.1版から、フラッシュでない部材は上書きしないと 0 のため）
+    return { boardId: LUMBER_18_ID, thicknessAxis: null, quantity: 1, grain: 'any', allowance: LUMBER_ALLOWANCE, ...p }
   }
 
   /** 以前の版の計算（部材ごとの逃げ）と、移し替えた後の今の計算の、部材ごとの寸法・厚みの軸・木取り寸法 */

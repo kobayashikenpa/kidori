@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
-import { canStack } from '../engine/packing/stack'
+import { canStack, stackKey } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout } from '../engine/types'
 import { defaultSettings } from '../engine/defaults'
@@ -165,17 +165,19 @@ function checkJob(job: Job) {
       expect([a.width, a.length, a.grain]).toEqual([b.width, b.length, b.grain])
     }
   }
-  // まとめ：材料の行の枚数 ＝ ふつうの 固定（切り終わりを除く）＋計算 ＋ その材料の組の 固定（切り終わりを除く）＋計算
+  // まとめ（第2.1版）：材料の行の枚数 ＝ その材料のふつうの 固定（切り終わりを除く）＋計算 だけ（組の1枚は足さない）。
+  // 組の行の枚数 ＝ その組の 固定（切り終わりを除く）＋計算。全体の歩留まりの枚数には組の1枚を2回数える
   const views = frozenSheetViews(job, dims)
   const sum = materialSummaries(job, r, views)
   for (const row of sum.materials) {
-    if (row.stack) continue
     const id = row.boardId
-    const inStack = (bs: readonly string[]) => bs.includes(id)
+    const own = (v: (typeof views)[number]) =>
+      row.stack ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === id : !v.sheet.stackWith && v.sheet.boardId === id
     const count =
-      views.filter((v) => !v.complete && (v.sheet.stackWith ? inStack([v.sheet.boardId, v.sheet.stackWith.boardId]) : v.sheet.boardId === id)).length +
-      r.materials.filter((m) => (m.stack ? inStack(m.stack.boardIds) : m.boardId === id)).reduce((n, m) => n + m.sheetCount, 0)
+      views.filter((v) => !v.complete && own(v)).length +
+      r.materials.filter((m) => m.boardId === id && (row.stack ? m.stack !== undefined : m.stack === undefined)).reduce((n, m) => n + m.sheetCount, 0)
     expect(row.sheetCount, id).toBe(count)
+    expect(row.stackedCount, id).toBe(row.stack ? row.sheetCount : 0)
   }
   return r
 }

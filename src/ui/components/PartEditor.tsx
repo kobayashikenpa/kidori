@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { flushBreakdown, flushBreakdownText, flushThickness, partThicknessSource } from '../../engine/flush'
+import { partAllowance } from '../../engine/dimensions/cutSize'
 import { computeFinished } from '../../engine/dimensions/finished'
 import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
@@ -226,10 +227,11 @@ export function PartEditor({ part, onClose }: Props) {
               id="part-allowance"
               ariaLabel="切り代"
               allowEmpty
-              placeholder={`空欄＝初期値 ${fmt(job.settings.allowance)}`}
+              placeholder={`空欄＝${draft.flushId !== undefined ? '初期値 ' : ''}${fmt(partAllowance({ allowance: null, flushId: draft.flushId }, job.settings))}`}
               value={draft.allowance}
               onChange={(v) => patch({ allowance: v })}
             />
+            <span className="hint">フラッシュの部材だけに足します（ほかの部材は、入れたときだけ足します）</span>
           </div>
         </>
       )}

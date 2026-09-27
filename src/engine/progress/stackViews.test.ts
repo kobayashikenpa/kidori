@@ -30,16 +30,15 @@ function freezeStack(job: Job, i: number, checks = 1): Job {
 }
 
 describe('固定した組の1枚・まとめ（E-52）', () => {
-  it('重ね切りオンの見本：メラミン 1 は 5枚（うち重ね切り 5）・組 5枚・ラワン 4 は 6枚（うち重ね切り 5）・全体 86.4%', () => {
+  it('重ね切りオンの見本（第2.1版）：組 5枚・ラワン 4 は背板の 1枚だけ・メラミン 1 の行は無い・全体 86.4%（変わらない）', () => {
     const s = summaries(sampleFlushJob(true))
     expect(s.materials.map((m) => [m.boardId, m.sheetCount, m.stackedCount, m.completedCount])).toEqual([
-      [MELAMINE_1_ID, 5, 5, 0],
       [KEY, 5, 5, 0],
-      [LAUAN_4_ID, 6, 5, 0],
+      [LAUAN_4_ID, 1, 0, 0],
     ])
-    expect(s.materials[1].stack).toEqual({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID] })
-    expect(s.materials[0].stack).toBeUndefined()
-    expect(s.materials.map((m) => pct(m.yieldRate))).toEqual([85.2, 85.2, 87.3])
+    expect(s.materials[0].stack).toEqual({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID] })
+    expect(s.materials[1].stack).toBeUndefined()
+    expect(s.materials.map((m) => pct(m.yieldRate))).toEqual([85.2, 97.8])
     expect(pct(s.totalYieldRate)).toBe(86.4)
   })
 
@@ -59,12 +58,11 @@ describe('固定した組の1枚・まとめ（E-52）', () => {
     expect(() => freezeSheet(job, MELAMINE_1_ID, 'vertical', f.layout, 'x', NOW, 'board-none')).toThrow()
   })
 
-  it('組の1枚目を切り終わりにすると メラミン 1 は 4枚・ラワン 4 は 5枚・組は 4枚で切り終わり 1', () => {
+  it('組の1枚目を切り終わりにすると 組は 4枚で切り終わり 1・ラワン 4 は 1枚のまま（メラミン 1 の行は無い）', () => {
     const job = freezeStack(sampleFlushJob(true), 0, 2)
     expect(rows(job)).toEqual([
-      [MELAMINE_1_ID, 4, 4, 0],
       [KEY, 4, 4, 1],
-      [LAUAN_4_ID, 5, 4, 0],
+      [LAUAN_4_ID, 1, 0, 0],
     ])
     const [v] = frozenSheetViews(job, computeDimensions(job))
     expect(v.label).toBe('メラミン1＋ラワン4（重ね切り）')
@@ -83,14 +81,20 @@ describe('固定した組の1枚・まとめ（E-52）', () => {
     ])
   })
 
-  it('固定中（切り終わり前）の組の1枚も両方の材料の行に数える', () => {
+  it('固定中（切り終わり前）の組の1枚は組の行だけに数える。全体の歩留まりは両方の材料に数えたまま', () => {
     const job = freezeStack(sampleFlushJob(true), 0, 1)
     expect(rows(job)).toEqual([
-      [MELAMINE_1_ID, 5, 5, 0],
       [KEY, 5, 5, 0],
-      [LAUAN_4_ID, 6, 5, 0],
+      [LAUAN_4_ID, 1, 0, 0],
     ])
     expect(pct(summaries(job).totalYieldRate)).toBe(86.4)
+  })
+
+  it('全体の歩留まり：組の1枚は a・b の2枚として数える（行の枚数の合計とは別）', () => {
+    // 組 5枚 ×2（メラミン 1・ラワン 4）＋ 背板の1枚。組の片の面積も2回数える
+    const job = sampleFlushJob(true)
+    const off = sampleFlushJob(false)
+    expect(summaries(job).totalYieldRate).toBeCloseTo(summaries(off).totalYieldRate, 10)
   })
 
   it('側板の枚数を 0 にすると drift に 側板（count）', () => {

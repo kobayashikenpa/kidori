@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
+import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part } from '../types'
 import { packJob } from './index'
 import { compareStandardSizes, pickBetterSize, type SizeSummary } from './sizes'
@@ -24,7 +24,8 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    allowance: null,
+    // 第2.1版から フラッシュでない部材の切り代は上書きしないと 0。今までの値（切り代 10）で確かめるため上書きする
+    allowance: LUMBER_ALLOWANCE,
     ...p,
   }
 }
