@@ -783,7 +783,7 @@
 - やること：`types.ts` に `Flush.stack?: true`・`FrozenSheet.stackWith`・`MaterialResult.stack`・`PackingResult.stackMismatches` を足す（12.2。`packJob` はまず `stackMismatches: []` を返す）。`packing/stack.ts` に `canStack`・`sameSheet`・`stackKey`・`stackPlan`・`stackLabel` を作る（12.3）
 - 完了の条件：メラミン1×2・ラワン4×2 は `canStack` が true、メラミン1×2・ラワン4×1 と 表面材3種類は false。見本でフラッシュ25 をオンにすると `stackPlan` の組が1つ（a＝メラミン 1、b＝ラワン 4、表面材の並びを逆にしても同じ）で `stackLabel` が「メラミン1＋ラワン4（重ね切り）」。ラワン 4 を 4×8 にすると組は無く `mismatches` に1つ。自由入力 910×1820・木目 長手方向 は 3×6 とそろう、木目が短手方向ならそろわない
 
-### [~] E-51 重ね切りの木取り（組の配置図・そろわないときは重ねない）
+### [x] E-51 重ね切りの木取り（組の配置図・そろわないときは重ねない）
 - 担当：engine-dev ／ 依存：E-50 ／ 仕様書：4（フラッシュの重ね切り）・8
 - やること：`expandPieces(job, dims, plan?)`・`packJob(job, dims, plan?)` で、重ねるフラッシュの部材の片を 重ねる数＝min(a の残り, b の残り) だけ組の“材料”に入れ、差はそれぞれの材料にふつうに入れる（12.4）。組の結果は `boardId: stackKey`・`stack` 付き、全体の歩留まりは組の1枚を2回数える。そろわない組は重ねずに `stackMismatches` に出す。`frozenDemand` は `stackWith` のある1枚を両方の材料に数える（12.5）
 - 完了の条件：見本で重ね切りオンにすると、組が5枚（85.2%）・ラワン 4 のふつうの1枚が1枚（背板）・メラミン 1 のふつうの結果は無い。組の配置図に背板は入らない。ラワン 4 を 4×8 にすると重ねずに S-14 と同じくメラミン 1 に5枚、`stackMismatches` に組が1つ。オフなら S-14 の値のまま。`stackWith` 付きの固定した1枚（側板×2）があると組が4枚、以前の `cutByBoard` でラワン 4 だけ木取り済みの部材は重ねずにメラミン 1 に出る

@@ -8,6 +8,7 @@ import { buildCuts } from './cutOrder'
 import { packGuillotine, type StripMode } from './guillotine'
 import { expandPieces, type Piece, type Unplaced } from './pieces'
 import { scrapsOf } from './scraps'
+import { stackPlan, type StackPlan } from './stack'
 import { sheetOrientation, trimRects, usableRect } from './sheet'
 import { combineYield, sheetYield } from './yield'
 
@@ -62,11 +63,15 @@ function preferFirst(a: Layout, b: Layout): boolean {
   return largestScrap(a) >= largestScrap(b)
 }
 
-export function packJob(job: Job, dims: DimensionResult): PackingResult {
+/**
+ * 木取りの計算。plan は重ねる組（初期値は今の仕事の stackPlan）。サイズの比較では今の仕事の plan を渡す（12.7）。
+ * 組の結果は boardId: stackKey・stack 付き（material・thickness は a）。全体の歩留まりは組の1枚を2枚（a と b）として数える
+ */
+export function packJob(job: Job, dims: DimensionResult, plan: StackPlan = stackPlan(job)): PackingResult {
   const { kerf, trim, cutMode } = job.settings
-  const { groups, skipped, done } = expandPieces(job, dims)
+  const { groups, skipped, done, stackMismatches } = expandPieces(job, dims, plan)
 
-  const materials = groups.map(({ board, pieces, unplaced }): MaterialResult => {
+  const materials = groups.map(({ board, stack, pieces, unplaced }): MaterialResult => {
     let chosen: Layout
     if (cutMode === 'auto') {
       const v = layout(pieces, board, trim, kerf, 'vertical')
@@ -80,8 +85,8 @@ export function packJob(job: Job, dims: DimensionResult): PackingResult {
     for (const p of chosen.unplaced) {
       if (!all.some((u) => u.partId === p.partId)) all.push({ partId: p.partId, name: p.name, reason: 'tooLarge' })
     }
-    return {
-      boardId: board.id,
+    const result: MaterialResult = {
+      boardId: stack?.key ?? board.id,
       material: board.material,
       thickness: board.thickness,
       mode: chosen.mode,
@@ -90,8 +95,10 @@ export function packJob(job: Job, dims: DimensionResult): PackingResult {
       yieldRate: combineYield(chosen.sheets.map(areasOf)).yieldRate,
       unplaced: all,
     }
+    if (stack) result.stack = { boardIds: [stack.boardIds[0], stack.boardIds[1]] }
+    return result
   })
 
-  const total = combineYield(materials.flatMap((m) => m.sheets.map(areasOf)))
-  return { materials, totalYieldRate: total.yieldRate, skipped, done, stackMismatches: [] }
+  const total = combineYield(materials.flatMap((m) => m.sheets.flatMap((s) => (m.stack ? [areasOf(s), areasOf(s)] : [areasOf(s)]))))
+  return { materials, totalYieldRate: total.yieldRate, skipped, done, stackMismatches }
 }

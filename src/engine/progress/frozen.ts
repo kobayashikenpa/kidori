@@ -44,13 +44,17 @@ export function freezeSheet(
   }
 }
 
-/** 固定した1枚（切り終わりを含む）の片の数。キーは `${partId}|${boardId}`（demandKey） */
+/**
+ * 固定した1枚（切り終わりを含む）の片の数。キーは `${partId}|${boardId}`（demandKey）。
+ * 重ね切りの1枚（stackWith あり）は、片1つを boardId と stackWith.boardId の両方に 1 ずつ数える（第2.0版）
+ */
 export function frozenDemand(job: Pick<Job, 'frozenSheets'>): Map<string, number> {
   const out = new Map<string, number>()
+  const add = (k: string) => out.set(k, (out.get(k) ?? 0) + 1)
   for (const s of job.frozenSheets) {
     for (const p of s.layout.placements) {
-      const k = demandKey(p.partId, s.boardId)
-      out.set(k, (out.get(k) ?? 0) + 1)
+      add(demandKey(p.partId, s.boardId))
+      if (s.stackWith) add(demandKey(p.partId, s.stackWith.boardId))
     }
   }
   return out
