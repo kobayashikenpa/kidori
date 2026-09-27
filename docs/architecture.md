@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -7,6 +7,7 @@
 > **第1.1版の変更は 6章にまとめている。** 1〜5章と 6章が食い違うところは 6章が正（例：部材ごとの逃げ `Part.clearance` は第1.1版でなくなる）。
 > **第1.2版の変更は 7章にまとめている。** 6章までと食い違うところは 7章が正。
 > **第1.3版の変更は 8章にまとめている。** 7章までと食い違うところは 8章が正。
+> **第1.8版（切りながら進める木取り）の変更は 11章にまとめている。** 切り出しのチェック（8.5・10.3・`checklist.ts`）と食い違うところは 11章が正。
 
 ## 1. 全体の構成
 
@@ -818,3 +819,213 @@ partsUsingFlushes(job, flushIds): string[]               // その材料欄で�
 - ひな形：`SettingsTemplate.flushes?: FlushSpec[]`。表面材は材料の id ではなく「材料名＋厚み」で持ち、新しい仕事を作るときに同じ材料名＋厚みの材料の id に直す。見本も同じ（ひな形から作るため）
 - 仕事のコピー：フラッシュの id・表面材の材料の id・部材の `flushId`・`cutByBoard` のキー・式の `{t:…}` をつけ替える
 - 操作：`addFlush(job, draft, id?)`・`updateFlush(job, id, draft)`・`removeFlushes(job, ids)`（使っていた部材は材料が未設定になる）・`flushesUsages(job, ids)`・`setFlushCutCheck(job, partId, boardId, done)`。`removeBoards` は削除した材料をフラッシュの表面材から外し、`boardsUsages` は `flushes`（使っているフラッシュの名前）も返す
+
+## 11. 第1.8版の変更（切りながら進める木取り）— 決定（planner）
+
+仕様書 9（切る順番・加工のチェック）の変更（コミット 704291b）に対応する。1〜10章と食い違うところは 11章が正。
+方針は「**固定した1枚は、そのとき画面に出ていた1枚をまるごと写して持つ**」。写しから描き、写しから進み具合を計算する。今の部材から作り直さないので、部材や設定が変わっても固定した1枚は動かない（仕様書 9「固定している1枚は…変わらない」）。
+
+### 11.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts                FrozenSheet・Job.frozenSheets を足す
+  progress/
+    frozen.ts             freezeSheet（写しを作る）・frozenDemand（固定した片の数）・frozenSheetViews（表示用・変わった部材の検出）・materialSummaries
+    sheetProgress.ts      sheetProgress（済んだ工程・次の工程・残りの材料）
+    sheetChecklist.ts     sheetChecklist（1枚ごとのチェックリストの行）
+  packing/pieces.ts       固定した片の数を、部材ごとの枚数から引いてから片にする
+  packing/index.ts        packJob が job.frozenSheets を見て引く（入口の形は変えない）
+src/store/
+  jobs.ts                 setPieceCheck（1枚ごとのチェック。最初のチェックで固定、全部外すと固定を外す）・clearLegacyCut・copyJob
+  storage.ts              frozenSheets の検査・修復
+src/ui/
+  screens/KidoriScreen.tsx     材料ごとに 固定した1枚 → 計算した1枚 の順で、1枚ごとに 配置図・チェックリスト・切る順番
+  components/SheetDiagram.tsx  チェックした部材をグレー、残りの材料の枠
+  components/SheetChecklist.tsx 1枚ごとのチェックリスト（CutChecklist の置きかえ）
+  components/CutSteps.tsx      切る順番（済んだ工程はグレー、次の工程を目立たせる）
+```
+
+### 11.2 データの形（`types.ts`）
+
+```ts
+/** 固定した1枚（第1.8版）。1つ目の部材にチェックしたときに、画面に出ていた1枚を写して作る */
+export interface FrozenSheet {
+  id: string                     // 仕事の中で重複しない（newId('sheet')）
+  boardId: string                // 切っている材料（フラッシュの表面材なら表面材の材料）
+  /** 固定したときの材料の表示（材料を削除・変更しても表示できるように） */
+  material: string
+  thickness: number
+  grain: BoardGrain              // 固定したときの材料の木目の方向（配置図の木目の表示）
+  mode: 'vertical' | 'horizontal' // 固定したときの切り方（おまかせなら選ばれたほう）
+  kerf: number                   // 固定したときの刃厚（残りの材料の計算に使う）
+  trim: number                   // 固定したときの端切り（凡例の表示）
+  /** 固定したときの1枚（SheetLayout をそのまま写す。index は使わない＝表示のときに振り直す） */
+  layout: SheetLayout
+  /** チェックした片の pieceId（layout.placements の pieceId。重複なし・写しにあるものだけ） */
+  checked: string[]
+  frozenAt: string               // ISO
+  /** すべての片にチェックした時刻。あれば「切り終わり」（木取り画面の通常の一覧に出さない） */
+  completedAt?: string
+}
+
+export interface Job {
+  …今のまま
+  /** 固定した1枚（固定した順）。以前のデータは読み込むときに [] */
+  frozenSheets: FrozenSheet[]
+}
+```
+
+- 片の中身（部材・材料・寸法）は `layout.placements` の `partId`・`name`・`sizeLabel` と `FrozenSheet.boardId` で分かる。フラッシュの片は「部材 × その1枚の材料（表面材）」。別に表面材の id は持たない
+- `pieceId`（`${partId}#${連番}`）はその1枚の中では重ならない（1つの材料の中で部材ごとの通し番号のため）。ほかの1枚・計算し直した1枚とは重なってよい。画面のキーは `${frozenSheet.id}:${pieceId}` や `計算した1枚の番号:${pieceId}` にする
+- **切り終わった1枚は消さずに残す**（`completedAt` を付ける）。消すと、その片が「まだ切っていない」扱いになって計算に戻ってしまうため。画面の通常の一覧からは外す
+- `completedAt` は `checked` から分かる値だが、切り終わった時刻を残すために持つ。`checked.length === placements.length` と食い違ったら読み込みで直す（11.8）
+- 保存データ（`kidori.jobs.v2`）の版は上げない（足すだけ。無ければ `[]`）
+
+### 11.3 固定した片を計算から除く（`progress/frozen.ts`・`packing/pieces.ts`）
+
+```ts
+/** 固定した1枚（切り終わりを含む）の片の数。キーは `${partId}|${boardId}` */
+export function frozenDemand(job: Pick<Job, 'frozenSheets'>): Map<string, number>
+```
+
+- `expandPieces(job, dims)` で、部材（フラッシュは表面材ごと）の枚数から `frozenDemand` の数を引いてから片にする（0 未満にはしない）。**寸法ではなく数だけで引く**（固定した片の寸法が変わっていても引く。変わったことは 11.5 で知らせる）
+- 片の id の連番は今までどおり 1 から振る（固定した片と同じ id になってよい。11.2）
+- 引いた結果 片が 0 になった部材（表面材）は、`done`（以前の木取り済み）にも `skipped` にも入れない
+- `packJob` の入口の形は変えない。`MaterialResult.sheets`・`sheetCount`・`yieldRate` は **固定していない片だけで計算した1枚** を表す
+- そのため **お知らせ（`findSavingHints`）とサイズの比較（`compareStandardSizes`）は、固定していない片だけで計算する**（どちらも `packJob` を呼ぶので、何も足さなくてよい）。固定した1枚は切り代・端切り・材料のサイズを変えても変わらないので、比べる意味がないため
+  - お知らせの「3枚 → 2枚」の数も、固定していない1枚の数になる（暫定。未決事項 30）
+
+### 11.4 固定の作り方と外し方（`freezeSheet`・store の `setPieceCheck`）
+
+```ts
+// engine（純粋関数）
+export function freezeSheet(
+  job: Job, boardId: string, mode: 'vertical' | 'horizontal', layout: SheetLayout, id: string, now: Date,
+): FrozenSheet   // material・thickness・grain は job.boards から、kerf・trim は job.settings から写す。layout は深いコピー
+
+// store
+export type SheetTarget =
+  | { kind: 'frozen'; sheetId: string }
+  | { kind: 'computed'; boardId: string; mode: 'vertical' | 'horizontal'; layout: SheetLayout }
+export function setPieceCheck(job: Job, target: SheetTarget, pieceId: string, done: boolean, now?: Date, id?: string): OpResult
+```
+
+- **計算した1枚**（`computed`）にチェック：画面に出ている `layout` を `freezeSheet` で写し、`checked: [pieceId]` で `job.frozenSheets` の最後に足す。`done = false` は何もしない。`pieceId` が `layout` に無ければ失敗
+- **固定した1枚**（`frozen`）：`checked` に足す／外す
+  - すべての片にチェックが付いたら `completedAt = now`（切り終わり）。1つでも外したら `completedAt` を消す
+  - **チェックがすべて外れたら、その1枚を `frozenSheets` から消す**（固定を外す。片は計算に戻り、今の部材で並べ直す。仕様書 9）
+- 画面は `computed` の `layout` に、今表示している `MaterialResult.sheets[i]` をそのまま渡す（見ているものと写すものが同じになる）
+
+### 11.5 表示用のまとめと、部材が変わったことの検出（`frozenSheetViews`）
+
+```ts
+export interface FrozenDrift {
+  partId: string
+  name: string                 // 今の部材名（部材が無ければ写しの名前）
+  reason: 'size' | 'count' | 'removed'
+}
+export interface FrozenSheetView {
+  sheet: FrozenSheet
+  label: string                // 「ラワン 4mm」（材料があれば今の名前、無ければ写し）
+  boardExists: boolean
+  progress: SheetProgress      // 11.6
+  drift: FrozenDrift[]         // 空なら変わっていない
+  complete: boolean
+}
+export function frozenSheetViews(job: Job, dims: DimensionResult): FrozenSheetView[] // frozenSheets の並び
+```
+
+「部材が変わっています」（仕様書 9）の判定。片ごとに見て、部材ごとに1つにまとめる：
+- `removed`：部材が無い、または部材がもうその材料から切らない（材料を変えた・フラッシュの表面材から外れた）
+- `size`：今の木取り寸法の表示（面の2軸の順、`${round1(s0)}×${round1(s1)}`）が写しの `sizeLabel` と違う。寸法にエラーがあって今の寸法が出ないときも `size`
+- `count`：その部材（表面材）について、**すべての固定した1枚（切り終わりを含む）の片の数 ＞ 今の枚数**（フラッシュは 表面材の枚数×部材の枚数）。枚数が増えたときは、増えた分が固定していない1枚に並ぶだけなので知らせない
+- 木目・切り代だけの変更（寸法が同じ）は知らせない。固定は外さない
+- 以前の「木取り済み」（`checks.cut`・`cutByBoard`）の部材も、枚数は部材の枚数のまま比べる
+
+```ts
+export interface MaterialSummary {
+  boardId: string
+  sheetCount: number     // 画面に出す材料の枚数 ＝ 固定した1枚（切り終わりを除く）＋ 計算した1枚
+  yieldRate: number      // 同じ1枚たちの歩留まり
+  completedCount: number // 切り終わった1枚の数
+}
+export function materialSummaries(job: Job, result: PackingResult, views: FrozenSheetView[]): { materials: MaterialSummary[]; totalYieldRate: number }
+```
+- 木取り画面の「必要な材料」「歩留まり」「全体の歩留まり」はこれを出す（暫定。未決事項 31）。並びは材料の保存の並び（`packJob` と同じ）で、固定した1枚しか無い材料も入れる
+
+### 11.6 進み具合と残りの材料（`progress/sheetProgress.ts`）
+
+```ts
+export interface RemainingPiece {
+  rect: Rect             // 1枚の置き方の座標
+  pieceIds: string[]     // この中にある、まだチェックしていない片。空なら切り離した余り（端材）
+}
+export interface SheetProgress {
+  doneSteps: number[]    // 済んだ工程（CutStep.no の小さい順）
+  nextStep: number | null // 次に切る工程（済んでいない一番小さい no）。全部済めば null
+  remaining: RemainingPiece[] // 残りの材料。部材の入っているもの → 端材 の順、それぞれ面積の大きい順
+}
+export function sheetProgress(layout: SheetLayout, kerf: number, checked: readonly string[]): SheetProgress
+```
+
+**済んだ工程**：切る順番の各工程 `CutStep.within`（その工程で2つに分ける長方形）を使う。
+- チェックした片を取り出すのに要る工程 ＝ `within` がその片の長方形を含む工程（ギロチンカットの木の「先祖」。端切り・前の帯の切り離し・その帯の切り分け・幅の切り揃え）。比べは小数第1位（0.1mm の誤差を許す）
+- 済んだ工程 ＝ チェックした片それぞれに要る工程を合わせたもの。チェックの順番や、切る順番どおりかは問わない（例：2本目の帯の部材を先にチェックすると、1本目の帯を切り離す工程も済みになる）
+- 計算した1枚（チェックなし）は `doneSteps: []`・`nextStep: 1`（工程が無ければ null）
+
+**残りの材料**：板全体（端切り前）の長方形から始め、済んだ工程を no の順に当てて分けていく。
+- 工程の `within` を含む今の長方形を探し、2つに分ける
+  - 縦に切る（線 x = at）：右 `[at, 右端]`、左 `[左端, at − 刃厚]`（刃厚は測った側の反対側＝左で消える。3.3）
+  - 横に切る（線 y = at）：上 `[at, 上端]`、下 `[下端, at − 刃厚]`
+  - 端切り（kind `trim`）：落とす側（縦は右、横は上）は捨て、残す側は刃厚を引かない（端切りの幅は刃厚を含む）
+  - 大きさが 0 以下になる側は捨てる
+- 分け終わった長方形のうち、チェックした片とぴったり同じ（0.1mm の誤差まで）ものは除く（切り出した部材）
+- 残りを「まだチェックしていない片が入っている長方形」と「片の入っていない長方形（端材）」に分ける。端材は幅・長さとも `MIN_SCRAP`（30mm）以上だけ出す
+- 例（第1.7版の見本、メラミン 1 の1枚目＝3×6 縦切り優先・端切り5・刃厚3・側板 410×1810 ×2）
+  - 右の側板（x 495〜905）にチェック → 済んだ工程 1・2・3、次は 4。残りの材料は x 0〜492 の 492×1820（もう1枚の側板が入っている）。帯の下の 410×7 は 30mm 未満なので出さない
+  - 両方にチェック → 済んだ工程 1〜5、次は無し。残りは端材 79×1820 だけ
+
+### 11.7 1枚ごとのチェックリスト（`progress/sheetChecklist.ts`）
+
+```ts
+export interface SheetChecklistRow {
+  pieceId: string
+  partId: string
+  name: string       // 今の部材名（部材が無ければ写しの名前）
+  sizeLabel: string  // その1枚の写し（固定した1枚）または計算の結果の木取り寸法
+  done: boolean
+}
+export function sheetChecklist(job: Job, layout: SheetLayout, checked: readonly string[]): SheetChecklistRow[]
+```
+- 行は `layout.placements` の並び（右の帯から、帯の中は上から＝切る順番に近い並び）。1片1行（仕様書 9 の例：天地板 874×410 □、天地板 874×410 □ …）
+- ふつうの部材もフラッシュの表面材も同じ形（その1枚の材料が表面材）
+- 材料ごとのチェックリスト（`cuttingChecklist`）は画面で使わなくなる。以前の「木取り済み」の一覧（11.9）のためだけに残してよい
+
+### 11.8 保存・コピー（`src/store`）
+
+- 読み込み（`sanitizeJob`）：`frozenSheets` が無ければ `[]`（直した数に数えない）。次のものは読めない1枚として外す（直した数に数える）：id が無い・重複、`boardId` が文字でない、`layout` の数（幅・長さ・長方形）が数でない、`placements` が空、`mode` が縦／横でない
+  - `checked`：文字の配列にし、写しに無い pieceId・重複を外す。空になった1枚は外す（固定が外れた状態と同じ）
+  - `completedAt`：`checked` がすべての片なら残す（無ければ `frozenAt` を入れる）、そうでなければ消す
+  - 材料が削除されていても外さない（写しで表示する）
+- **材料を削除しても、固定した1枚は消さない**（写しで表示し、「部材が変わっています」を出す。チェックを外せば消える）
+- **仕事のコピー（`copyJob`）では固定した1枚を写さない**（似た家具を作るときは、まだ何も切っていないため）（暫定。未決事項 32）
+- 部材の削除・名前の変更・設定の変更・サイズの選択では、固定した1枚を変えない
+
+### 11.9 以前の「木取り済み」（`checks.cut`・`cutByBoard`）の扱い — 移し替えない
+
+- 以前の版の、部材ごとの木取りの完了は **どの1枚のどの片かが分からない** ので、固定した1枚には移し替えない。データはそのまま残す（消さない・書き換えない）
+- 意味は今までどおり「木取り済み（計算から除いています）」：`expandPieces` は、その部材（表面材）を計算から除き `done` に入れる（8.5・10.3 のまま）
+- 画面では新しく付ける方法をなくし、木取り画面の「木取り済み（計算から除いています）」の一覧に **「外す」** ボタンを置く。押すと `clearLegacyCut(job, partId, boardId)`（ふつうの部材は `checks.cut = false`、フラッシュは `cutByBoard[boardId]` を消す）で計算に戻る
+- 固定した片の数（11.3）は、木取り済みの部材には関係しない（部材ごと除くので）
+- 寸法表・部材の画面は今のまま（寸法表に木取りの完了は無い。第1.6版から）
+
+### 11.10 木取り画面の並び（`KidoriScreen`）
+
+- 材料ごとの段（材料の表示の並び `orderedBoards`。材料が削除された固定した1枚は最後に、写しの材料名で）
+  1. 見出し：材料・枚数（`materialSummaries`）・切り方。切り終わった1枚があれば「切り終わり ◯枚」
+  2. **固定した1枚**（切り終わりを除く、固定した順）→ **計算した1枚**（`MaterialResult.sheets`）の順に、通しで「1枚目 / ◯枚」
+  3. 1枚ごとに：配置図（チェックした片はグレー、残りの材料の枠と大きさ）→ チェックリスト（`sheetChecklist`）→ 切る順番（`CutSteps`：済んだ工程はグレー、次の工程を目立たせる。第1.6版で外した表示を戻す）→ 端材
+  4. 固定した1枚に `drift` があれば、その1枚の上に「部材が変わっています：棚板（寸法）・背板（枚数）」
+- 計算した1枚の最初の片にチェックすると、その1枚は固定されて「固定した1枚」の最後に移る（見た目の位置が変わることがある）。今のスクロールの戻し（押した行が同じ位置に残る）を使う
+- すべての片にチェックすると、その1枚は画面から消える（仕様書 9）。「切り終わり ◯枚」を押すと切り終わった1枚をグレーで開き、チェックを外せる（暫定。未決事項 29）
