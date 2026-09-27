@@ -4,6 +4,7 @@ import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import { compareStandardSizes } from '../engine/packing/sizes'
 import { freezeSheet, frozenDemand } from '../engine/progress/frozen'
+import { sheetProgress } from '../engine/progress/sheetProgress'
 import type { Job, MaterialResult } from '../engine/types'
 import { sampleFromTemplate } from './sample'
 import { defaultTemplate } from './template'
@@ -99,5 +100,34 @@ describe('E-43 見本：固定した片を木取りの計算から除く', () =>
     const r = packJob(job, computeDimensions(job))
     expect(r.done).toEqual([{ partId: tana, name: '棚板', quantity: 8, boardId: mel }])
     expect(r.materials.find((x) => x.boardId === mel)!.sheetCount).toBe(2)
+  })
+})
+
+describe('E-44 見本：メラミン 1 の1枚目の進み具合', () => {
+  it('右の側板 → 済んだ工程 [1,2,3]・次は 4・残り 492×1820。両方 → [1〜5]・次は無し・端材 79×1820', () => {
+    const job = sample()
+    const m = materialOf(job, boardId(job, 'メラミン', 1))!
+    const s = m.sheets[0]
+    const right = s.placements.find((p) => p.x > 400)!.pieceId
+    const left = s.placements.find((p) => p.x < 400)!.pieceId
+    expect(s.cuts[3].label).toBe('右端から 410mm で縦に切る')
+    const one = sheetProgress(s, job.settings.kerf, [right])
+    expect(one).toEqual({
+      doneSteps: [1, 2, 3],
+      nextStep: 4,
+      remaining: [{ rect: { x: 0, y: 0, w: 492, h: 1820 }, pieceIds: [left] }],
+    })
+    const both = sheetProgress(s, job.settings.kerf, [right, left])
+    expect(both).toEqual({ doneSteps: [1, 2, 3, 4, 5], nextStep: null, remaining: [{ rect: { x: 0, y: 0, w: 79, h: 1820 }, pieceIds: [] }] })
+    expect(sheetProgress(s, job.settings.kerf, [])).toMatchObject({ doneSteps: [], nextStep: 1 })
+  })
+
+  it('横切り優先の1枚目（側板 1810×410 ×2）で上の側板 → 済んだ工程 [1,2,3,4]・次は 5', () => {
+    const job0 = sample()
+    const job = { ...job0, settings: { ...job0.settings, cutMode: 'horizontal' as const } }
+    const s = materialOf(job, boardId(job, 'メラミン', 1))!.sheets[0]
+    expect(s.placements.map((p) => p.sizeLabel)).toEqual(['1810×410', '1810×410'])
+    const top = s.placements.find((p) => p.y > 400)!.pieceId
+    expect(sheetProgress(s, 3, [top])).toMatchObject({ doneSteps: [1, 2, 3, 4], nextStep: 5 })
   })
 })
