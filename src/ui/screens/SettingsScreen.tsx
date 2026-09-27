@@ -50,9 +50,8 @@ export function SettingsScreen() {
 
         <div className="field">
           <Help className="label" title="切り代（フラッシュのみ）">
-            フラッシュの部材だけに足します。仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
+            フラッシュの部材だけに足します（ほかの部材は 0）。仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
           </Help>
-          <p className="hint">フラッシュの部材だけに足します（ほかの部材は 0）</p>
           <div className="seg" role="group" aria-label="切り代のよく使う値">
             {ALLOWANCE_PRESETS.map((v) => (
               <button key={v} type="button" aria-pressed={s.allowance === v} onClick={() => set({ allowance: v })}>
