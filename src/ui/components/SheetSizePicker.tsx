@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { Board, BoardGrain, MaterialResult } from '../../engine/types'
-import { setBoardSize } from '../../store/jobs'
+import { setBoardSize, setBoardsSize } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { closeKeyboard } from '../keyboard'
 import { fmt, pct } from '../format'
@@ -14,15 +14,23 @@ import { Segmented } from './Segmented'
 const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4×8' }
 
 interface Props {
+  /** 材料（重ね切りの組なら1つ目の材料。今のサイズの表示に使う） */
   board: Board
+  /** 重ね切りの組の2つの材料（第2.0版）。選ぶと setBoardsSize で2つとも同じサイズにする */
+  boardIds?: readonly [string, string] | null
+  /** 選択の読み上げ名（組の表示名など） */
+  label?: string
   /** compareStandardSizes の結果（3×6、4×8 の順の options と、枚数が少ない方・歩留まりが高い方） */
   compare: MaterialSizeComparison | null
   /** 今選んでいるサイズでの結果（自由入力の枚数・歩留まりに使う） */
   current: MaterialResult
 }
 
-export function SheetSizePicker({ board, compare, current }: Props) {
+export function SheetSizePicker({ board, boardIds = null, label, compare, current }: Props) {
   const { run } = useCurrentJob()
+  // 材料の行で選んでも、重ね切りの相手の材料は store 側で同じサイズにそろう（未決事項 36）
+  const apply = (size: Parameters<typeof setBoardSize>[2]) =>
+    run((j) => (boardIds ? setBoardsSize(j, boardIds, size) : setBoardSize(j, board.id, size)))
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isCustom = board.sizeKind === 'custom'
@@ -33,8 +41,8 @@ export function SheetSizePicker({ board, compare, current }: Props) {
   const choose = (o: SizeSummary) => {
     setEditing(false)
     setError(null)
-    if (board.sizeKind === o.kind) return
-    run((j) => setBoardSize(j, board.id, { sizeKind: o.kind, width: o.width, length: o.length, grain: 'long' }))
+    if (board.sizeKind === o.kind && !boardIds) return
+    apply({ sizeKind: o.kind, width: o.width, length: o.length, grain: 'long' })
   }
 
   return (
@@ -45,7 +53,7 @@ export function SheetSizePicker({ board, compare, current }: Props) {
           今：{board.sizeKind === 'custom' ? '自由入力' : SIZE_NAME[board.sizeKind]} {fmt(board.width)}×{fmt(board.length)}
         </span>
       </div>
-      <div className="sz-opts" role="group" aria-label={`材料のサイズ：${board.material}`}>
+      <div className="sz-opts" role="group" aria-label={`材料のサイズ：${label ?? board.material}`}>
         {options?.map((o) => (
           <button
             key={o.kind}
@@ -92,7 +100,7 @@ export function SheetSizePicker({ board, compare, current }: Props) {
         <CustomForm
           board={board}
           onDone={(size) => {
-            const r = run((j) => setBoardSize(j, board.id, { sizeKind: 'custom', ...size }))
+            const r = apply({ sizeKind: 'custom', ...size })
             if (!r.ok) return setError(r.message)
             closeKeyboard()
             setError(null)

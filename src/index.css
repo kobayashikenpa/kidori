@@ -1808,3 +1808,8 @@ button.dim-name {
   border-color: var(--muted);
   opacity: 0.5;
 }
+
+/* 木取り：重ね切りの組の行（第2.0版） */
+.kd-mat-stack {
+  border-left: 4px solid var(--accent);
+}

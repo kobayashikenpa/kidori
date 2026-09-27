@@ -1,10 +1,13 @@
 // 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
 // 入らない部材・計算できない部材の一覧、材料ごとに 固定した1枚 → 計算した1枚 の順で1枚ごとの配置図とチェックリスト（第1.8版）。
-// 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetChecklist）
+// 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetChecklist）。
+// 重ね切り（第2.0版。architecture.md 12.8）：組の段は1つ目の材料の段の直後。組の1枚のチェックは stackWith を付けて両方の材料に数える
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
+import { boardTokenLabel } from '../../engine/defaults'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
+import { stackKey, stackLabel } from '../../engine/packing/stack'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
 import { frozenSheetViews, materialSummaries, type FrozenSheetView, type MaterialSummary } from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
@@ -43,9 +46,12 @@ interface SheetEntry {
   view: FrozenSheetView | null
 }
 
-/** 材料ごとの段 */
+/** 材料ごとの段（重ね切りの組の段もここに入る） */
 interface Section {
+  /** 材料の id、組なら stackKey */
   boardId: string
+  /** 重ね切りの組の2つの材料（組の段だけ） */
+  stack: [string, string] | null
   label: string
   summary: MaterialSummary
   mode: 'vertical' | 'horizontal' | null
@@ -119,22 +125,35 @@ export function KidoriScreen() {
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
 
-  // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で
-  const order = [
+  // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
+  // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
+  const groupRows = summaries.materials.filter((m) => m.stack)
+  const plainOrder = [
     ...orderedBoards(job).map((b) => b.id),
-    ...summaries.materials.map((m) => m.boardId).filter((id) => !job.boards.some((b) => b.id === id)),
+    ...summaries.materials.filter((m) => !m.stack && !job.boards.some((b) => b.id === m.boardId)).map((m) => m.boardId),
+  ]
+  const order = [
+    ...plainOrder.flatMap((id) => [id, ...groupRows.filter((g) => g.stack?.boardIds[0] === id).map((g) => g.boardId)]),
+    ...groupRows.filter((g) => !plainOrder.includes(g.stack?.boardIds[0] ?? '')).map((g) => g.boardId),
   ]
   const sections: Section[] = order.flatMap((boardId) => {
     const summary = summaries.materials.find((m) => m.boardId === boardId)
     if (!summary) return []
-    const board = boardOf(boardId)
+    const pair = summary.stack?.boardIds ?? null
+    const board = boardOf(pair ? pair[0] : boardId)
     const m = resultOf(boardId)
-    const mine = views.filter((v) => v.sheet.boardId === boardId)
+    const mine = views.filter((v) =>
+      pair
+        ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === boardId
+        : v.sheet.boardId === boardId && !v.sheet.stackWith,
+    )
     const frozen = mine.filter((v) => !v.complete).map(frozenEntry)
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
-      key: `c${sh.index}`,
+      key: `c${boardId}:${sh.index}`,
       layout: sh,
-      target: { kind: 'computed', boardId, mode: m?.mode ?? 'vertical', layout: sh },
+      target: pair
+        ? { kind: 'computed', boardId: pair[0], stackWith: pair[1], mode: m?.mode ?? 'vertical', layout: sh }
+        : { kind: 'computed', boardId, mode: m?.mode ?? 'vertical', layout: sh },
       checked: [],
       grain: board?.grain ?? 'long',
       trim: s.trim,
@@ -144,7 +163,15 @@ export function KidoriScreen() {
     return [
       {
         boardId,
-        label: board ? boardLabel(board) : (mine[0]?.label ?? ''),
+        stack: pair,
+        // 組の名前は材料が2つともあれば今の名前、無ければ固定した1枚の写しの名前
+        label: pair
+          ? board && boardOf(pair[1])
+            ? stackLabel(job, pair)
+            : (mine[0]?.label ?? stackLabel(job, pair))
+          : board
+            ? boardLabel(board)
+            : (mine[0]?.label ?? ''),
         summary,
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
@@ -195,6 +222,15 @@ export function KidoriScreen() {
         <SavingHints job={job} />
       )}
 
+      {result.stackMismatches.map((x) => {
+        const [a, b] = x.boardIds.map((id) => boardOf(id))
+        return (
+          <p key={x.boardIds.join('+')} className="msg warn" role="note">
+            {a ? boardTokenLabel(a) : ''}＋{b ? boardTokenLabel(b) : ''}：サイズがそろっていないので、重ねずに木取りしています
+          </p>
+        )
+      })}
+
       {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
           <div className="kd-total">
@@ -207,10 +243,11 @@ export function KidoriScreen() {
                 key={sec.boardId}
                 label={sec.label}
                 summary={sec.summary}
+                stack={sec.stack}
                 mode={sec.mode}
                 m={resultOf(sec.boardId)}
                 auto={s.cutMode === 'auto'}
-                board={boardOf(sec.boardId)}
+                board={boardOf(sec.stack ? sec.stack[0] : sec.boardId)}
                 comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
               />
             ))}
@@ -273,13 +310,14 @@ export function KidoriScreen() {
         </div>
       )}
 
-      {sections.map((sec) => (
+      {/* ふつうの1枚の無い材料（組の1枚だけの材料）は、1枚ごとの段を出さない */}
+      {sections.filter(showSection).map((sec) => (
         <section key={sec.boardId} aria-label={sec.label}>
           <h3 data-cl-key={`sec:${sec.boardId}`}>
             {sec.label}
             <span className="kd-h3-sub num">
               {sec.sheets.length > 0
-                ? `${sec.summary.sheetCount}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
+                ? `${sec.sheets.length}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
                 : sec.finished.length > 0
                   ? 'すべて切り終わり'
                   : '切り出す板はありません'}
@@ -335,9 +373,14 @@ export function KidoriScreen() {
   )
 }
 
+const showSection = (sec: Section) =>
+  sec.stack !== null || sec.sheets.length > 0 || sec.finished.length > 0 || sec.summary.stackedCount === 0
+
 interface MaterialRowProps {
   label: string
   summary: MaterialSummary
+  /** 重ね切りの組の行なら、組の2つの材料 */
+  stack: [string, string] | null
   mode: 'vertical' | 'horizontal' | null
   /** 計算した結果（固定した1枚しか無い材料は null のことがある） */
   m: MaterialResult | null
@@ -346,15 +389,16 @@ interface MaterialRowProps {
   comparison: MaterialSizeComparison | null
 }
 
-function MaterialRow({ label, summary, mode, m, auto, board, comparison }: MaterialRowProps) {
+function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison }: MaterialRowProps) {
   const n = summary.sheetCount
   return (
-    <li className="kd-mat">
+    <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
       <div className="kd-mat-name">{label}</div>
       <div className="kd-mat-nums">
         <span>
           <span className="kd-k">必要な材料</span>
           <span className="kd-v num">{n}枚</span>
+          {!stack && summary.stackedCount > 0 && <span className="kd-k num">うち重ね切り {summary.stackedCount}枚</span>}
         </span>
         <span>
           <span className="kd-k">歩留まり</span>
@@ -367,7 +411,7 @@ function MaterialRow({ label, summary, mode, m, auto, board, comparison }: Mater
           {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
-      {board && m && <SheetSizePicker board={board} compare={comparison} current={m} />}
+      {board && m && <SheetSizePicker board={board} boardIds={stack} label={label} compare={comparison} current={m} />}
     </li>
   )
 }
