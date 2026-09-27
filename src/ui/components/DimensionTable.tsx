@@ -1,5 +1,6 @@
 // 寸法表の表：1部材1行で 部材・枚数・仕上がり寸法 W・H・D・仕上がりの完了 を並べる（仕様書 9「寸法表の表」）。
 // 仕上がり寸法の数字を押すと、その下の行に内訳（式の各項と値）を開く。もう一度押すと閉じる。
+// 部材のメモは部材名の下に小さく出す。長いときは1行で省略し、部材名のところを押すと全文を出す（もう一度押すと戻す）。
 // 右端の「完了」で仕上がりの完了を付け外しする。完了した行の寸法はグレーにする。
 // 木取り寸法と切り出しの完了は寸法表に出さない（木取り画面で見る）。
 // フラッシュの部材は、厚みの数字を押したときの内訳に フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2） を出す。
@@ -22,6 +23,15 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
   const finished = useMemo(() => computeFinished(job), [job])
   // 開いている内訳（1つだけ）
   const [open, setOpen] = useState<{ partId: string; axis: Axis } | null>(null)
+  // メモを全文で出している部材
+  const [memoOpen, setMemoOpen] = useState<ReadonlySet<string>>(new Set())
+  const toggleMemo = (id: string) =>
+    setMemoOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   return (
     <div className="dim-table-wrap">
@@ -58,6 +68,8 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
             const flush = p.flushId !== undefined && flushName !== undefined ? flushBreakdown(job, p.flushId) : null
             const mismatch = d.errors.some((e) => e.kind === 'thicknessMismatch')
             const ex = AXES.map((a) => explainDimension(job, p.id, a, finished))
+            const memo = p.memo.trim()
+            const memoFull = memoOpen.has(p.id)
             const openAxis = open?.partId === p.id ? open.axis : null
             const openEx = openAxis ? ex[AXES.indexOf(openAxis)] : null
             // フラッシュの部材の厚みを開いたとき：フラッシュの中身を出す。式がフラッシュの厚み1つだけなら式の内訳は省く
@@ -72,8 +84,24 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
               <Fragment key={p.id}>
                 <tr className={`${openAxis ? 'row-open' : ''}${finDone ? ' row-done' : ''}`.trim() || undefined}>
                   <th scope="row" className="c-name">
-                    {p.name}
-                    {mismatch && <span className="dim-note bad"> 厚みが合わない</span>}
+                    {memo === '' ? (
+                      <span className="dim-name">
+                        {p.name}
+                        {mismatch && <span className="dim-note bad">厚みが合わない</span>}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="dim-name"
+                        aria-expanded={memoFull}
+                        aria-label={`${p.name}（メモ：${memo}）${memoFull ? '' : ' メモを全文で表示'}`}
+                        onClick={() => toggleMemo(p.id)}
+                      >
+                        {p.name}
+                        {mismatch && <span className="dim-note bad">厚みが合わない</span>}
+                        <span className={`dim-memo${memoFull ? ' full' : ''}`}>{memo}</span>
+                      </button>
+                    )}
                   </th>
                   <td className="c-qty num">{cutting ? p.quantity : '0'}</td>
                   {AXES.map((a, k) => {

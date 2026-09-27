@@ -1669,3 +1669,38 @@ h3 > .help {
 .dim-table thead th.c-qty {
   white-space: nowrap;
 }
+.dim-name {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+button.dim-name {
+  cursor: pointer;
+}
+/* 部材のメモ：部材名の下に小さく。ふだんは1行で省略し、押すと全文 */
+.dim-memo {
+  display: block;
+  /* 表の列の幅をメモで広げない（列の幅に合わせて省略する） */
+  width: 0;
+  min-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dim-memo.full {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
