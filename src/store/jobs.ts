@@ -1,6 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
-import type { CutChecklistRow } from '../engine/checklist'
 import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
@@ -436,18 +435,6 @@ export function flushesUsages(job: Job, flushIds: readonly string[]): { parts: s
   return { parts: partsUsingFlushes(job, flushIds), thickness: partsUsingBoardThicknesses(job, flushIds) }
 }
 
-/** フラッシュの部材の、表面材ごとの木取りの完了を変える。フラッシュの部材でない・表面材でない材料は断る */
-export function setFlushCutCheck(job: Job, partId: string, boardId: string, done: boolean): OpResult {
-  const part = job.parts.find((p) => p.id === partId)
-  if (!part) return fail('部材が見つかりません')
-  const flush = job.flushes.find((f) => f.id === part.flushId)
-  if (!flush || !flush.faces.some((x) => x.boardId === boardId)) return fail('フラッシュの表面材が見つかりません')
-  const cutByBoard = { ...part.checks.cutByBoard }
-  if (done) cutByBoard[boardId] = true
-  else delete cutByBoard[boardId]
-  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, cutByBoard } } : p)) })
-}
-
 // ---------- 部材 ----------
 
 /** 新しい部材の下書き */
@@ -555,20 +542,6 @@ export function setPartChecks(job: Job, partId: string, patch: Partial<PartCheck
     ...job,
     parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, ...patch } } : p)),
   })
-}
-
-/**
- * 切り出しのチェックリスト（木取り画面。第1.6版）の行の完了を変える。
- * ふつうの部材は checks.cut（setPartChecks）、フラッシュの表面材は checks.cutByBoard（setFlushCutCheck）
- */
-export function setCutChecklistRow(
-  job: Job,
-  row: Pick<CutChecklistRow, 'kind' | 'partId' | 'boardId'>,
-  done: boolean,
-): OpResult {
-  return row.kind === 'flushFace'
-    ? setFlushCutCheck(job, row.partId, row.boardId, done)
-    : setPartChecks(job, row.partId, { cut: done })
 }
 
 // ---------- 切りながら進める木取り（第1.8版。architecture.md 11.4） ----------

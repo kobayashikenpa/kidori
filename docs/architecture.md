@@ -35,7 +35,6 @@ src/
       scraps.ts        端材の取り出し
       yield.ts         歩留まり
       index.ts         packJob(job, dims)：おまかせの比較を含む入口
-    checklist.ts       cuttingChecklist(job, dims)：木取り画面の切り出しのチェックリスト（材料ごと。第1.6版）
   store/             仕事データの状態管理と保存
     jobs.ts            仕事・板・部材の追加／変更／削除（純粋関数）
     storage.ts         localStorage の読み書き（try/catch）
@@ -818,7 +817,7 @@ partsUsingFlushes(job, flushIds): string[]               // その材料欄で�
 - 読み込み：`flushes` が無ければ `[]`（直した数に数えない）。読めないフラッシュ・無い材料の表面材は外す。無いフラッシュを指す部材は `flushId` を外す（直した数に数える）。`cutByBoard` は真偽値のものだけ残す
 - ひな形：`SettingsTemplate.flushes?: FlushSpec[]`。表面材は材料の id ではなく「材料名＋厚み」で持ち、新しい仕事を作るときに同じ材料名＋厚みの材料の id に直す。見本も同じ（ひな形から作るため）
 - 仕事のコピー：フラッシュの id・表面材の材料の id・部材の `flushId`・`cutByBoard` のキー・式の `{t:…}` をつけ替える
-- 操作：`addFlush(job, draft, id?)`・`updateFlush(job, id, draft)`・`removeFlushes(job, ids)`（使っていた部材は材料が未設定になる）・`flushesUsages(job, ids)`・`setFlushCutCheck(job, partId, boardId, done)`。`removeBoards` は削除した材料をフラッシュの表面材から外し、`boardsUsages` は `flushes`（使っているフラッシュの名前）も返す
+- 操作：`addFlush(job, draft, id?)`・`updateFlush(job, id, draft)`・`removeFlushes(job, ids)`（使っていた部材は材料が未設定になる）・`flushesUsages(job, ids)`（表面材ごとの完了を付ける `setFlushCutCheck` は第1.8版で削除。外すのは `clearLegacyCut`）。`removeBoards` は削除した材料をフラッシュの表面材から外し、`boardsUsages` は `flushes`（使っているフラッシュの名前）も返す
 
 ## 11. 第1.8版の変更（切りながら進める木取り）— 決定（planner）
 
@@ -1000,7 +999,7 @@ export function sheetChecklist(job: Job, layout: SheetLayout, checked: readonly 
 ```
 - 行は `layout.placements` の並び（右の帯から、帯の中は上から＝切る順番に近い並び）。1片1行（仕様書 9 の例：天地板 874×410 □、天地板 874×410 □ …）
 - ふつうの部材もフラッシュの表面材も同じ形（その1枚の材料が表面材）
-- 材料ごとのチェックリスト（`cuttingChecklist`）は画面で使わなくなる。以前の「木取り済み」の一覧（11.9）のためだけに残してよい
+- 材料ごとのチェックリスト（`cuttingChecklist`）と、その完了を付け外す `setCutChecklistRow`・`setFlushCutCheck` は使わなくなったので削除した。以前の「木取り済み」を外すのは `clearLegacyCut`（11.9）だけ
 
 ### 11.8 保存・コピー（`src/store`）
 
