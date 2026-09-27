@@ -1157,6 +1157,53 @@ select.input {
   background-image: repeating-linear-gradient(0deg, var(--dg-grain) 0 1px, transparent 1px 4px);
 }
 
+/* ---------- 部材が変わっています・切り終わり（第1.8版） ---------- */
+.kd-drift {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.kd-drift .band-note {
+  display: block;
+  font-weight: 400;
+}
+.kd-finished-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.kd-finished-hint {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.kd-finished {
+  margin-bottom: 12px;
+}
+.kd-sheet.finished {
+  background: var(--bg);
+  color: var(--muted);
+}
+.kd-sheet.finished .diagram {
+  opacity: 0.6;
+}
+
 /* ---------- 切る順番・端材 ---------- */
 .steps-fold {
   margin: 8px 0 6px;

@@ -1,7 +1,7 @@
 // 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
 // 入らない部材・計算できない部材の一覧、材料ごとに 固定した1枚 → 計算した1枚 の順で1枚ごとの配置図とチェックリスト（第1.8版）。
 // 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetChecklist）
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
@@ -52,7 +52,26 @@ interface Section {
   summary: MaterialSummary
   mode: 'vertical' | 'horizontal' | null
   sheets: SheetEntry[]
+  /** 切り終わった1枚（通常の一覧には出さない） */
+  finished: SheetEntry[]
 }
+
+const DRIFT_REASON: Record<FrozenSheetView['drift'][number]['reason'], string> = {
+  size: '寸法',
+  count: '枚数',
+  removed: '部材の削除・材料の変更',
+}
+
+const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
+  key: v.sheet.id,
+  layout: v.sheet.layout,
+  target: { kind: 'frozen', sheetId: v.sheet.id },
+  checked: v.sheet.checked,
+  grain: v.sheet.grain,
+  trim: v.sheet.trim,
+  progress: v.progress,
+  view: v,
+})
 
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
@@ -91,6 +110,8 @@ export function KidoriScreen() {
     const r = run((j) => setPieceCheck(j, entry.target, row.pieceId, !row.done, new Date(), id))
     if (!r.ok) anchor.current = null
   }
+  // 「切り終わり ◯枚」を開いている材料
+  const [openFinished, setOpenFinished] = useState<Record<string, boolean>>({})
   const s = job.settings
   // 部材ごとに切り代を入れた部材（設定の切り代を変えても変わらないことを見せる）
   const own = job.parts.filter((p) => p.quantity > 0 && p.allowance !== null)
@@ -111,18 +132,7 @@ export function KidoriScreen() {
     const board = boardOf(boardId)
     const m = resultOf(boardId)
     const mine = views.filter((v) => v.sheet.boardId === boardId)
-    const frozen: SheetEntry[] = mine
-      .filter((v) => !v.complete)
-      .map((v) => ({
-        key: v.sheet.id,
-        layout: v.sheet.layout,
-        target: { kind: 'frozen', sheetId: v.sheet.id },
-        checked: v.sheet.checked,
-        grain: v.sheet.grain,
-        trim: v.sheet.trim,
-        progress: v.progress,
-        view: v,
-      }))
+    const frozen = mine.filter((v) => !v.complete).map(frozenEntry)
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
       key: `c${sh.index}`,
       layout: sh,
@@ -140,6 +150,7 @@ export function KidoriScreen() {
         summary,
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
+        finished: mine.filter((v) => v.complete).map(frozenEntry),
       },
     ]
   })
@@ -240,9 +251,39 @@ export function KidoriScreen() {
             <span className="kd-h3-sub num">
               {sec.sheets.length > 0
                 ? `${sec.summary.sheetCount}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
-                : '切り出す板はありません'}
+                : sec.finished.length > 0
+                  ? 'すべて切り終わり'
+                  : '切り出す板はありません'}
             </span>
           </h3>
+          {sec.finished.length > 0 && (
+            <button
+              type="button"
+              className="kd-finished-btn"
+              aria-expanded={openFinished[sec.boardId] === true}
+              onClick={() => setOpenFinished((o) => ({ ...o, [sec.boardId]: !o[sec.boardId] }))}
+            >
+              <span className="num">切り終わり {sec.finished.length}枚</span>
+              <span className="kd-finished-hint">{openFinished[sec.boardId] ? '閉じる' : '開いて見る・チェックを外す'}</span>
+            </button>
+          )}
+          {openFinished[sec.boardId] && sec.finished.length > 0 && (
+            <div className="stack kd-finished">
+              {sec.finished.map((e, i) => (
+                <SheetCard
+                  key={e.key}
+                  entry={e}
+                  no={i + 1}
+                  count={sec.finished.length}
+                  finished
+                  label={sec.label}
+                  rows={sheetChecklist(job, e.layout, e.checked)}
+                  colorOf={colorOf}
+                  onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
+                />
+              ))}
+            </div>
+          )}
           {sec.sheets.length > 0 && (
             <div className="stack">
               {sec.sheets.map((e, i) => (
@@ -307,14 +348,17 @@ interface SheetCardProps {
   /** 材料の中の通しの番号（固定した1枚 → 計算した1枚） */
   no: number
   count: number
+  /** 切り終わった1枚（グレーで開く） */
+  finished?: boolean
   label: string
   rows: SheetChecklistRow[]
   colorOf: (partId: string) => number
   onToggle: (row: SheetChecklistRow, key: string, el: HTMLElement) => void
 }
 
-function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCardProps) {
+function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, onToggle }: SheetCardProps) {
   const { layout: sheet, grain, trim } = entry
+  const drift = entry.view?.drift ?? []
   const landscape = sheet.orientation === 'landscape'
   // 図の上で木目の線が横に通るか（横長で長手方向、または縦長で妻手方向）
   const grainAcross = (grain === 'long') === landscape
@@ -324,9 +368,16 @@ function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCa
   const rowKey = (r: SheetChecklistRow) =>
     entry.target.kind === 'frozen' ? `${entry.target.sheetId}:${r.pieceId}` : `${entry.key}:${r.pieceId}`
   return (
-    <article className="card kd-sheet">
+    <article className={finished ? 'card kd-sheet finished' : 'card kd-sheet'}>
+      {drift.length > 0 && (
+        <p className="kd-drift" role="note">
+          部材が変わっています：{drift.map((d) => `${d.name}（${DRIFT_REASON[d.reason]}）`).join('・')}
+          <span className="band-note">この1枚は固定したままです。作り直すときは、チェックをすべて外してください。</span>
+        </p>
+      )}
       <header className="kd-sheet-head">
         <span className="kd-sheet-no">
+          {finished ? '切り終わり ' : ''}
           {no}枚目<span className="kd-of"> / {count}枚</span>
         </span>
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
