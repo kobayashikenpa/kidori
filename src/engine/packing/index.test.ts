@@ -107,27 +107,27 @@ describe('packJob（木取り計算の入口）', () => {
     expect(pct(r.totalYieldRate)).toBe(78.2)
   })
 
-  it('見本・横切り優先の1枚目：横長（landscape）、使える範囲 1815×905、端切りは上の長手と右の妻手、側板は右上から', () => {
+  it('見本・横切り優先の1枚目：横長（landscape）、使える範囲 1815×905、端切りは下の長手と右の妻手、側板は右上から', () => {
     const s1 = run(withMode('horizontal')).materials[0].sheets[0]
     expect(s1.orientation).toBe('landscape')
     expect([s1.boardWidth, s1.boardLength]).toEqual([910, 1820])
-    expect(s1.usable).toEqual({ x: 0, y: 0, w: 1815, h: 905 })
+    expect(s1.usable).toEqual({ x: 0, y: 5, w: 1815, h: 905 })
     expect(s1.trims).toEqual([
-      { x: 0, y: 905, w: 1820, h: 5 },
-      { x: 1815, y: 0, w: 5, h: 905 },
+      { x: 0, y: 0, w: 1820, h: 5 },
+      { x: 1815, y: 5, w: 5, h: 905 },
     ])
     expect(s1.placements.map((p) => [p.x, p.y, p.w, p.h])).toEqual([
-      [5, 495, 1810, 410],
-      [5, 82, 1810, 410],
+      [5, 500, 1810, 410],
+      [5, 87, 1810, 410],
     ])
     expect(s1.cuts.map((c) => c.label)).toEqual([
-      '端切り：上の長手を 5mm 落とす（横に切る）',
+      '端切り：下の長手を 5mm 落とす（横に切る）',
       '端切り：右の妻手を 5mm 落とす（縦に切る）',
       '右端から 1810mm で縦に切る',
       '上端から 410mm で横に切る',
       '上端から 410mm で横に切る',
     ])
-    expect(s1.scraps).toEqual([{ x: 5, y: 0, w: 1810, h: 79 }])
+    expect(s1.scraps).toEqual([{ x: 5, y: 5, w: 1810, h: 79 }])
   })
 
   it('横切り優先：長手 1816 以上の部材は、右の妻手を端切りするので入らない（1815 は入る）', () => {
@@ -178,7 +178,7 @@ describe('packJob（木取り計算の入口）', () => {
     const v = run(lumberOnly('vertical', parts)).materials[0]
     const h = run(lumberOnly('horizontal', parts)).materials[0]
     expect(v.sheets[0].scraps[0]).toMatchObject({ w: 402, h: 1820 })
-    expect(h.sheets[0].scraps[0]).toMatchObject({ x: 0, y: 0, w: 812, h: 905 })
+    expect(h.sheets[0].scraps[0]).toMatchObject({ x: 0, y: 5, w: 812, h: 905 })
     expect(run(lumberOnly('auto', parts)).materials[0].mode).toBe('horizontal')
   })
 

@@ -32,8 +32,12 @@ describe('横切り優先（横長に置く）の使える範囲と端切り', (
     expect(sheetOrientation('horizontal')).toBe('landscape')
   })
 
-  it('横長のサブロク・端切り5 → x 0〜1815（長手方向）・y 0〜905（妻手方向）。上の長手と右の妻手を落とす', () => {
-    expect(usableRect(saburoku, 5, 'horizontal')).toEqual({ x: 0, y: 0, w: 1815, h: 905 })
+  it('横長のサブロク・端切り5 → x 0〜1815（長手方向）・y 5〜910（妻手方向）。下の長手と右の妻手を落とす', () => {
+    expect(usableRect(saburoku, 5, 'horizontal')).toEqual({ x: 0, y: 5, w: 1815, h: 905 })
+  })
+
+  it('横長・端切り0 → 板全体（x 0〜1820・y 0〜910）', () => {
+    expect(usableRect(saburoku, 0, 'horizontal')).toEqual({ x: 0, y: 0, w: 1820, h: 910 })
   })
 
   it('縦切り優先を明示しても今までと同じ', () => {
@@ -44,10 +48,10 @@ describe('横切り優先（横長に置く）の使える範囲と端切り', (
     expect(trimRects(saburoku, 5, 'vertical')).toEqual([{ x: 905, y: 0, w: 5, h: 1820 }])
   })
 
-  it('端切りで落とす部分：横切り優先は 上の長手（全長）→ 右の妻手（上を落とした残りの高さ）の順', () => {
+  it('端切りで落とす部分：横切り優先は 下の長手（全長）→ 右の妻手（下を落とした残りの高さ）の順', () => {
     expect(trimRects(saburoku, 5, 'horizontal')).toEqual([
-      { x: 0, y: 905, w: 1820, h: 5 },
-      { x: 1815, y: 0, w: 5, h: 905 },
+      { x: 0, y: 0, w: 1820, h: 5 },
+      { x: 1815, y: 5, w: 5, h: 905 },
     ])
   })
 

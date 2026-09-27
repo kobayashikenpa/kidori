@@ -42,7 +42,7 @@ function expectClean(scraps: Rect[], placements: Rect[], usable: Rect, kerf: num
 
 const USABLE: Rect = { x: 0, y: 0, w: 905, h: 1820 }
 /** 横長に置いたとき（横切り優先）の使える範囲 */
-const LANDSCAPE_USABLE: Rect = { x: 0, y: 0, w: 1815, h: 905 }
+const LANDSCAPE_USABLE: Rect = { x: 0, y: 5, w: 1815, h: 905 }
 const usableOf = (mode: StripMode) => (mode === 'vertical' ? USABLE : LANDSCAPE_USABLE)
 
 function piece(id: string, x: number, y: number): Piece {
@@ -75,23 +75,23 @@ describe('scrapsOf（端材）', () => {
   it('見本・横切り優先（横長）の2枚目：各帯の下の残りと、左の残り（妻手の高さいっぱい）。大きい順', () => {
     const [, s2] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
     expect(s2.scraps).toEqual([
-      { x: 65, y: 0, w: 873, h: 119 },
-      { x: 941, y: 0, w: 874, h: 79 },
-      { x: 0, y: 0, w: 62, h: 905 },
+      { x: 65, y: 5, w: 873, h: 119 },
+      { x: 941, y: 5, w: 874, h: 79 },
+      { x: 0, y: 5, w: 62, h: 905 },
     ])
   })
 
   it('見本・横切り優先（横長）の3枚目：左の残り 939×905（左下）と、帯の下の残り 873×119', () => {
     const s3 = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')[2]
     expect(s3.scraps).toEqual([
-      { x: 0, y: 0, w: 939, h: 905 },
-      { x: 942, y: 0, w: 873, h: 119 },
+      { x: 0, y: 5, w: 939, h: 905 },
+      { x: 942, y: 5, w: 873, h: 119 },
     ])
   })
 
   it('見本・横切り優先（横長）の1枚目：帯の下の残り 1810×79 だけ（左の残り 2mm は出さない）', () => {
     const [s1] = sheetsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
-    expect(s1.scraps).toEqual([{ x: 5, y: 0, w: 1810, h: 79 }])
+    expect(s1.scraps).toEqual([{ x: 5, y: 5, w: 1810, h: 79 }])
   })
 
   it('見本のベニヤは端材なし（残りは 2mm と 17mm）', () => {

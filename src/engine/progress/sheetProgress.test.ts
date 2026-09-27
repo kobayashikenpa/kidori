@@ -17,6 +17,22 @@ const rectOf = (r: Rect) => ({ x: r.x, y: r.y, w: r.w, h: r.h })
 const idAt = (s: SheetLayout, pred: (r: Rect) => boolean) => s.placements.find(pred)!.pieceId
 const overlaps = (a: Rect, b: Rect) =>
   a.x < b.x + b.w - 0.05 && b.x < a.x + a.w - 0.05 && a.y < b.y + b.h - 0.05 && b.y < a.y + a.h - 0.05
+/** いろいろな大きさの片（40片）を並べた1枚たち */
+function manyPieces(mode: Mode): SheetLayout[] {
+  return sheets(mode, {}, (job) => {
+    const base = job.parts.find((p) => p.name === '棚板')!
+    job.parts = [
+      ...job.parts.filter((p) => p.name === '全体'),
+      ...Array.from({ length: 8 }, (_, i) => ({
+        ...base,
+        id: `m${i}`,
+        name: `部材${i}`,
+        quantity: 5,
+        expr: { ...base.expr, W: String(150 + ((i * 97) % 500)), D: String(80 + ((i * 53) % 300)) },
+      })),
+    ]
+  })
+}
 const inside = (o: Rect, i: Rect) =>
   i.x >= o.x - 0.05 && i.y >= o.y - 0.05 && i.x + i.w <= o.x + o.w + 0.05 && i.y + i.h <= o.y + o.h + 0.05
 
@@ -109,26 +125,72 @@ describe('sheetProgress 横切り優先の1枚目（横長・側板 1810×410 ×
   const top = idAt(first, (r) => r.y > 400)
   const bottom = idAt(first, (r) => r.y < 400)
 
-  it('前提：端切り 上の長手（1）・右の妻手（2）、帯の切り離し（3）、切り分け（4・5）', () => {
+  it('前提：端切り 下の長手（1）・右の妻手（2）、帯の切り離し（3）、切り分け（4・5）', () => {
     expect(first.cuts.map((c) => [c.no, c.kind, c.direction, c.at])).toEqual([
-      [1, 'trim', 'horizontal', 905],
+      [1, 'trim', 'horizontal', 5],
       [2, 'trim', 'vertical', 1815],
       [3, 'strip', 'vertical', 5],
-      [4, 'crosscut', 'horizontal', 495],
-      [5, 'crosscut', 'horizontal', 82],
+      [4, 'crosscut', 'horizontal', 500],
+      [5, 'crosscut', 'horizontal', 87],
     ])
   })
 
-  it('上の側板：済んだ工程 1〜4、次は 5。残りは下の 1810×492（左の 2mm は捨てる）', () => {
+  it('チェックなし：残りは板全体（端切り前）', () => {
+    expect(sheetProgress(first, 3, []).remaining).toEqual([{ rect: { x: 0, y: 0, w: 1820, h: 910 }, pieceIds: [top, bottom] }])
+  })
+
+  it('上の側板：済んだ工程 1〜4、次は 5。残りは下の 1810×492（下の 5mm は端切りで落とし、左の 2mm は捨てる）', () => {
     const p = sheetProgress(first, 3, [top])
     expect(p.doneSteps).toEqual([1, 2, 3, 4])
     expect(p.nextStep).toBe(5)
-    expect(p.remaining).toEqual([{ rect: { x: 5, y: 0, w: 1810, h: 492 }, pieceIds: [bottom] }])
+    expect(p.remaining).toEqual([{ rect: { x: 5, y: 5, w: 1810, h: 492 }, pieceIds: [bottom] }])
   })
 
-  it('両方：済んだ工程 1〜5、次は無し。残りは 1810×79 の端材', () => {
+  it('両方：済んだ工程 1〜5、次は無し。残りは 1810×79 の端材（y 5〜84）', () => {
     const p = sheetProgress(first, 3, [top, bottom])
     expect(p.doneSteps).toEqual([1, 2, 3, 4, 5])
+    expect(p.nextStep).toBeNull()
+    expect(p.remaining).toEqual([{ rect: { x: 5, y: 5, w: 1810, h: 79 }, pieceIds: [] }])
+  })
+})
+
+describe('sheetProgress 以前に保存した横切り優先の1枚（上の長手を端切りした写し）', () => {
+  // 第1.8版までの写し：使える範囲 y 0〜905、端切りは上の長手 → 右の妻手。写しのまま読み替えない
+  const legacy: SheetLayout = {
+    index: 1,
+    boardWidth: 910,
+    boardLength: 1820,
+    orientation: 'landscape',
+    trims: [
+      { x: 0, y: 905, w: 1820, h: 5 },
+      { x: 1815, y: 0, w: 5, h: 905 },
+    ],
+    usable: { x: 0, y: 0, w: 1815, h: 905 },
+    placements: [
+      { x: 5, y: 495, w: 1810, h: 410, pieceId: 'a#1', partId: 'a', name: '側板', rotated: false, sizeLabel: '1810×410' },
+      { x: 5, y: 82, w: 1810, h: 410, pieceId: 'a#2', partId: 'a', name: '側板', rotated: false, sizeLabel: '1810×410' },
+    ],
+    cuts: [
+      { no: 1, direction: 'horizontal', at: 905, within: { x: 0, y: 0, w: 1820, h: 910 }, kind: 'trim', label: '端切り：上の長手を 5mm 落とす（横に切る）' },
+      { no: 2, direction: 'vertical', at: 1815, within: { x: 0, y: 0, w: 1820, h: 905 }, kind: 'trim', label: '端切り：右の妻手を 5mm 落とす（縦に切る）' },
+      { no: 3, direction: 'vertical', at: 5, within: { x: 0, y: 0, w: 1815, h: 905 }, kind: 'strip', label: '右端から 1810mm で縦に切る' },
+      { no: 4, direction: 'horizontal', at: 495, within: { x: 5, y: 0, w: 1810, h: 905 }, kind: 'crosscut', label: '上端から 410mm で横に切る' },
+      { no: 5, direction: 'horizontal', at: 82, within: { x: 5, y: 0, w: 1810, h: 492 }, kind: 'crosscut', label: '上端から 410mm で横に切る' },
+    ],
+    scraps: [{ x: 5, y: 0, w: 1810, h: 79 }],
+    usedArea: 1810 * 410 * 2,
+    yieldRate: 0.896,
+  }
+
+  it('上の側板：済んだ工程 1〜4、次は 5。残りは下の 1810×492（上の 5mm を落とした写しのまま）', () => {
+    const p = sheetProgress(legacy, 3, ['a#1'])
+    expect(p.doneSteps).toEqual([1, 2, 3, 4])
+    expect(p.nextStep).toBe(5)
+    expect(p.remaining).toEqual([{ rect: { x: 5, y: 0, w: 1810, h: 492 }, pieceIds: ['a#2'] }])
+  })
+
+  it('両方：残りは 1810×79 の端材（y 0〜79）', () => {
+    const p = sheetProgress(legacy, 3, ['a#1', 'a#2'])
     expect(p.nextStep).toBeNull()
     expect(p.remaining).toEqual([{ rect: { x: 5, y: 0, w: 1810, h: 79 }, pieceIds: [] }])
   })
@@ -141,7 +203,17 @@ describe('sheetProgress の性質（どの1枚・どの片でも）', () => {
     ...withKerf(3, sheets('horizontal')),
     ...withKerf(0, sheets('vertical', { kerf: 0, trim: 0 })),
     ...withKerf(4.5, sheets('horizontal', { kerf: 4.5, trim: 7 })),
+    ...withKerf(3, sheets('horizontal', { trim: 0 })),
+    ...withKerf(3, manyPieces('horizontal')),
+    ...withKerf(3, manyPieces('vertical')),
   ]
+
+  it('横切り優先：残りの材料は下の長手の端切り（y 0〜端切り）に掛からない', () => {
+    for (const s of [...sheets('horizontal'), ...manyPieces('horizontal')]) {
+      const p = sheetProgress(s, 3, s.placements.slice(0, 1).map((x) => x.pieceId))
+      for (const r of p.remaining) expect(r.rect.y).toBeGreaterThanOrEqual(5)
+    }
+  })
 
   it('1片だけチェック：残りの材料に、ほかの片がちょうど1回ずつ入り、チェックした片とは重ならない', () => {
     for (const { s, kerf } of all) {
