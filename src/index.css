@@ -1158,6 +1158,80 @@ select.input {
 }
 
 /* ---------- 切る順番・端材 ---------- */
+.steps-fold {
+  margin: 8px 0 6px;
+}
+.cut-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cut-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.cut-no {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cut-item.trim .cut-no {
+  background: var(--dg-trim);
+  color: #fff;
+}
+.cut-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.cut-label {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.cut-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+}
+.cut-item.done {
+  color: var(--muted);
+}
+.cut-item.done .cut-no {
+  background: var(--line);
+  color: var(--muted);
+}
+.cut-item.done .cut-label {
+  text-decoration: line-through;
+}
+.cut-item.next {
+  background: var(--accent-soft);
+  outline: 2px solid var(--accent);
+  font-weight: 700;
+  color: var(--accent);
+}
+.cut-item.next .cut-label {
+  font-size: 16px;
+}
 .steps {
   display: flex;
   flex-direction: column;

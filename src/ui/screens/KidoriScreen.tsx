@@ -7,10 +7,12 @@ import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
 import { frozenSheetViews, materialSummaries, type FrozenSheetView, type MaterialSummary } from '../../engine/progress/frozen'
+import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
 import { boardLabel, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
+import { CutSteps } from '../components/CutSteps'
 import { ScrapList } from '../components/ScrapList'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
@@ -37,6 +39,8 @@ interface SheetEntry {
   checked: readonly string[]
   grain: BoardGrain
   trim: number
+  /** 済んだ工程・次の工程・残りの材料 */
+  progress: SheetProgress
   /** 固定した1枚なら表示用のまとめ */
   view: FrozenSheetView | null
 }
@@ -116,6 +120,7 @@ export function KidoriScreen() {
         checked: v.sheet.checked,
         grain: v.sheet.grain,
         trim: v.sheet.trim,
+        progress: v.progress,
         view: v,
       }))
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
@@ -125,6 +130,7 @@ export function KidoriScreen() {
       checked: [],
       grain: board?.grain ?? 'long',
       trim: s.trim,
+      progress: sheetProgress(sh, s.kerf, []),
       view: null,
     }))
     return [
@@ -365,6 +371,7 @@ function SheetCard({ entry, no, count, label, rows, colorOf, onToggle }: SheetCa
         <span>部材は右上から詰める・部材の寸法は木取り寸法・端材は 横×縦</span>
       </p>
       <SheetChecklist label={`${label} の ${no}枚目`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
+      <CutSteps sheet={sheet} progress={entry.progress} />
       <ScrapList sheet={sheet} />
     </article>
   )
