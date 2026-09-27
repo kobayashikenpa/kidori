@@ -687,7 +687,7 @@
 
 ### 保存と操作（store）
 
-### [~] S-15 1枚ごとのチェックの付け外し（自動の固定と、固定の外れ）
+### [x] S-15 1枚ごとのチェックの付け外し（自動の固定と、固定の外れ）
 - 担当：engine-dev ／ 依存：E-42 ／ 仕様書：9（加工のチェック）
 - やること：`setPieceCheck(job, target, pieceId, done, now?, id?)`（11.4）。計算した1枚へのチェックで写しを作って固定、全部チェックで `completedAt`、1つ外すと `completedAt` を消す、全部外すと固定を消す
 - 完了の条件：見本のメラミン 1 の1枚目（計算した1枚）の側板にチェック → `frozenSheets` が1つ（checked 1）。もう1つ → `completedAt` が付く。1つ外す → `completedAt` が消える。もう1つ外す → `frozenSheets` が空で、`packJob` のメラミン 1 が 5枚に戻る。写しに無い pieceId は失敗

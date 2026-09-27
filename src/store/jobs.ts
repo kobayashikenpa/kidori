@@ -12,6 +12,7 @@ import {
   remapBoardIds,
 } from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
+import { freezeSheet } from '../engine/progress/frozen'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -24,6 +25,7 @@ import {
   type Part,
   type PartChecks,
   type Settings,
+  type SheetLayout,
 } from '../engine/types'
 import { defaultTemplate, type SettingsTemplate } from './template'
 
@@ -567,4 +569,50 @@ export function setCutChecklistRow(
   return row.kind === 'flushFace'
     ? setFlushCutCheck(job, row.partId, row.boardId, done)
     : setPartChecks(job, row.partId, { cut: done })
+}
+
+// ---------- 切りながら進める木取り（第1.8版。architecture.md 11.4） ----------
+
+/** チェックを付け外しする1枚：固定した1枚、または画面に出ている計算した1枚（layout は表示中の MaterialResult.sheets[i]） */
+export type SheetTarget =
+  | { kind: 'frozen'; sheetId: string }
+  | { kind: 'computed'; boardId: string; mode: 'vertical' | 'horizontal'; layout: SheetLayout }
+
+/**
+ * 1枚ごとのチェック（1片ずつ）を付け外しする。
+ * - 計算した1枚にチェック：その1枚を写して固定し（checked は その片だけ）、固定した1枚の最後に足す。外す（done=false）は何もしない
+ * - 固定した1枚：checked に足す／外す。すべての片にチェックが付いたら completedAt（切り終わり）、1つでも外したら消す。
+ *   チェックがすべて外れたら、その1枚を消す（固定を外す。片は計算に戻る）
+ * - 写しに無い pieceId・無い1枚・無い材料は断る
+ */
+export function setPieceCheck(
+  job: Job,
+  target: SheetTarget,
+  pieceId: string,
+  done: boolean,
+  now: Date = new Date(),
+  id: string = newId('sheet'),
+): OpResult {
+  if (target.kind === 'computed') {
+    const { boardId, mode, layout } = target
+    if (!layout.placements.some((p) => p.pieceId === pieceId)) return fail('部材が見つかりません')
+    if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
+    if (!done) return ok(job)
+    const sheet = freezeSheet(job, boardId, mode, layout, id, now)
+    sheet.checked = [pieceId]
+    if (sheet.layout.placements.length === 1) sheet.completedAt = now.toISOString()
+    return ok({ ...job, frozenSheets: [...job.frozenSheets, sheet] })
+  }
+
+  const sheet = job.frozenSheets.find((f) => f.id === target.sheetId)
+  if (!sheet) return fail('固定した1枚が見つかりません')
+  if (!sheet.layout.placements.some((p) => p.pieceId === pieceId)) return fail('部材が見つかりません')
+  const has = sheet.checked.includes(pieceId)
+  if (done === has) return ok(job)
+  const checked = done ? [...sheet.checked, pieceId] : sheet.checked.filter((x) => x !== pieceId)
+  if (checked.length === 0) return ok({ ...job, frozenSheets: job.frozenSheets.filter((f) => f.id !== sheet.id) })
+  const { completedAt: _completedAt, ...rest } = sheet
+  const all = sheet.layout.placements.every((p) => checked.includes(p.pieceId))
+  const next = all ? { ...rest, checked, completedAt: sheet.completedAt ?? now.toISOString() } : { ...rest, checked }
+  return ok({ ...job, frozenSheets: job.frozenSheets.map((f) => (f.id === sheet.id ? next : f)) })
 }

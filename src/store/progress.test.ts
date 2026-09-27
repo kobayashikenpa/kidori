@@ -7,7 +7,7 @@ import { freezeSheet, frozenDemand, frozenSheetViews, materialSummaries } from '
 import { sheetChecklist } from '../engine/progress/sheetChecklist'
 import { sheetProgress } from '../engine/progress/sheetProgress'
 import type { Job, MaterialResult } from '../engine/types'
-import { removePart, updatePart } from './jobs'
+import { removePart, setPieceCheck, updatePart, type OpResult } from './jobs'
 import { sampleFromTemplate } from './sample'
 import { defaultTemplate } from './template'
 
@@ -187,5 +187,84 @@ describe('E-46 見本：1枚ごとのチェックリスト', () => {
     const renamed = updatePart(job, partId(job, '天地板'), { name: '天板' })
     if (!renamed.ok) throw new Error(renamed.message)
     expect(sheetChecklist(renamed.job, f.layout, f.checked).map((r) => r.name)).toEqual(Array(4).fill('天板'))
+  })
+})
+
+describe('S-15 見本：1枚ごとのチェックの付け外し（setPieceCheck）', () => {
+  const ok = (r: OpResult): Job => {
+    if (!r.ok) throw new Error(r.message)
+    return r.job
+  }
+  const LATER = new Date('2026-09-27T10:00:00.000Z')
+
+  it('計算した1枚の側板にチェック → 固定1つ（checked 1）→ もう1つで切り終わり → 1つ外すと戻る → 全部外すと固定が消えて 5枚', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const m = materialOf(job0, mel)!
+    const layout = m.sheets[0]
+    const [a, b] = layout.placements.map((p) => p.pieceId)
+
+    const j1 = ok(setPieceCheck(job0, { kind: 'computed', boardId: mel, mode: m.mode, layout }, a, true, NOW, 'sheet-x'))
+    expect(j1.frozenSheets).toHaveLength(1)
+    expect(j1.frozenSheets[0]).toMatchObject({ id: 'sheet-x', boardId: mel, checked: [a], frozenAt: NOW.toISOString() })
+    expect(j1.frozenSheets[0].completedAt).toBeUndefined()
+    expect(j1.frozenSheets[0].layout).toEqual(layout)
+    expect(j1.frozenSheets[0].layout).not.toBe(layout)
+    expect(materialOf(j1, mel)!.sheetCount).toBe(4)
+    expect(job0.frozenSheets).toEqual([])
+
+    const target = { kind: 'frozen', sheetId: 'sheet-x' } as const
+    const j2 = ok(setPieceCheck(j1, target, b, true, LATER))
+    expect(j2.frozenSheets[0].checked).toEqual([a, b])
+    expect(j2.frozenSheets[0].completedAt).toBe(LATER.toISOString())
+    // 同じチェックをもう一度付けても重ならない・切り終わりの時刻は変えない
+    const again = ok(setPieceCheck(j2, target, b, true, new Date('2026-09-28T00:00:00.000Z')))
+    expect(again.frozenSheets[0]).toEqual(j2.frozenSheets[0])
+
+    const j3 = ok(setPieceCheck(j2, target, a, false, LATER))
+    expect(j3.frozenSheets[0].checked).toEqual([b])
+    expect(j3.frozenSheets[0].completedAt).toBeUndefined()
+    expect('completedAt' in j3.frozenSheets[0]).toBe(false)
+
+    const j4 = ok(setPieceCheck(j3, target, b, false, LATER))
+    expect(j4.frozenSheets).toEqual([])
+    expect(materialOf(j4, mel)!.sheetCount).toBe(5)
+  })
+
+  it('計算した1枚のチェックを外す（done=false）は何もしない。片が1つだけの1枚は、チェック1つで切り終わり', () => {
+    const job0 = sample()
+    const lau = boardId(job0, 'ラワン', 4)
+    const m = materialOf(job0, lau)!
+    const layout = m.sheets[0]
+    const pid = layout.placements[0].pieceId
+    const t = { kind: 'computed', boardId: lau, mode: m.mode, layout } as const
+    expect(ok(setPieceCheck(job0, t, pid, false, NOW))).toBe(job0)
+    const j = ok(setPieceCheck(job0, t, pid, true, NOW, 's'))
+    expect(j.frozenSheets[0].completedAt).toBe(NOW.toISOString())
+  })
+
+  it('写しに無い pieceId・無い1枚・無い材料は失敗', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const m = materialOf(job0, mel)!
+    const layout = m.sheets[0]
+    expect(setPieceCheck(job0, { kind: 'computed', boardId: mel, mode: m.mode, layout }, 'none#1', true).ok).toBe(false)
+    expect(setPieceCheck(job0, { kind: 'computed', boardId: 'board-x', mode: m.mode, layout }, layout.placements[0].pieceId, true).ok).toBe(false)
+    expect(setPieceCheck(job0, { kind: 'frozen', sheetId: 'none' }, layout.placements[0].pieceId, true).ok).toBe(false)
+    const j = ok(setPieceCheck(job0, { kind: 'computed', boardId: mel, mode: m.mode, layout }, layout.placements[0].pieceId, true, NOW, 's'))
+    expect(setPieceCheck(j, { kind: 'frozen', sheetId: 's' }, 'none#1', true).ok).toBe(false)
+    expect(setPieceCheck(j, { kind: 'frozen', sheetId: 's' }, 'none#1', false).ok).toBe(false)
+  })
+
+  it('2枚目を固定すると固定した1枚の最後に足される（固定した順）', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const m = materialOf(job0, mel)!
+    const t = (i: number) => ({ kind: 'computed', boardId: mel, mode: m.mode, layout: m.sheets[i] }) as const
+    let j = ok(setPieceCheck(job0, t(1), m.sheets[1].placements[0].pieceId, true, NOW, 'a'))
+    const m2 = materialOf(j, mel)!
+    j = ok(setPieceCheck(j, { kind: 'computed', boardId: mel, mode: m2.mode, layout: m2.sheets[0] }, m2.sheets[0].placements[0].pieceId, true, NOW, 'b'))
+    expect(j.frozenSheets.map((f) => f.id)).toEqual(['a', 'b'])
+    expect(materialOf(j, mel)!.sheetCount).toBe(3)
   })
 })
