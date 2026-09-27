@@ -50,7 +50,7 @@ export function SettingsScreen() {
 
         <div className="field">
           <Help className="label" title="切り代（初期値）">
-            仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
+            フラッシュの部材だけに足します。仕上がり寸法に足す、あとで削り仕上げるための余分。部材ごとに変えられます
           </Help>
           <div className="seg" role="group" aria-label="切り代のよく使う値">
             {ALLOWANCE_PRESETS.map((v) => (
