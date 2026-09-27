@@ -1,4 +1,4 @@
-// 寸法表の内訳：式の各項（記号・数・参照とその値）と計算結果（仕様書 9「寸法表の表示の切り替え」、architecture.md 9.2）
+// 寸法表の内訳：式の各項（記号・数・参照とその値）。explainDimension は計算結果も返すが、explanationText には出さない（仕様書 9「寸法表の表示の切り替え」、architecture.md 9.2）
 import { nigeName } from '../defaults'
 import { thicknessOfId, thicknessRefLabel } from '../flush'
 import { parse } from '../formula/parse'
@@ -88,19 +88,17 @@ function num(v: number, exact: boolean): string {
 }
 
 /**
- * 内訳を1行の文字にする（例：全体.W 900 − 側板.W 18 × 2 = 864、天地板.W 864 − 逃げ1 = 863）。
+ * 内訳を1行の文字にする（例：全体.W 900 − 側板.W 18 × 2、天地板.W 864 − 逃げ1）。項と値だけで、「= 結果」は付けない
+ * （結果は寸法表の数字で分かるため。仕様書 9）。
  * 値を後ろに出すのは部材の寸法の参照だけ。調整寸法（逃げ1）・材料の厚み（ラワン4）は名前に値が入っているので名前だけ。
- * 値の無い参照は名前だけ、結果が無ければ「= 」の代わりに「?」。
- * 式が数1つだけ（全体.W の 900）なら「= 結果」を付けず、数だけ（900）
+ * 値の無い参照は名前だけ
  */
 export function explanationText(e: DimensionExplanation): string {
-  const only = e.pieces.length === 1 ? e.pieces[0] : null
-  if (only?.kind === 'number' && e.result !== null) return num(only.value, true)
-  const words = e.pieces.map((p) => {
-    if (p.kind === 'op') return p.text
-    if (p.kind === 'number') return num(p.value, true)
-    return p.ref !== 'part' || p.value === null ? p.label : `${p.label} ${num(p.value, false)}`
-  })
-  words.push(e.result === null ? '?' : `= ${num(e.result, false)}`)
-  return words.join(' ')
+  return e.pieces
+    .map((p) => {
+      if (p.kind === 'op') return p.text
+      if (p.kind === 'number') return num(p.value, true)
+      return p.ref !== 'part' || p.value === null ? p.label : `${p.label} ${num(p.value, false)}`
+    })
+    .join(' ')
 }
