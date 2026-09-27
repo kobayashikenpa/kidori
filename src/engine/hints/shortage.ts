@@ -33,7 +33,7 @@ function short(r: PackingResult, boardId: string): boolean {
 }
 
 /** 手持ちが足りない材料の id（材料の保存の並び） */
-export function shortBoardIds(job: Job, r: PackingResult): string[] {
+function shortBoardIds(job: Job, r: PackingResult): string[] {
   return job.boards.filter((b) => usesStock(b) && short(r, b.id)).map((b) => b.id)
 }
 
@@ -103,6 +103,8 @@ function withAdded(job: Job, boardIds: readonly string[], kind: AddKind, n: numb
  *   その材料の noStock が無くなった一番小さい n。1, 2, 4, … と倍にして入る n を見つけてから、その手前との間を半分ずつ狭める
  *   （計算の回数を減らすため。上限は入らない片の数で、それで入らなければ null）。
  *   入らない片のうち1つでもそのサイズに入らない材料は試さずに null
+ *   注意：ここでは足りない材料すべてに同時に n 枚足して試すが、画面（StockShortageNotice）は押した材料1つにだけ足す。
+ *   材料どうしは重ね切りの組でなければ別々に木取りするので結果は変わらない（テストした場合では同じになることを確かめた）
  * - 設定の変更：お知らせ（findSavingHints）と同じ試し方。切り代（設定の切り代を使う部材があるとき）を大きい値から、
  *   切り代で入らなかった材料だけ端切り。その材料の noStock が無くなる一番大きい値。組み合わせは試さない
  */
