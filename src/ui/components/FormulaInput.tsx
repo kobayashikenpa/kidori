@@ -116,13 +116,36 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
 
   const spoken = labels.length > 0 ? labels.join(' ') : '空'
   const errorText = errors.map((e) => e.message).join('。')
+  // エラーの全文を出しているか（押したときだけ。ふだんは1行に切り詰める）
+  const [errFull, setErrFull] = useState(false)
 
   return (
     <div className="field" ref={fieldRef}>
-      <span className="label" aria-hidden="true">
-        {axis}（{AXIS_NAME[axis]}）
-        {finished !== null && <span className="expr-result num"> 仕上がり {fmt(finished)}</span>}
-      </span>
+      {/* 欄の上の1行：ふだんは仕上がりの値、エラーのときは同じ行にエラーを赤で出す（1行に切り詰め、押すと全文）。
+          行の高さは変わらないので、エラーが出ても消えても下のボタンの位置がずれない */}
+      <div className="label expr-head">
+        <span aria-hidden="true">
+          {axis}（{AXIS_NAME[axis]}）
+        </span>
+        {errors.length > 0 ? (
+          <button
+            type="button"
+            className={`expr-err${errFull ? ' full' : ''}`}
+            id={`${id}-err`}
+            role="alert"
+            aria-expanded={errFull}
+            onClick={() => setErrFull((v) => !v)}
+          >
+            {errorText}
+          </button>
+        ) : (
+          finished !== null && (
+            <span className="expr-result num" aria-hidden="true">
+              仕上がり {fmt(finished)}
+            </span>
+          )
+        )}
+      </div>
       <button
         type="button"
         className={`expr-box${open ? ' active' : ''}${errors.length > 0 ? ' bad' : ''}`}
@@ -147,18 +170,6 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
         })}
         {open && cursor === units.length && <span className="caret" aria-hidden="true" />}
       </button>
-      {errors.length > 0 &&
-        (open ? (
-          // ボタンの並びを開いているあいだは、エラーの場所の高さを決めておく（エラーの文が長くても短くても、ボタンの位置が同じ）。
-          // エラーが無いときは出さない（仕上がりの値は欄の上に出ている。ボタンを画面に収めるため）
-          <div className="expr-status msg err" id={`${id}-err`} role="alert">
-            <span className="expr-status-text">{errorText}</span>
-          </div>
-        ) : (
-          <p className="msg err" id={`${id}-err`} role="alert">
-            {errorText}
-          </p>
-        ))}
       {open && (
         <div className="pad" id={`${id}-pad`} ref={padRef}>
           {tab !== null && (

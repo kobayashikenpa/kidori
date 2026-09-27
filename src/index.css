@@ -480,10 +480,44 @@ select.input {
   min-width: 0;
 }
 
+.expr-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.expr-head > span:first-child {
+  flex: none;
+}
 .expr-result {
-  float: right;
+  margin-left: auto;
   font-weight: 400;
   color: var(--fin);
+}
+/* エラーは仕上がりの値と同じ行に赤で出す。1行に切り詰め、押すと全文 */
+.expr-err {
+  appearance: none;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 見た目の高さは1行のまま、押せる範囲だけ上下に広げる */
+  margin: -12px 0 -12px auto;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--err);
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.expr-err.full {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 /* ---------- 仕事の一覧 ---------- */
@@ -680,23 +714,6 @@ select.input {
   }
 }
 /* ボタンの並びを開いているあいだのエラーの場所：高さを決めておき、長い文は2行で打ち切る */
-.expr-status {
-  box-sizing: border-box;
-  height: calc(2 * 1.35em + 12px);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.35;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.expr-status-text {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
 .pad {
   background: var(--surface);
   border: 1px solid var(--line);
