@@ -665,7 +665,7 @@
 - やること：`types.ts` に `FrozenSheet`・`Job.frozenSheets` を足す（11.2）。見本・テストの仕事（`bookshelfJob`・フラッシュの見本・`createJob`・`sampleFromTemplate`）に `frozenSheets: []` を入れる。`progress/frozen.ts` に `freezeSheet(job, boardId, mode, layout, id, now)` と `frozenDemand(job)` を作る
 - 完了の条件：見本のメラミン 1 の1枚目を `freezeSheet` すると、材料名・厚み・木目・切り方・刃厚3・端切り5 が写り、`layout` を書き換えても元の結果が変わらない（深いコピー）。その1枚があると `frozenDemand` の `側板|メラミン` が 2
 
-### [~] E-43 固定した片を木取りの計算から除く
+### [x] E-43 固定した片を木取りの計算から除く
 - 担当：engine-dev ／ 依存：E-42 ／ 仕様書：9（加工のチェック）
 - やること：`expandPieces` で部材（表面材）の枚数から `frozenDemand` の数を引いてから片にする（11.3）。引いて 0 になった部材は `done`・`skipped` に入れない。以前の木取り済み（`checks.cut`・`cutByBoard`）は今までどおり除く
 - 完了の条件：見本でメラミン 1 の1枚目（側板×2）を固定すると、`packJob` のメラミン 1 が 4枚（側板×2・天地板×4・棚板×4・棚板×4）、ほかの材料は変わらない。ラワン 4 の1枚目（背板）を固定すると ラワン 4 が 5枚。`compareStandardSizes` のメラミン 1（3×6）も 4枚になる。以前の `cutByBoard` の完了がある部材は今までどおり `done` に出る

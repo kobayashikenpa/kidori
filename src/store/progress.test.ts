@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
+import { compareStandardSizes } from '../engine/packing/sizes'
 import { freezeSheet, frozenDemand } from '../engine/progress/frozen'
 import type { Job, MaterialResult } from '../engine/types'
 import { sampleFromTemplate } from './sample'
@@ -36,5 +37,67 @@ describe('E-42 見本：メラミン 1 の1枚目を写す', () => {
     expect(d.get(`${partId(job, '側板')}|${mel}`)).toBe(2)
     expect(d.size).toBe(1)
     expect(job.frozenSheets).toEqual([])
+  })
+})
+
+/** 今の計算の i 枚目を固定する（チェックは先頭の片） */
+function freezeAt(job: Job, board: string, i: number): Job {
+  const m = materialOf(job, board)!
+  const f = freezeSheet(job, board, m.mode, m.sheets[i], `sheet-${job.frozenSheets.length + 1}`, NOW)
+  f.checked = [f.layout.placements[0].pieceId]
+  return { ...job, frozenSheets: [...job.frozenSheets, f] }
+}
+
+describe('E-43 見本：固定した片を木取りの計算から除く', () => {
+  it('メラミン 1 の1枚目（側板×2）を固定すると メラミン 1 は 4枚、ほかの材料は変わらない', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const lau = boardId(job0, 'ラワン', 4)
+    const before = packJob(job0, computeDimensions(job0))
+    const job = freezeAt(job0, mel, 0)
+    const r = packJob(job, computeDimensions(job))
+    const m = r.materials.find((x) => x.boardId === mel)!
+    expect(m.sheetCount).toBe(4)
+    expect([0, 1, 2, 3].map((i) => names(m, i))).toEqual([
+      ['側板', '側板'],
+      ['天地板', '天地板', '天地板', '天地板'],
+      ['棚板', '棚板', '棚板', '棚板'],
+      ['棚板', '棚板', '棚板', '棚板'],
+    ])
+    expect(r.materials.find((x) => x.boardId === lau)).toEqual(before.materials.find((x) => x.boardId === lau))
+    expect(r.done).toEqual([])
+    expect(r.skipped).toEqual([])
+  })
+
+  it('ラワン 4 の1枚目（背板）を固定すると ラワン 4 は 5枚', () => {
+    const job0 = sample()
+    const lau = boardId(job0, 'ラワン', 4)
+    expect(materialOf(job0, lau)!.sheetCount).toBe(6)
+    expect(names(materialOf(job0, lau), 0)).toEqual(['背板'])
+    const job = freezeAt(job0, lau, 0)
+    expect(materialOf(job, lau)!.sheetCount).toBe(5)
+    expect(materialOf(job, lau)!.sheets.flatMap((s) => s.placements.map((p) => p.name))).not.toContain('背板')
+  })
+
+  it('サイズの比較（compareStandardSizes）のメラミン 1（3×6）も 4枚', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const job = freezeAt(job0, mel, 0)
+    const c = compareStandardSizes(job, computeDimensions(job)).find((x) => x.boardId === mel)!
+    expect(c.options.find((o) => o.kind === 'saburoku')!.sheetCount).toBe(4)
+  })
+
+  it('以前の cutByBoard の完了がある部材は今までどおり done に出る', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const tana = partId(job0, '棚板')
+    let job = freezeAt(job0, mel, 0)
+    job = {
+      ...job,
+      parts: job.parts.map((p) => (p.id === tana ? { ...p, checks: { ...p.checks, cutByBoard: { [mel]: true } } } : p)),
+    }
+    const r = packJob(job, computeDimensions(job))
+    expect(r.done).toEqual([{ partId: tana, name: '棚板', quantity: 8, boardId: mel }])
+    expect(r.materials.find((x) => x.boardId === mel)!.sheetCount).toBe(2)
   })
 })
