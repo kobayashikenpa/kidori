@@ -1421,17 +1421,6 @@ select.input {
   color: var(--err);
   font-weight: 700;
 }
-.dim-flush td {
-  text-align: left;
-  padding: 2px 6px 4px;
-}
-.dim-flush-head {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  padding: 0;
-  word-break: break-word;
-}
 /* 仕上がりの完了（行の右端） */
 .dim-table .c-done {
   width: 46px;

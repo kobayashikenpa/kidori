@@ -2,11 +2,11 @@
 // 仕上がり寸法の数字を押すと、その下の行に内訳（式の各項と値）を開く。もう一度押すと閉じる。
 // 右端の「完了」で仕上がりの完了を付け外しする。完了した行の寸法はグレーにする。
 // 木取り寸法と切り出しの完了は寸法表に出さない（木取り画面で見る）。
-// フラッシュの部材は、厚みの内訳を下の行に1行で出す。
+// フラッシュの部材は、厚みの数字を押したときの内訳に フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2） を出す。
 import { Fragment, useMemo, useState } from 'react'
 import { explainDimension, explanationText } from '../../engine/dimensions/explain'
 import { computeFinished } from '../../engine/dimensions/finished'
-import { flushBreakdown, flushBreakdownText } from '../../engine/flush'
+import { flushBreakdown, flushCompositionText } from '../../engine/flush'
 import { AXES, type Axis, type Job, type PartChecks, type PartDimensions } from '../../engine/types'
 import { fmt } from '../format'
 
@@ -54,11 +54,20 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
             const d = dims[i]
             const cutting = p.quantity > 0
             const finDone = cutting && p.checks.finished
-            const flush = p.flushId !== undefined ? flushBreakdown(job, p.flushId) : null
+            const flushName = p.flushId !== undefined ? job.flushes.find((f) => f.id === p.flushId)?.name : undefined
+            const flush = p.flushId !== undefined && flushName !== undefined ? flushBreakdown(job, p.flushId) : null
             const mismatch = d.errors.some((e) => e.kind === 'thicknessMismatch')
             const ex = AXES.map((a) => explainDimension(job, p.id, a, finished))
             const openAxis = open?.partId === p.id ? open.axis : null
             const openEx = openAxis ? ex[AXES.indexOf(openAxis)] : null
+            // フラッシュの部材の厚みを開いたとき：フラッシュの中身を出す。式がフラッシュの厚み1つだけなら式の内訳は省く
+            const flushText = flush && flushName !== undefined && openAxis !== null && openAxis === d.thicknessAxis ? flushCompositionText(flushName, flush) : null
+            const onlyFlush =
+              flushText !== null &&
+              openEx?.pieces.length === 1 &&
+              openEx.pieces[0].kind === 'ref' &&
+              openEx.pieces[0].ref === 'thickness' &&
+              openEx.pieces[0].label === flushName
             return (
               <Fragment key={p.id}>
                 <tr className={`${openAxis ? 'row-open' : ''}${finDone ? ' row-done' : ''}`.trim() || undefined}>
@@ -104,24 +113,16 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
                     )}
                   </td>
                 </tr>
-                {flush && (
-                  <tr className="dim-flush">
-                    <td colSpan={6}>
-                      <span className="dim-flush-head num">
-                        {p.name}：厚み {flushBreakdownText(flush)}
-                      </span>
-                    </td>
-                  </tr>
-                )}
                 {openAxis && (
                   <tr className="dim-explain">
                     <td colSpan={6}>
                       <span className="dim-explain-head">
                         {p.name}.{openAxis} の内訳
                       </span>
-                      {openEx && openEx.pieces.length > 0 && (
+                      {openEx && openEx.pieces.length > 0 && !onlyFlush && (
                         <span className="dim-explain-text num">{explanationText(openEx)}</span>
                       )}
+                      {flushText !== null && <span className="dim-explain-text num">{flushText}</span>}
                       {openEx?.errors.map((e, k) => (
                         <span key={k} className="dim-explain-err">
                           {e.message}

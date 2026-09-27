@@ -90,9 +90,12 @@ function num(v: number, exact: boolean): string {
 /**
  * 内訳を1行の文字にする（例：全体.W 900 − 側板.W 18 × 2 = 864、天地板.W 864 − 逃げ1 = 863）。
  * 値を後ろに出すのは部材の寸法の参照だけ。調整寸法（逃げ1）・材料の厚み（ラワン4）は名前に値が入っているので名前だけ。
- * 値の無い参照は名前だけ、結果が無ければ「= 」の代わりに「?」
+ * 値の無い参照は名前だけ、結果が無ければ「= 」の代わりに「?」。
+ * 式が数1つだけ（全体.W の 900）なら「= 結果」を付けず、数だけ（900）
  */
 export function explanationText(e: DimensionExplanation): string {
+  const only = e.pieces.length === 1 ? e.pieces[0] : null
+  if (only?.kind === 'number' && e.result !== null) return num(only.value, true)
   const words = e.pieces.map((p) => {
     if (p.kind === 'op') return p.text
     if (p.kind === 'number') return num(p.value, true)

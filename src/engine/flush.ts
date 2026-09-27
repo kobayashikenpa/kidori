@@ -72,6 +72,12 @@ export function flushBreakdownText(b: FlushBreakdown): string {
   return `${words.join(' ＋ ')} ＝ ${round1(b.total)}`
 }
 
+/** 寸法表の厚みの内訳（例：フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）） */
+export function flushCompositionText(name: string, b: FlushBreakdown): string {
+  const words = [`芯材${round1(b.core)}`, ...b.faces.map((f) => `${f.label}×${f.count}`)]
+  return `${name}（${words.join(' ＋ ')}）`
+}
+
 /** 表面材にその材料のどれかを使っているフラッシュの名前（登録順）。材料を削除する前の確認に使う */
 export function flushesUsingBoards(job: Pick<Job, 'flushes'>, boardIds: readonly string[]): string[] {
   const ids = new Set(boardIds)
