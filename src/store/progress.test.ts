@@ -4,6 +4,7 @@ import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import { compareStandardSizes } from '../engine/packing/sizes'
 import { freezeSheet, frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
+import { sheetChecklist } from '../engine/progress/sheetChecklist'
 import { sheetProgress } from '../engine/progress/sheetProgress'
 import type { Job, MaterialResult } from '../engine/types'
 import { removePart, updatePart } from './jobs'
@@ -170,5 +171,21 @@ describe('E-45 見本：部材が変わっています・材料のまとめ', ()
       frozenSheets: [{ ...f, checked: f.layout.placements.map((p) => p.pieceId), completedAt: NOW.toISOString() }],
     }
     expect(summary(both)).toMatchObject({ sheetCount: 4, completedCount: 1 })
+  })
+})
+
+describe('E-46 見本：1枚ごとのチェックリスト', () => {
+  it('メラミン 1 の3枚目（天地板×4）で「天地板 860×410」が4行。1つにチェックした写しではその行だけ done。部材名を変えるとついてくる', () => {
+    const job = sample()
+    const mel = boardId(job, 'メラミン', 1)
+    const third = materialOf(job, mel)!.sheets[2]
+    const rows = sheetChecklist(job, third, [])
+    expect(rows.map((r) => `${r.name} ${r.sizeLabel} ${r.done}`)).toEqual(Array(4).fill('天地板 860×410 false'))
+    const f = freezeSheet(job, mel, 'vertical', third, 's', NOW)
+    f.checked = [third.placements[2].pieceId]
+    expect(sheetChecklist(job, f.layout, f.checked).map((r) => r.done)).toEqual([false, false, true, false])
+    const renamed = updatePart(job, partId(job, '天地板'), { name: '天板' })
+    if (!renamed.ok) throw new Error(renamed.message)
+    expect(sheetChecklist(renamed.job, f.layout, f.checked).map((r) => r.name)).toEqual(Array(4).fill('天板'))
   })
 })
