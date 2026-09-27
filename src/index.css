@@ -984,8 +984,6 @@ select.input {
   --dg-grain: rgba(120, 85, 40, 0.28);
   --dg-line: #3d3a33;
   --dg-text: #1b211e;
-  --dg-scrap: #6b6456;
-  --dg-scrap-fill: #faf6ee;
   --dg-trim: #d4331f;
   --dg-done: #d9d6cf;
   --pc0: #bcd9ee;
@@ -1001,9 +999,7 @@ select.input {
     --dg-grain: rgba(230, 200, 150, 0.2);
     --dg-line: #cfc8b8;
     --dg-text: #f1f4f2;
-    --dg-scrap: #bdb4a2;
-    --dg-scrap-fill: #3d382d;
-    --dg-trim: #ff7a66;
+        --dg-trim: #ff7a66;
     --dg-done: #3a3a38;
     --pc0: #24506e;
     --pc1: #6e4424;
@@ -1018,8 +1014,6 @@ select.input {
   --dg-grain: rgba(230, 200, 150, 0.2);
   --dg-line: #cfc8b8;
   --dg-text: #f1f4f2;
-  --dg-scrap: #bdb4a2;
-  --dg-scrap-fill: #3d382d;
   --dg-trim: #ff7a66;
   --dg-done: #3a3a38;
   --pc0: #24506e;
@@ -1074,13 +1068,6 @@ select.input {
   stroke-dasharray: 10 5;
   vector-effect: non-scaling-stroke;
 }
-.dg-scrap {
-  fill: var(--dg-scrap-fill);
-  stroke: var(--dg-scrap);
-  stroke-width: 1.5px;
-  stroke-dasharray: 5 4;
-  vector-effect: non-scaling-stroke;
-}
 .dg-trim {
   fill: var(--dg-trim);
   stroke: var(--dg-trim);
@@ -1101,12 +1088,6 @@ select.input {
 }
 .dg-text .l2 {
   font-family: var(--mono);
-}
-.dg-text.scrap {
-  fill: var(--dg-scrap);
-}
-.dg-text.scrap .l1 {
-  font-weight: 400;
 }
 .dg-legend {
   display: flex;
@@ -1142,9 +1123,6 @@ select.input {
   margin: 6px 0 0;
   font-weight: 700;
   color: var(--accent);
-}
-.dg-key.scrap {
-  border: 1.5px dashed var(--dg-scrap);
 }
 .dg-key.grain {
   background: var(--dg-board);
@@ -1230,133 +1208,6 @@ select.input {
 }
 .kd-sheet.finished .diagram {
   opacity: 0.6;
-}
-
-/* ---------- 切る順番・端材 ---------- */
-.steps-fold {
-  margin: 8px 0 6px;
-}
-.cut-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cut-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 4px 6px;
-  border-radius: 8px;
-}
-.cut-no {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cut-item.trim .cut-no {
-  background: var(--dg-trim);
-  color: #fff;
-}
-.cut-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-.cut-label {
-  overflow-wrap: anywhere;
-  line-height: 1.4;
-}
-.cut-tag {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  border: 1px solid currentColor;
-}
-.cut-item.done {
-  color: var(--muted);
-}
-.cut-item.done .cut-no {
-  background: var(--line);
-  color: var(--muted);
-}
-.cut-item.done .cut-label {
-  text-decoration: line-through;
-}
-.cut-item.next {
-  background: var(--accent-soft);
-  outline: 2px solid var(--accent);
-  font-weight: 700;
-  color: var(--accent);
-}
-.cut-item.next .cut-label {
-  font-size: 16px;
-}
-.steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.fold {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-.fold > summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-  touch-action: manipulation;
-}
-.fold > summary::-webkit-details-marker {
-  display: none;
-}
-.fold > summary::after {
-  content: '▼';
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
-  transition: transform 0.15s;
-}
-.fold[open] > summary::after {
-  transform: rotate(180deg);
-}
-.fold-count {
-  font-weight: 400;
-  font-size: 13px;
-  color: var(--muted);
-}
-.fold > :not(summary) {
-  margin-left: 12px;
-  margin-right: 12px;
-}
-.fold > :last-child:not(summary) {
-  margin-bottom: 10px;
-}
-.scrap-list {
-  margin-top: 4px;
-  padding-left: 1.4em;
-  font-size: 16px;
 }
 
 /* 削除の確認：ふつうの行とはっきり見分けられるように、赤の枠と薄い赤の地にする */
