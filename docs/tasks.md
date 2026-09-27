@@ -889,9 +889,10 @@
 - やること：`hints/shortage.ts` に `stockShortage(job, dims)`（14.8）。3×6・4×8 をそれぞれ何枚足せば入るか、切り代 → 端切りを小さくすれば手持ちで入るか。`findSavingHints` は `noStock` のある材料・その材料の入る組を対象から外す
 - 完了の条件：見本のランバー 3×6 ×2 → 「シナランバー 18mm が足りません（入らない部材：棚板）」、3×6 は 1枚・4×8 は 1枚、`change` は null。4×8 ×1 → 入らない部材 天地板・棚板、3×6 は 1枚・4×8 は 1枚。側板 410×1810 ×1 だけの仕事で手持ち 自由入力 414×1820 ×1 → `change` が 端切り 4mm。足りない材料が無ければ `[]` で、`packJob` を追加で呼ばない。部材150枚で 1秒以内
 
-### [ ] E-60 まとめのサイズ別の枚数・手持ちの残り・固定した1枚の木目
+### [x] E-60 まとめのサイズ別の枚数・手持ちの残り・固定した1枚の木目
 - 担当：engine-dev ／ 依存：E-58 ／ 仕様書：9（手持ちの材料・加工のチェック）
 - やること：`MaterialSummary.bySize`、`stockUsage(job, result)`（14.9）。`freezeSheet` の木目は `layout.sheet?.grain` を優先（14.6）
+- 実装メモ：今の `MaterialSummary` の形（と今のテスト）を変えないため、`bySize` は `materialSizeCounts(job, result, views)`（`materialSummaries` と同じ並び・同じ boardId の `{ boardId, bySize }[]`）で返す。1枚ごとの大きさの表示は `layoutSizeLabel(layout)`
 - 完了の条件：見本のランバー 3×6 ×1・4×8 ×1 → `bySize` は `4×8 ×1`・`3×6 ×1`。3×6 ×5・4×8 ×1 → `stockUsage` は 3×6 が 使う3・残り2、4×8 が 使う0・残り1。3×6 ×2（棚板が足りない）→ 3×6 は 使う2・残り0。1枚目を固定して切り終わりにしても 3×6 の使う数は変わらない。手持ち 自由入力 木目 短手 の1枚を `freezeSheet` すると `grain` が short
 
 ### 保存と操作（store）
