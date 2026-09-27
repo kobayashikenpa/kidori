@@ -2,7 +2,8 @@
 // 重ねる2つの材料の組を、木取りの上では1つの“材料”（id は stackKey）として扱う
 import { boardTokenLabel } from '../defaults'
 import { round1 } from '../round'
-import type { Board, Flush, Job } from '../types'
+import type { Board, Flush, Job, StackMismatchReason } from '../types'
+import { commonStock, stockKinds, usesStock } from './stock'
 
 /** 重ねて切れるフラッシュか：表面材がちょうど2つ（違う材料）で、枚数が同じ。材料があるかは見ない */
 export function canStack(flush: Pick<Flush, 'faces'>): boolean {
@@ -35,6 +36,8 @@ export interface StackGroup {
 export interface StackMismatch {
   boardIds: [string, string]
   flushIds: string[]
+  /** 'stock'：どちらかが手持ちで、同じサイズの手持ちが無い（第2.2版）。無ければ 'size'（今までの結果と同じ形にするため持たない） */
+  reason?: StackMismatchReason
 }
 
 export interface StackPlan {
@@ -70,7 +73,10 @@ export function stackPlan(job: Pick<Job, 'boards' | 'flushes'>): StackPlan {
   for (const [key, p] of sorted) {
     const a = job.boards[index.get(p.boardIds[0])!]
     const b = job.boards[index.get(p.boardIds[1])!]
-    if (sameSheet(a, b)) plan.groups.push({ key, ...p })
+    // 第2.2版（14.7）：登録した手持ちどうし（固定した1枚は引かない）でそろう行があれば組。
+    // どちらも手持ちを使わなければ sameSheet と同じ判定
+    if (commonStock(stockKinds(a), stockKinds(b)).length > 0) plan.groups.push({ key, ...p })
+    else if (usesStock(a) || usesStock(b)) plan.mismatches.push({ ...p, reason: 'stock' })
     else plan.mismatches.push(p)
   }
   return plan

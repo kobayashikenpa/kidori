@@ -9,11 +9,11 @@ import { round1 } from '../round'
 import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout } from '../types'
 import { buildCuts } from './cutOrder'
 import { packGuillotine, packOnStock, type StripMode } from './guillotine'
-import { expandPieces, type Piece, type Unplaced } from './pieces'
+import { expandPieces, orientationsOn, type BoardPieces, type Piece, type Unplaced } from './pieces'
 import { scrapsOf } from './scraps'
 import { stackPlan, type StackPlan } from './stack'
 import { sheetOrientation, trimRects, usableRect } from './sheet'
-import { availableStock, usesStock, type StockKind } from './stock'
+import { availableStock, commonStock, sameStockSize, usesStock, type StockKind } from './stock'
 import { combineYield, sheetYield } from './yield'
 
 export { MIN_SCRAP } from './scraps'
@@ -151,16 +151,89 @@ export function packJob(job: Job, dims: DimensionResult, plan: StackPlan = stack
     return result
   }
 
-  const materials = groups.map(({ board, stack, pieces, unplaced }): MaterialResult => {
-    if (!stack && usesStock(board)) {
-      const stock = availableStock(job, board.id)
+  // 手持ち（固定した1枚を引いた残り）。組 → 材料の順に使った1枚を引いていく
+  const avail = new Map<string, StockKind[]>()
+  const availOf = (id: string): StockKind[] => {
+    let k = avail.get(id)
+    if (!k) {
+      k = availableStock(job, id)
+      avail.set(id, k)
+    }
+    return k
+  }
+  /** 使った1枚を、大きさ・木目のそろう最初の行（残り1以上）から引く */
+  const take = (id: string, s: SheetLayout, grain: StockKind['grain']) => {
+    const size = { width: s.boardWidth, length: s.boardLength, grain }
+    const k = availOf(id).find((x) => x.count >= 1 && sameStockSize(x, size))
+    if (k) k.count -= 1
+  }
+  const boardById = new Map(job.boards.map((b) => [b.id, b]))
+
+  // 1. 重ね切りの組（plan の並び）。どちらかが手持ちなら組の手持ちで並べ、置けなかった片は a・b のふつうの片に回す
+  const stackResults = new Map<BoardPieces, MaterialResult | null>()
+  const rerouted = new Map<string, Piece[]>()
+  const reroute = (boardId: string, piece: Piece) => {
+    const list = rerouted.get(boardId) ?? []
+    list.push(piece)
+    rerouted.set(boardId, list)
+  }
+  for (const g of groups) {
+    if (!g.stack) continue
+    const { board, stack, pieces, unplaced } = g
+    const other = boardById.get(stack.boardIds[1])
+    if (!other || (!usesStock(board) && !usesStock(other))) {
+      const chosen = choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode))
+      stackResults.set(g, resultOf(board, chosen, unplacedOf(unplaced, chosen.unplaced, 'tooLarge'), stack))
+      continue
+    }
+    const stock = commonStock(availOf(board.id), availOf(other.id))
+    const chosen = choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode))
+    for (const s of chosen.sheets) {
+      const grain = s.sheet?.grain ?? board.grain
+      take(board.id, s, grain)
+      take(other.id, s, grain)
+    }
+    for (const p of chosen.unplaced) {
+      reroute(board.id, p)
+      const { twin, ...rest } = p
+      reroute(other.id, { ...rest, pieceId: twin ?? p.pieceId })
+    }
+    // 組に置けた1枚が無ければ組の結果は出さない（片はすべて a・b に回した）
+    stackResults.set(g, chosen.sheets.length > 0 || unplaced.length > 0 ? resultOf(board, chosen, unplaced, stack) : null)
+  }
+
+  // 2. 材料ごとのふつうの片（組に置けなかった片を含む）
+  const materialResult = (board: Board, pieces: Piece[], unplaced: Unplaced[]): MaterialResult => {
+    if (usesStock(board)) {
+      const stock = availOf(board.id)
       const chosen = choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode))
       return resultOf(board, chosen, unplacedOf(unplaced, chosen.unplaced, 'noStock'))
     }
     const chosen = choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode))
     // 配置で入らなかった片（通常は起きない）も「入らない部材」に加える
-    return resultOf(board, chosen, unplacedOf(unplaced, chosen.unplaced, 'tooLarge'), stack)
-  })
+    return resultOf(board, chosen, unplacedOf(unplaced, chosen.unplaced, 'tooLarge'))
+  }
+  const materials: MaterialResult[] = []
+  for (const b of job.boards) {
+    const g = groups.find((x) => !x.stack && x.board.id === b.id)
+    const extra = rerouted.get(b.id) ?? []
+    if (g || extra.length > 0) {
+      const pieces = [...(g?.pieces ?? [])]
+      const unplaced = [...(g?.unplaced ?? [])]
+      for (const p of extra) {
+        // 手持ちで並べる材料は行ごとに向きを決め直す。サイズを選んだ材料は、その材料の向きで入らなければ tooLarge
+        const orientations = p.shape ? orientationsOn(b, p.shape, job) : p.orientations
+        if (orientations.length > 0 || usesStock(b)) pieces.push({ ...p, orientations })
+        else if (!unplaced.some((u) => u.partId === p.partId)) unplaced.push({ partId: p.partId, name: p.name, reason: 'tooLarge' })
+      }
+      materials.push(materialResult(b, pieces, unplaced))
+    }
+    for (const sg of groups) {
+      if (sg.stack?.boardIds[0] !== b.id) continue
+      const r = stackResults.get(sg)
+      if (r) materials.push(r)
+    }
+  }
 
   const total = combineYield(materials.flatMap((m) => m.sheets.flatMap((s) => (m.stack ? [areasOf(s), areasOf(s)] : [areasOf(s)]))))
   return { materials, totalYieldRate: total.yieldRate, skipped, done, stackMismatches }

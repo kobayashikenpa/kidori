@@ -234,7 +234,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
   }
   const stackMismatches = plan.mismatches
     .filter((m) => mismatched.has(m))
-    .map((m) => ({ boardIds: m.boardIds, flushIds: [...m.flushIds] }))
+    .map((m) => (m.reason ? { boardIds: m.boardIds, flushIds: [...m.flushIds], reason: m.reason } : { boardIds: m.boardIds, flushIds: [...m.flushIds] }))
   return { groups, skipped, done, stackMismatches }
 }
 
