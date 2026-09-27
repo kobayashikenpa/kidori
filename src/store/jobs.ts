@@ -616,3 +616,21 @@ export function setPieceCheck(
   const next = all ? { ...rest, checked, completedAt: sheet.completedAt ?? now.toISOString() } : { ...rest, checked }
   return ok({ ...job, frozenSheets: job.frozenSheets.map((f) => (f.id === sheet.id ? next : f)) })
 }
+
+/**
+ * 以前の版で付けた「木取り済み」（部材ごと）を外して、計算に戻す（第1.8版。architecture.md 11.9）。
+ * ふつうの部材は checks.cut = false、フラッシュの部材は checks.cutByBoard[boardId] を消す（boardId は PackingResult.done の boardId）
+ */
+export function clearLegacyCut(job: Job, partId: string, boardId: string | null): OpResult {
+  const part = job.parts.find((p) => p.id === partId)
+  if (!part) return fail('部材が見つかりません')
+  let checks: PartChecks
+  if (part.flushId !== undefined && boardId !== null) {
+    const cutByBoard = { ...part.checks.cutByBoard }
+    delete cutByBoard[boardId]
+    checks = { ...part.checks, cutByBoard }
+  } else {
+    checks = { ...part.checks, cut: false }
+  }
+  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, checks } : p)) })
+}
