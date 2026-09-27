@@ -6,6 +6,7 @@ import { canStack } from '../engine/packing/stack'
 import { eq1 } from '../engine/round'
 import {
   AXES,
+  BOARD_SIZES,
   DEFAULT_SETTINGS,
   type Axis,
   type Board,
@@ -20,6 +21,7 @@ import {
   type Job,
   type Nige,
   type PartGrain,
+  type StockSheet,
 } from '../engine/types'
 import { newId } from './jobs'
 import { defaultTemplate, templateOf, type FlushSpec, type MaterialSpec, type SettingsTemplate } from './template'
@@ -193,7 +195,60 @@ function sanitizeBoard(v: unknown, fx: Fixes): Board | null {
     grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
     // 最初から入っている材料の印（第1.2版）。無ければ付けない（並び順は engine の orderedBoards が以前のデータも判定する）
     ...(v.builtIn === true ? { builtIn: true as const } : {}),
+    ...sanitizeStock(v, fx),
   }
+}
+
+/**
+ * 手持ちの材料（第2.2版。architecture.md 14.10）。stockOn は true のときだけ残す。stock は配列でなければ外す。
+ * 行ごとに、id が文字で重ならない・種類が3つのどれか・枚数が1以上の整数・自由入力は短辺・長辺が 0 より大きい数、でなければ外す。
+ * 3×6・4×8 の寸法と木目は決まった値に、自由入力の短辺＞長辺は入れ替える。stockOn で行が0になったら stockOn を外す（どれも直した数に数える）
+ */
+function sanitizeStock(v: Record<string, unknown>, fx: Fixes): Pick<Board, 'stockOn' | 'stock'> {
+  const out: Pick<Board, 'stockOn' | 'stock'> = {}
+  const rows: StockSheet[] = []
+  if (v.stock !== undefined) {
+    if (!Array.isArray(v.stock)) fx.count++
+    for (const x of Array.isArray(v.stock) ? v.stock : []) {
+      if (
+        !isRecord(x) ||
+        !isId(x.id) ||
+        rows.some((r) => r.id === x.id) ||
+        !SIZE_KINDS.includes(x.sizeKind as BoardSizeKind) ||
+        !isCount(x.count) ||
+        (x.sizeKind === 'custom' && (!isPositive(x.width) || !isPositive(x.length)))
+      ) {
+        fx.count++
+        continue
+      }
+      const sizeKind = x.sizeKind as BoardSizeKind
+      let width: number
+      let length: number
+      let grain: Board['grain']
+      if (sizeKind === 'custom') {
+        const w = x.width as number
+        const l = x.length as number
+        width = Math.min(w, l)
+        length = Math.max(w, l)
+        if (w > l) fx.count++
+        grain = pick(x.grain, (g): g is Board['grain'] => g === 'long' || g === 'short', 'long', fx)
+      } else {
+        ;[width, length] = BOARD_SIZES[sizeKind]
+        grain = 'long'
+        if (x.width !== width || x.length !== length || x.grain !== 'long') fx.count++
+      }
+      rows.push({ id: x.id as string, sizeKind, width, length, grain, count: x.count as number })
+    }
+    if (Array.isArray(v.stock)) out.stock = rows
+  }
+  if (v.stockOn === true) {
+    if (rows.length > 0) out.stockOn = true
+    else fx.count++
+  } else if (v.stockOn !== undefined) {
+    fx.count++
+  }
+  if (out.stock && out.stock.length === 0) delete out.stock
+  return out
 }
 
 const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
@@ -378,7 +433,7 @@ function readLayout(v: unknown): SheetLayout | null {
   const cuts = v.cuts.map(readCut)
   if (!cuts.every((c): c is CutStep => c !== null)) return null
   if (!isNum(v.usedArea) || !isNum(v.yieldRate)) return null
-  return {
+  const layout: SheetLayout = {
     index: isNum(v.index) ? v.index : 1,
     boardWidth: v.boardWidth,
     boardLength: v.boardLength,
@@ -391,6 +446,17 @@ function readLayout(v: unknown): SheetLayout | null {
     usedArea: v.usedArea,
     yieldRate: v.yieldRate,
   }
+  // 手持ちの1枚（第2.2版）：使った手持ちの行と木目。読めなければ付けない（1枚は描ける）
+  const sh = v.sheet
+  if (
+    isRecord(sh) &&
+    isId(sh.stockId) &&
+    SIZE_KINDS.includes(sh.sizeKind as BoardSizeKind) &&
+    (sh.grain === 'long' || sh.grain === 'short')
+  ) {
+    layout.sheet = { stockId: sh.stockId, sizeKind: sh.sizeKind as BoardSizeKind, grain: sh.grain }
+  }
+  return layout
 }
 
 /**
