@@ -1894,3 +1894,24 @@ button.dim-name {
   flex: 0 0 auto;
   padding: 8px 12px;
 }
+.kd-short h4 {
+  overflow-wrap: anywhere;
+}
+.kd-issues .kd-short-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kd-short-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+}
+.kd-short-btn {
+  flex: 0 0 auto;
+}

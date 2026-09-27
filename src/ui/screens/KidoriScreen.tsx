@@ -9,6 +9,7 @@ import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
 import { usesStock } from '../../engine/packing/stock'
+import { stockShortage } from '../../engine/hints/shortage'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
 import {
   frozenSheetViews,
@@ -31,6 +32,7 @@ import { SheetChecklist } from '../components/SheetChecklist'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { SheetSizePicker } from '../components/SheetSizePicker'
 import { StockEditor } from '../components/StockEditor'
+import { StockShortageNotice } from '../components/StockShortageNotice'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 import { Help } from '../components/Help'
@@ -93,7 +95,7 @@ const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
-  const { result, compare, views, summaries, usage, sizeCounts } = useMemo(() => {
+  const { result, compare, views, summaries, usage, sizeCounts, shortages } = useMemo(() => {
     const dims = computeDimensions(job)
     const result = packJob(job, dims)
     const views = frozenSheetViews(job, dims)
@@ -104,6 +106,8 @@ export function KidoriScreen() {
       summaries: materialSummaries(job, result, views),
       usage: stockUsage(job, result),
       sizeCounts: materialSizeCounts(job, result, views),
+      // 手持ちが足りない材料の解決策（足りない材料が無ければ packJob を追加で呼ばない）
+      shortages: stockShortage(job, dims, result),
     }
   }, [job])
   // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
@@ -139,7 +143,7 @@ export function KidoriScreen() {
   const s = job.settings
   // 部材ごとに切り代を入れた部材（設定の切り代を変えても変わらないことを見せる）
   const own = job.parts.filter((p) => p.quantity > 0 && p.allowance !== null)
-  const unplaced = result.materials.flatMap((m) => m.unplaced.map((u) => ({ ...u, board: boardLabel(m) })))
+  const unplaced = result.materials.flatMap((m) => m.unplaced.filter((u) => u.reason !== 'noStock').map((u) => ({ ...u, board: boardLabel(m) })))
   const empty = summaries.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
@@ -249,6 +253,8 @@ export function KidoriScreen() {
       ) : (
         <SavingHints job={job} />
       )}
+
+      <StockShortageNotice shortages={shortages} />
 
       {result.stackMismatches.map((x) => {
         const [a, b] = x.boardIds.map((id) => boardOf(id))
