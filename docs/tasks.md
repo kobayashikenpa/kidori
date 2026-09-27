@@ -795,7 +795,7 @@
 
 ### 保存と操作（store）
 
-### [~] S-18 重ね切りの設定・保存・引き継ぎと、組のチェック・サイズ
+### [x] S-18 重ね切りの設定・保存・引き継ぎと、組のチェック・サイズ
 - 担当：engine-dev ／ 依存：E-50・E-52 ／ 仕様書：4（フラッシュの重ね切り・設定の引き継ぎ）・9（加工のチェック）・10
 - やること：`validateFlush`・`cleanFlush`・`removeBoards`・`sanitizeFlushes`・固定した1枚の `stackWith` の検査・`FlushSpec.stack`（ひな形・見本）・`copyJob`（12.6）。`SheetTarget` の `computed` に `stackWith`、`setPieceCheck` から `freezeSheet` に渡す。`setBoardsSize(job, boardIds, size)`
 - 完了の条件：表面材 メラミン1×2・ラワン4×1 で `stack: true` は断られる。ラワン 4 を削除すると フラッシュ25 の `stack` が外れる。`stack: 'yes'` や条件に合わない `stack` を読むと外れて直した数 1。`stackWith.boardId` が無い・自分と同じ固定した1枚は外れる。保存して読み込む・ひな形から新しい仕事を作る・仕事をコピーすると `stack` が残る。組の計算した1枚目の側板にチェックすると `frozenSheets` の1枚に `stackWith`（ラワン 4）が付き、組が4枚に。`setBoardsSize` でメラミン 1 とラワン 4 を 4×8 にすると両方が 4×8 で組がそろう

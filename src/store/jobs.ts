@@ -1,5 +1,6 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import { canStack } from '../engine/packing/stack'
 import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
@@ -64,15 +65,20 @@ export function createJob(
     return b
   })
   // フラッシュの表面材は、材料名＋厚みが同じ材料の id に直す（見つからない表面材は外す）
-  const flushes: Flush[] = template.flushes.map((f) => ({
-    id: newId('flush'),
-    name: f.name,
-    core: f.core,
-    faces: f.faces.flatMap((x) => {
-      const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
-      return b ? [{ boardId: b.id, count: x.count }] : []
-    }),
-  }))
+  // 重ね切り（第2.0版）は、直した表面材で canStack のときだけ引き継ぐ
+  const flushes: Flush[] = template.flushes.map((f) => {
+    const flush: Flush = {
+      id: newId('flush'),
+      name: f.name,
+      core: f.core,
+      faces: f.faces.flatMap((x) => {
+        const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
+        return b ? [{ boardId: b.id, count: x.count }] : []
+      }),
+    }
+    if (f.stack === true && canStack(flush)) flush.stack = true
+    return flush
+  })
   return {
     id,
     name: name.trim() || '名前のない仕事',
@@ -276,10 +282,15 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   return ok({
     ...job,
     boards: job.boards.filter((b) => !ids.has(b.id)),
-    // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）
-    flushes: job.flushes.map((f) =>
-      f.faces.some((x) => ids.has(x.boardId)) ? { ...f, faces: f.faces.filter((x) => !ids.has(x.boardId)) } : f,
-    ),
+    // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）。
+    // 重ねて切れなくなったフラッシュは重ね切りを外す（第2.0版）
+    flushes: job.flushes.map((f) => {
+      if (!f.faces.some((x) => ids.has(x.boardId))) return f
+      const { stack, ...rest } = f
+      const next: Flush = { ...rest, faces: f.faces.filter((x) => !ids.has(x.boardId)) }
+      if (stack === true && canStack(next)) next.stack = true
+      return next
+    }),
     parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
   })
 }
@@ -300,14 +311,56 @@ export function boardsUsages(
   }
 }
 
-/** 材料のサイズを選ぶ（木取りの画面）。3×6・4×8 は寸法が決まり木目は長手方向。自由入力は短辺・長辺・木目。0 以下の寸法は断る */
+/**
+ * 重ね切りの相手の材料（第2.0版）：重ね切りがオンで canStack のフラッシュの、表面材の2つの材料をつないだ組を、
+ * たどれるだけたどった材料（例：A＋B と B＋C なら A・B・C）。仕事にある材料だけ。boardIds 自身を含む（材料の保存の並び）
+ */
+function stackPartners(job: Job, boardIds: readonly string[]): string[] {
+  const exists = new Set(job.boards.map((b) => b.id))
+  const pairs = job.flushes
+    .filter((f) => f.stack === true && canStack(f) && f.faces.every((x) => exists.has(x.boardId)))
+    .map((f) => [f.faces[0].boardId, f.faces[1].boardId])
+  const found = new Set(boardIds.filter((id) => exists.has(id)))
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const [a, b] of pairs) {
+      if (found.has(a) !== found.has(b)) {
+        found.add(a)
+        found.add(b)
+        grew = true
+      }
+    }
+  }
+  return job.boards.map((b) => b.id).filter((id) => found.has(id))
+}
+
+/** 材料たちを同じサイズにする（1回の操作）。無い材料・0 以下の寸法は断る */
+function applySize(job: Job, boardIds: readonly string[], size: BoardSheet): OpResult {
+  let next = job
+  for (const id of boardIds) {
+    const r = updateBoard(next, id, { sizeKind: size.sizeKind, width: size.width, length: size.length, grain: size.grain })
+    if (!r.ok) return r
+    next = r.job
+  }
+  return ok(next)
+}
+
+/**
+ * 材料のサイズを選ぶ（木取りの画面）。3×6・4×8 は寸法が決まり木目は長手方向。自由入力は短辺・長辺・木目。0 以下の寸法は断る。
+ * 重ね切りの組の材料なら、相手の材料も同じサイズにする（第2.0版。未決事項 36）
+ */
 export function setBoardSize(job: Job, boardId: string, size: BoardSheet): OpResult {
-  return updateBoard(job, boardId, {
-    sizeKind: size.sizeKind,
-    width: size.width,
-    length: size.length,
-    grain: size.grain,
-  })
+  if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
+  return applySize(job, stackPartners(job, [boardId]), size)
+}
+
+/**
+ * いくつかの材料を1回の操作で同じサイズにする（第2.0版。組の行のサイズの選択）。重ね切りの相手の材料もそろえる。
+ * 1つも無い・無い材料があれば断る
+ */
+export function setBoardsSize(job: Job, boardIds: readonly string[], size: BoardSheet): OpResult {
+  if (boardIds.length === 0 || boardIds.some((id) => !job.boards.some((b) => b.id === id))) return fail('材料が見つかりません')
+  return applySize(job, stackPartners(job, boardIds), size)
 }
 
 // ---------- 逃げ ----------
@@ -388,11 +441,15 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
     seen.add(b.id)
     if (!(Number.isInteger(face.count) && face.count >= 1)) return '表面材の枚数は 1 以上の整数を入れてください'
   }
+  if (f.stack === true && !canStack(f)) return '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
   return null
 }
 
+/** 前後の空白を外し、重ね切り（第2.0版）は true のときだけ持つ */
 function cleanFlush(f: FlushDraft): FlushDraft {
-  return { name: f.name.trim(), core: f.core, faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+  const out: FlushDraft = { name: f.name.trim(), core: f.core, faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+  if (f.stack === true) out.stack = true
+  return out
 }
 
 /** フラッシュを足す（一覧の最後）。名前が重なる・値がおかしければ断る */
@@ -549,7 +606,15 @@ export function setPartChecks(job: Job, partId: string, patch: Partial<PartCheck
 /** チェックを付け外しする1枚：固定した1枚、または画面に出ている計算した1枚（layout は表示中の MaterialResult.sheets[i]） */
 export type SheetTarget =
   | { kind: 'frozen'; sheetId: string }
-  | { kind: 'computed'; boardId: string; mode: 'vertical' | 'horizontal'; layout: SheetLayout }
+  | {
+      kind: 'computed'
+      /** 材料。重ね切りの組の1枚は1つ目の材料（MaterialResult.stack.boardIds[0]） */
+      boardId: string
+      /** 重ね切りの組の1枚（第2.0版）なら2つ目の材料（MaterialResult.stack.boardIds[1]） */
+      stackWith?: string
+      mode: 'vertical' | 'horizontal'
+      layout: SheetLayout
+    }
 
 /**
  * 1枚ごとのチェック（1片ずつ）を付け外しする。
@@ -567,11 +632,14 @@ export function setPieceCheck(
   id: string = newId('sheet'),
 ): OpResult {
   if (target.kind === 'computed') {
-    const { boardId, mode, layout } = target
+    const { boardId, stackWith, mode, layout } = target
     if (!layout.placements.some((p) => p.pieceId === pieceId)) return fail('部材が見つかりません')
     if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
+    if (stackWith !== undefined && (stackWith === boardId || !job.boards.some((b) => b.id === stackWith))) {
+      return fail('材料が見つかりません')
+    }
     if (!done) return ok(job)
-    const sheet = freezeSheet(job, boardId, mode, layout, id, now)
+    const sheet = freezeSheet(job, boardId, mode, layout, id, now, stackWith)
     sheet.checked = [pieceId]
     if (sheet.layout.placements.length === 1) sheet.completedAt = now.toISOString()
     return ok({ ...job, frozenSheets: [...job.frozenSheets, sheet] })

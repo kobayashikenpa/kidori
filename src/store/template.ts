@@ -19,6 +19,8 @@ export interface FlushSpec {
   name: string
   core: number
   faces: { material: string; thickness: number; count: number }[]
+  /** 表面材を重ねて切る（第2.0版）。オンのときだけ true */
+  stack?: true
 }
 
 export interface SettingsTemplate {
@@ -54,14 +56,18 @@ export function templateOf(job: Job): SettingsTemplate {
       if (isBuiltInBoard(b, job)) m.builtIn = true
       return m
     }),
-    flushes: job.flushes.map((f) => ({
-      name: f.name,
-      core: f.core,
-      faces: f.faces.flatMap((x) => {
-        const b = job.boards.find((y) => y.id === x.boardId)
-        return b ? [{ material: b.material, thickness: b.thickness, count: x.count }] : []
-      }),
-    })),
+    flushes: job.flushes.map((f) => {
+      const spec: FlushSpec = {
+        name: f.name,
+        core: f.core,
+        faces: f.faces.flatMap((x) => {
+          const b = job.boards.find((y) => y.id === x.boardId)
+          return b ? [{ material: b.material, thickness: b.thickness, count: x.count }] : []
+        }),
+      }
+      if (f.stack === true) spec.stack = true
+      return spec
+    }),
   }
 }
 
@@ -86,6 +92,7 @@ function normalized(t: SettingsTemplate) {
       name: f.name,
       core: f.core,
       faces: f.faces.map((x) => ({ material: x.material, thickness: x.thickness, count: x.count })),
+      stack: f.stack === true,
     })),
   }
 }
