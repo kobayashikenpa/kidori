@@ -45,24 +45,23 @@ export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pi
   }
 }
 
-/** 仕事の材料をすべて指定のサイズ（木目は長手方向）にした写し。部材・設定は元の仕事のものを共有する（packJob は書き換えない） */
+/**
+ * 仕事の「サイズを選ぶ」材料をすべて指定のサイズ（木目は長手方向）にした写し。部材・設定は元の仕事のものを共有する（packJob は書き換えない）。
+ * 手持ちで木取りする材料（stockOn）はそのまま残す。サイズを替えると重ね切りの組（手持ちのサイズで決まる）が今の packJob と変わり、
+ * 比べる材料の並び・組が画面の結果と合わなくなるため（手持ちの材料の比較は画面では使わない）
+ */
 function withAllBoards(job: Job, kind: StandardSize): Job {
   const [width, length] = BOARD_SIZES[kind]
   return {
     ...job,
-    boards: job.boards.map((b) => {
-      // 「サイズを選ぶ」ときの比較なので、手持ちは使わない（第2.2版。行は写しに残ってもよい）
-      const c: Board = { ...b, sizeKind: kind, width, length, grain: 'long' }
-      delete c.stockOn
-      return c
-    }),
+    boards: job.boards.map((b): Board => (b.stockOn ? b : { ...b, sizeKind: kind, width, length, grain: 'long' })),
   }
 }
 
 /**
  * 材料ごとに 3×6 と 4×8 で木取りした結果を返す。材料の並びと対象は packJob(job, dims).materials と同じ
  * （片か入らない部材のある材料だけ）。切り方・刃厚・端切り・切り代は今の設定のまま。
- * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。手持ちの材料も手持ちを使わずに比べる（第2.2版）。
+ * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。手持ちで木取りする材料は手持ちのまま（第2.2版。サイズは替えない）。
  * 重ね切り（第2.0版。architecture.md 12.7）：今の仕事で重ねている組だけを重ねる（今の stackPlan を渡す。
  * すべての材料を同じサイズにすると組は必ずそろうため）。組にも比較が出る（boardId が stackKey）
  */

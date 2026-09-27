@@ -1212,7 +1212,7 @@ src/engine/
   packing/pieces.ts      Piece.shape（手持ちの大きさごとに向きを決め直すため）・Piece.twin（組の片の b の id）
   packing/guillotine.ts  1枚ごとに大きさ（frame）を持つ。新しい1枚は「入る一番小さい手持ち」を選ぶ
   packing/index.ts       手持ちで木取り・組 → 材料の順に手持ちを使う・組に置けなかった片を a・b に回す
-  packing/sizes.ts       比較の写しは手持ちを使わない（stockOn を外す）
+  packing/sizes.ts       比較の写しでも手持ちの材料はそのまま（サイズを替えない）
   hints/saving.ts        手持ちが足りない材料はお知らせを試さない
   hints/shortage.ts      stockShortage（足りないときの解決策）
   progress/frozen.ts     freezeSheet の木目を layout.sheet から・materialSummaries の bySize・stockUsage
@@ -1324,7 +1324,7 @@ export function stockShortage(job: Job, dims: DimensionResult): StockShortage[]
 
 ### 14.9 比較・まとめ（`packing/sizes.ts`・`progress/frozen.ts`）
 
-- `compareStandardSizes`：写しの材料は `stockOn` を外す（「サイズを選ぶ」ときの比較）。手持ちの材料の比較は画面に出さない
+- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない
 - `MaterialSummary.bySize: { label: string; count: number }[]`：その行の1枚（固定した1枚（切り終わりを除く）＋計算した1枚）を大きさごとに数えたもの。並びは大きい面積から（例：`4×8 ×2`・`3×6 ×1`）。サイズを選んだ材料でも1つ出す（画面は手持ちの材料のときだけ出す）
 - `stockUsage(job, result): { boardId; rows: { stockId; label; count; used; left }[] }[]`：`stockOn` の材料ごとに、手持ちの行ごとの 使った枚数（固定した1枚（切り終わりを含む）＋組の1枚＋計算した1枚）と残り（count − used。0 未満にしない）。手持ちの編集欄に出す
 

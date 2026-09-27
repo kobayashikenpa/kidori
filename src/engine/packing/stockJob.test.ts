@@ -120,12 +120,12 @@ describe('packJob：手持ちで木取り', () => {
     ])
   })
 
-  it('3×6 ×2 のときもサイズの比較は 3×6 3枚・4×8 2枚（比較は手持ちを使わない）', () => {
+  it('サイズの比較でも手持ちの材料は手持ちのまま（3×6 ×2 なら両方とも 2枚・入らない 1。画面には出さない）', () => {
     const job = stocked([['3×6', 2]])
     const c = compareStandardSizes(job, computeDimensions(job)).find((x) => x.boardId === LUMBER_18_ID)!
     expect(c.options.map((o) => [o.kind, o.sheetCount, o.unplacedCount])).toEqual([
-      ['saburoku', 3, 0],
-      ['shihachi', 2, 0],
+      ['saburoku', 2, 1],
+      ['shihachi', 2, 1],
     ])
   })
 
