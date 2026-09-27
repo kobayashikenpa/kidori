@@ -8,9 +8,15 @@ import { fmt } from '../format'
 
 interface Props {
   sheet: SheetLayout
+  /** 材料の中の通しの番号（固定した1枚の写しの index は使わない） */
+  no: number
   grain: BoardGrain
   /** 部材ごとの色の番号（0〜5） */
   colorOf: (partId: string) => number
+  /** チェックした片の pieceId（グレーにして「済」の印を付ける） */
+  checked?: readonly string[]
+  /** 残りの材料（まだ切っていない部材の入っている長方形）。太い点線の枠で示す */
+  remaining?: readonly Rect[]
 }
 
 /** 部材の色の数（index.css の --pc0〜--pc5） */
@@ -74,7 +80,7 @@ function LabelText({ r, label, className }: { r: Rect; label: Label; className: 
   )
 }
 
-export function SheetDiagram({ sheet, grain, colorOf }: Props) {
+export function SheetDiagram({ sheet, no, grain, colorOf, checked = [], remaining = [] }: Props) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const landscape = sheet.orientation === 'landscape'
   // 図の横（W）と縦（L）。横長なら長辺が横
@@ -94,7 +100,7 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
       className={landscape ? 'diagram landscape' : 'diagram'}
       viewBox={`0 0 ${W} ${L}`}
       role="img"
-      aria-label={`${sheet.index}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
+      aria-label={`${no}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
     >
       <defs>
         <pattern
@@ -128,7 +134,7 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
         return (
           <rect
             key={p.pieceId}
-            className={`dg-piece pc${colorOf(p.partId) % PIECE_COLORS}`}
+            className={checked.includes(p.pieceId) ? 'dg-piece done' : `dg-piece pc${colorOf(p.partId) % PIECE_COLORS}`}
             x={r.x}
             y={r.y}
             width={r.w}
@@ -145,14 +151,20 @@ export function SheetDiagram({ sheet, grain, colorOf }: Props) {
         return <rect key={i} className="dg-trim" x={r.x} y={r.y} width={r.w} height={r.h} />
       })}
       <rect className="dg-outline" x={0} y={0} width={W} height={L} />
+      {remaining.map((q, i) => {
+        const r = flipY(q, L)
+        return <rect key={i} className="dg-remain" x={r.x} y={r.y} width={r.w} height={r.h} />
+      })}
 
       {sheet.placements.map((p, i) => {
         const r = flipY(p, L)
-        const label = fitLabel(r.w, r.h, [[p.name, p.sizeLabel], [p.name]], maxFont, minFont)
+        const done = checked.includes(p.pieceId)
+        const name = done ? `済 ${p.name}` : p.name
+        const label = fitLabel(r.w, r.h, done ? [[name, p.sizeLabel], [name], ['済']] : [[name, p.sizeLabel], [name]], maxFont, minFont)
         return (
           label && (
             <g key={p.pieceId} clipPath={`url(#clip-${uid}-${i})`}>
-              <LabelText r={r} label={label} className="dg-text" />
+              <LabelText r={r} label={label} className={done ? 'dg-text done' : 'dg-text'} />
             </g>
           )
         )

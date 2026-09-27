@@ -10,6 +10,11 @@ import {
   type Board,
   type BoardSizeKind,
   type CutMode,
+  type CutStep,
+  type FrozenSheet,
+  type Placement,
+  type Rect,
+  type SheetLayout,
   type Flush,
   type Job,
   type Nige,
@@ -310,6 +315,125 @@ function sanitizePart(
   }
 }
 
+// ---------- 固定した1枚（第1.8版。architecture.md 11.8） ----------
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isStr = (v: unknown): v is string => typeof v === 'string'
+const isDateText = (x: unknown): x is string => typeof x === 'string' && !Number.isNaN(Date.parse(x))
+
+/** 長方形。形が壊れていれば null */
+function readRect(v: unknown): Rect | null {
+  if (!isRecord(v) || !isNum(v.x) || !isNum(v.y) || !isNum(v.w) || !isNum(v.h)) return null
+  return { x: v.x, y: v.y, w: v.w, h: v.h }
+}
+
+/** 長方形の配列。1つでも壊れていれば null */
+function readRects(v: unknown): Rect[] | null {
+  if (!Array.isArray(v)) return null
+  const out = v.map(readRect)
+  return out.every((r): r is Rect => r !== null) ? out : null
+}
+
+function readPlacement(v: unknown): Placement | null {
+  const r = readRect(v)
+  if (!r || !isRecord(v) || !isId(v.pieceId) || !isId(v.partId) || !isStr(v.name) || !isStr(v.sizeLabel)) return null
+  return { ...r, pieceId: v.pieceId, partId: v.partId, name: v.name, rotated: v.rotated === true, sizeLabel: v.sizeLabel }
+}
+
+const CUT_KINDS: readonly CutStep['kind'][] = ['trim', 'strip', 'crosscut', 'rip']
+
+function readCut(v: unknown): CutStep | null {
+  if (!isRecord(v)) return null
+  const within = readRect(v.within)
+  const dirOk = v.direction === 'vertical' || v.direction === 'horizontal'
+  const kindOk = typeof v.kind === 'string' && (CUT_KINDS as readonly string[]).includes(v.kind)
+  if (!within || !dirOk || !kindOk || !isNum(v.no) || !isNum(v.at) || !isStr(v.label)) return null
+  return {
+    no: v.no,
+    direction: v.direction as CutStep['direction'],
+    at: v.at,
+    within,
+    kind: v.kind as CutStep['kind'],
+    label: v.label,
+  }
+}
+
+/** 固定した1枚の写し。数（幅・長さ・長方形）が数でない・片が無い・片の id が重なるなど、形が壊れていれば null */
+function readLayout(v: unknown): SheetLayout | null {
+  if (!isRecord(v)) return null
+  if (!isNum(v.boardWidth) || !isNum(v.boardLength) || v.boardWidth <= 0 || v.boardLength <= 0) return null
+  if (v.orientation !== 'portrait' && v.orientation !== 'landscape') return null
+  const usable = readRect(v.usable)
+  const trims = readRects(v.trims)
+  const scraps = readRects(v.scraps)
+  if (!usable || !trims || !scraps || !Array.isArray(v.placements) || !Array.isArray(v.cuts)) return null
+  const placements = v.placements.map(readPlacement)
+  if (placements.length === 0 || !placements.every((p): p is Placement => p !== null)) return null
+  if (new Set(placements.map((p) => p.pieceId)).size !== placements.length) return null
+  const cuts = v.cuts.map(readCut)
+  if (!cuts.every((c): c is CutStep => c !== null)) return null
+  if (!isNum(v.usedArea) || !isNum(v.yieldRate)) return null
+  return {
+    index: isNum(v.index) ? v.index : 1,
+    boardWidth: v.boardWidth,
+    boardLength: v.boardLength,
+    orientation: v.orientation,
+    trims,
+    usable,
+    placements,
+    cuts,
+    scraps,
+    usedArea: v.usedArea,
+    yieldRate: v.yieldRate,
+  }
+}
+
+/**
+ * 固定した1枚の一覧。無ければ []（直した数に数えない）。読めない1枚・id の重なる1枚・チェックが空になった1枚は外す。
+ * 写しに無い・重なるチェックは外す。completedAt は全部チェックなら残し（無ければ frozenAt）、そうでなければ消す。
+ * 材料が削除されていても外さない（写しで表示する）
+ */
+function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): FrozenSheet[] {
+  if (v === undefined) return []
+  if (!Array.isArray(v)) {
+    fx.count++
+    return []
+  }
+  const out: FrozenSheet[] = []
+  for (const raw of v) {
+    const layout = isRecord(raw) ? readLayout(raw.layout) : null
+    const modeOk = isRecord(raw) && (raw.mode === 'vertical' || raw.mode === 'horizontal')
+    if (!isRecord(raw) || !layout || !modeOk || !isId(raw.id) || !isId(raw.boardId) || out.some((f) => f.id === raw.id)) {
+      fx.count++
+      continue
+    }
+    const ids = new Set(layout.placements.map((p) => p.pieceId))
+    const rawChecked: unknown[] = Array.isArray(raw.checked) ? raw.checked : []
+    const checked = [...new Set(rawChecked.filter((x): x is string => typeof x === 'string' && ids.has(x)))]
+    if (!Array.isArray(raw.checked) || checked.length !== rawChecked.length || checked.length === 0) fx.count++
+    if (checked.length === 0) continue
+    const frozenAt = pick(raw.frozenAt, isDateText, fallbackDate, fx)
+    const sheet: FrozenSheet = {
+      id: raw.id,
+      boardId: raw.boardId,
+      material: pick(raw.material, isStr, '', fx),
+      thickness: pick(raw.thickness, isPositive, 1, fx),
+      grain: pick(raw.grain, (x): x is 'long' | 'short' => x === 'long' || x === 'short', 'long', fx),
+      mode: raw.mode as FrozenSheet['mode'],
+      kerf: pick(raw.kerf, isNonNegative, DEFAULT_SETTINGS.kerf, fx),
+      trim: pick(raw.trim, isNonNegative, DEFAULT_SETTINGS.trim, fx),
+      layout,
+      checked,
+      frozenAt,
+    }
+    const complete = checked.length === ids.size
+    if (complete) sheet.completedAt = pick(raw.completedAt, isDateText, frozenAt, fx)
+    else if (raw.completedAt !== undefined) fx.count++
+    out.push(sheet)
+  }
+  return out
+}
+
 /** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
 function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
@@ -353,6 +477,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     boards,
     flushes,
     parts,
+    frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }

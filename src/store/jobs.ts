@@ -1,6 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
-import type { CutChecklistRow } from '../engine/checklist'
 import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
@@ -12,6 +11,7 @@ import {
   remapBoardIds,
 } from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
+import { freezeSheet } from '../engine/progress/frozen'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -24,6 +24,7 @@ import {
   type Part,
   type PartChecks,
   type Settings,
+  type SheetLayout,
 } from '../engine/types'
 import { defaultTemplate, type SettingsTemplate } from './template'
 
@@ -79,6 +80,7 @@ export function createJob(
     boards,
     flushes,
     parts: [],
+    frozenSheets: [],
     createdAt: t,
     updatedAt: t,
   }
@@ -155,6 +157,8 @@ export function copyJob(
     boards,
     flushes,
     parts,
+    // 固定した1枚（切った記録）は写さない（第1.8版。未決事項 32）
+    frozenSheets: [],
     createdAt: t,
     updatedAt: t,
   }
@@ -431,18 +435,6 @@ export function flushesUsages(job: Job, flushIds: readonly string[]): { parts: s
   return { parts: partsUsingFlushes(job, flushIds), thickness: partsUsingBoardThicknesses(job, flushIds) }
 }
 
-/** フラッシュの部材の、表面材ごとの木取りの完了を変える。フラッシュの部材でない・表面材でない材料は断る */
-export function setFlushCutCheck(job: Job, partId: string, boardId: string, done: boolean): OpResult {
-  const part = job.parts.find((p) => p.id === partId)
-  if (!part) return fail('部材が見つかりません')
-  const flush = job.flushes.find((f) => f.id === part.flushId)
-  if (!flush || !flush.faces.some((x) => x.boardId === boardId)) return fail('フラッシュの表面材が見つかりません')
-  const cutByBoard = { ...part.checks.cutByBoard }
-  if (done) cutByBoard[boardId] = true
-  else delete cutByBoard[boardId]
-  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, cutByBoard } } : p)) })
-}
-
 // ---------- 部材 ----------
 
 /** 新しい部材の下書き */
@@ -552,16 +544,66 @@ export function setPartChecks(job: Job, partId: string, patch: Partial<PartCheck
   })
 }
 
+// ---------- 切りながら進める木取り（第1.8版。architecture.md 11.4） ----------
+
+/** チェックを付け外しする1枚：固定した1枚、または画面に出ている計算した1枚（layout は表示中の MaterialResult.sheets[i]） */
+export type SheetTarget =
+  | { kind: 'frozen'; sheetId: string }
+  | { kind: 'computed'; boardId: string; mode: 'vertical' | 'horizontal'; layout: SheetLayout }
+
 /**
- * 切り出しのチェックリスト（木取り画面。第1.6版）の行の完了を変える。
- * ふつうの部材は checks.cut（setPartChecks）、フラッシュの表面材は checks.cutByBoard（setFlushCutCheck）
+ * 1枚ごとのチェック（1片ずつ）を付け外しする。
+ * - 計算した1枚にチェック：その1枚を写して固定し（checked は その片だけ）、固定した1枚の最後に足す。外す（done=false）は何もしない
+ * - 固定した1枚：checked に足す／外す。すべての片にチェックが付いたら completedAt（切り終わり）、1つでも外したら消す。
+ *   チェックがすべて外れたら、その1枚を消す（固定を外す。片は計算に戻る）
+ * - 写しに無い pieceId・無い1枚・無い材料は断る
  */
-export function setCutChecklistRow(
+export function setPieceCheck(
   job: Job,
-  row: Pick<CutChecklistRow, 'kind' | 'partId' | 'boardId'>,
+  target: SheetTarget,
+  pieceId: string,
   done: boolean,
+  now: Date = new Date(),
+  id: string = newId('sheet'),
 ): OpResult {
-  return row.kind === 'flushFace'
-    ? setFlushCutCheck(job, row.partId, row.boardId, done)
-    : setPartChecks(job, row.partId, { cut: done })
+  if (target.kind === 'computed') {
+    const { boardId, mode, layout } = target
+    if (!layout.placements.some((p) => p.pieceId === pieceId)) return fail('部材が見つかりません')
+    if (!job.boards.some((b) => b.id === boardId)) return fail('材料が見つかりません')
+    if (!done) return ok(job)
+    const sheet = freezeSheet(job, boardId, mode, layout, id, now)
+    sheet.checked = [pieceId]
+    if (sheet.layout.placements.length === 1) sheet.completedAt = now.toISOString()
+    return ok({ ...job, frozenSheets: [...job.frozenSheets, sheet] })
+  }
+
+  const sheet = job.frozenSheets.find((f) => f.id === target.sheetId)
+  if (!sheet) return fail('固定した1枚が見つかりません')
+  if (!sheet.layout.placements.some((p) => p.pieceId === pieceId)) return fail('部材が見つかりません')
+  const has = sheet.checked.includes(pieceId)
+  if (done === has) return ok(job)
+  const checked = done ? [...sheet.checked, pieceId] : sheet.checked.filter((x) => x !== pieceId)
+  if (checked.length === 0) return ok({ ...job, frozenSheets: job.frozenSheets.filter((f) => f.id !== sheet.id) })
+  const { completedAt: _completedAt, ...rest } = sheet
+  const all = sheet.layout.placements.every((p) => checked.includes(p.pieceId))
+  const next = all ? { ...rest, checked, completedAt: sheet.completedAt ?? now.toISOString() } : { ...rest, checked }
+  return ok({ ...job, frozenSheets: job.frozenSheets.map((f) => (f.id === sheet.id ? next : f)) })
+}
+
+/**
+ * 以前の版で付けた「木取り済み」（部材ごと）を外して、計算に戻す（第1.8版。architecture.md 11.9）。
+ * ふつうの部材は checks.cut = false、フラッシュの部材は checks.cutByBoard[boardId] を消す（boardId は PackingResult.done の boardId）
+ */
+export function clearLegacyCut(job: Job, partId: string, boardId: string | null): OpResult {
+  const part = job.parts.find((p) => p.id === partId)
+  if (!part) return fail('部材が見つかりません')
+  let checks: PartChecks
+  if (part.flushId !== undefined && boardId !== null) {
+    const cutByBoard = { ...part.checks.cutByBoard }
+    delete cutByBoard[boardId]
+    checks = { ...part.checks, cutByBoard }
+  } else {
+    checks = { ...part.checks, cut: false }
+  }
+  return ok({ ...job, parts: job.parts.map((p) => (p.id === partId ? { ...p, checks } : p)) })
 }

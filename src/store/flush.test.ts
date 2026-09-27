@@ -15,15 +15,23 @@ import {
   createJob,
   addPart,
   boardsUsages,
+  clearLegacyCut,
   flushesUsages,
   newPart,
   removeBoards,
   removeFlushes,
-  setFlushCutCheck,
   updateFlush,
   updatePart,
   type OpResult,
 } from './jobs'
+
+/** 以前の版で付けた、フラッシュの部材の表面材ごとの木取り済み（cutByBoard）を付ける */
+function withCutByBoard(job: Job, partId: string, boardId: string): Job {
+  return {
+    ...job,
+    parts: job.parts.map((p) => (p.id === partId ? { ...p, checks: { ...p.checks, cutByBoard: { ...p.checks.cutByBoard, [boardId]: true } } } : p)),
+  }
+}
 
 function unwrap(r: OpResult): Job {
   if (!r.ok) throw new Error(r.message)
@@ -103,7 +111,7 @@ describe('フラッシュの削除', () => {
   })
 
   it('削除すると使っていた部材は材料が未設定になり、表面材の完了も消える', () => {
-    const base = unwrap(setFlushCutCheck(flushJob(), 'part-tenban', MELAMINE_1_ID, true))
+    const base = withCutByBoard(flushJob(), 'part-tenban', MELAMINE_1_ID)
     const job = unwrap(removeFlushes(base, [FLUSH_25_ID]))
     expect(job.flushes).toEqual([])
     const p = job.parts[0]
@@ -132,7 +140,7 @@ describe('部材の材料とフラッシュ', () => {
     base.parts[0] = { ...base.parts[0], flushId: undefined, boardId: LAUAN_4_ID, checks: { finished: false, cut: true } }
     const toFlush = unwrap(updatePart(base, 'part-tenban', { flushId: FLUSH_25_ID }))
     expect(toFlush.parts[0].checks.cut).toBe(false)
-    const checked = unwrap(setFlushCutCheck(toFlush, 'part-tenban', MELAMINE_1_ID, true))
+    const checked = withCutByBoard(toFlush, 'part-tenban', MELAMINE_1_ID)
     expect(checked.parts[0].checks.cutByBoard).toEqual({ [MELAMINE_1_ID]: true })
     const back = unwrap(updatePart(checked, 'part-tenban', { flushId: undefined, boardId: LAUAN_4_ID }))
     expect('cutByBoard' in back.parts[0].checks).toBe(false)
@@ -156,19 +164,18 @@ describe('部材の材料とフラッシュ', () => {
   })
 })
 
-describe('setFlushCutCheck（部材×表面材の完了）', () => {
-  it('メラミン1 を完了にすると木取りから メラミン1 だけ除かれる。外すと戻る', () => {
-    const job = unwrap(setFlushCutCheck(flushJob(), 'part-tenban', MELAMINE_1_ID, true))
-    expect(job.parts[0].checks.cutByBoard).toEqual({ [MELAMINE_1_ID]: true })
+describe('以前の表面材ごとの木取り済み（cutByBoard）と clearLegacyCut', () => {
+  it('メラミン1 が木取り済みなら木取りから メラミン1 だけ除かれる。clearLegacyCut で外すと戻る', () => {
+    const job = withCutByBoard(flushJob(), 'part-tenban', MELAMINE_1_ID)
     const r = expandPieces(job, computeDimensions(job))
     expect(r.groups.map((g) => [g.board.id, g.pieces.length])).toEqual([[LAUAN_4_ID, 4]])
-    const back = unwrap(setFlushCutCheck(job, 'part-tenban', MELAMINE_1_ID, false))
+    const back = unwrap(clearLegacyCut(job, 'part-tenban', MELAMINE_1_ID))
     expect(back.parts[0].checks.cutByBoard).toEqual({})
-  })
-
-  it('フラッシュでない部材・表面材でない材料は断る', () => {
-    expect(setFlushCutCheck(flushJob(), 'なし', MELAMINE_1_ID, true).ok).toBe(false)
-    expect(setFlushCutCheck(flushJob(), 'part-tenban', 'なし', true).ok).toBe(false)
+    const r2 = expandPieces(back, computeDimensions(back))
+    expect(r2.groups.map((g) => [g.board.id, g.pieces.length])).toEqual([
+      [MELAMINE_1_ID, 4],
+      [LAUAN_4_ID, 4],
+    ])
   })
 })
 
@@ -179,7 +186,7 @@ function memoryStorage(init: Record<string, string> = {}): KeyValueStorage {
 
 /** 天板の メラミン1 を完了にし、式でフラッシュの厚みを使う部材も入れた仕事 */
 function richJob(): Job {
-  let job = unwrap(setFlushCutCheck(flushJob(), 'part-tenban', MELAMINE_1_ID, true))
+  let job = withCutByBoard(flushJob(), 'part-tenban', MELAMINE_1_ID)
   job = unwrap(addPart(job, newPart({ id: 'p-maku', name: '幕板', boardId: LAUAN_4_ID, expr: { W: '900', H: `{t:${FLUSH_25_ID}} * 2`, D: '4' } })))
   return job
 }

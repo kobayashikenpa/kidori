@@ -1,4 +1,5 @@
 // 部材を1枚ずつの「片」に展開し、板ごとに分ける。板の木目に部材の木目を合わせて向き（x・y）を決める
+import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
 import type { Axis, Board, DimensionResult, Job, PackingResult, Part, PartDimensions, PartGrain } from '../types'
 import { usableSides } from './sheet'
@@ -74,7 +75,9 @@ function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[
 
 /**
  * 部材を片に展開する。フラッシュの部材（第1.5版）は表面材ごとにその材料の片にする（芯材は入れない）。
- * 片の id の連番は部材ごとの通し番号（表面材をまたいで続ける）
+ * 片の id の連番は部材ごとの通し番号（表面材をまたいで続ける。固定した片のぶんも番号を取っておく）。
+ * 固定した1枚（第1.8版）の片の数は、部材（表面材）の枚数から数だけで引く（寸法は見ない。0 未満にはしない）。
+ * 引いて 0 になった部材（表面材）は片にせず、done にも skipped にも入れない
  */
 export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
@@ -82,6 +85,7 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   const byBoard = new Map<string, BoardPieces>()
   const skipped: ExpandResult['skipped'] = []
   const done: ExpandResult['done'] = []
+  const frozen = frozenDemand(job)
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
@@ -93,18 +97,31 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       continue
     }
     // 木取り済みの部材（表面材）は、ほかの判定より先に除く（エラーがあっても直さずに済むように。仕様書 8）
-    const rest: { board: Board; quantity: number }[] = []
+    // start：片の id の連番の始まり。表面材ごとに、固定した片を引く前の枚数ぶん取っておく
+    // （ある表面材の固定で、ほかの表面材の片の id がずれないように。以前の木取り済みの表面材は今までどおり取らない）
+    const rest: { board: Board; quantity: number; start: number }[] = []
+    let offset = 0
     let missing = false
+    /** 以前の木取り済み、または固定した1枚で全部切った表面材の数 */
+    let settled = 0
     for (const t of targets ?? []) {
       if (t.done) {
         done.push({ partId: d.partId, name: d.name, quantity: t.quantity, boardId: t.boardId })
+        settled++
+        continue
+      }
+      const quantity = Math.max(0, t.quantity - (frozen.get(demandKey(d.partId, t.boardId)) ?? 0))
+      const start = offset
+      offset += t.quantity
+      if (quantity === 0) {
+        settled++
         continue
       }
       const board = boardById.get(t.boardId)
-      if (board) rest.push({ board, quantity: t.quantity })
+      if (board) rest.push({ board, quantity, start })
       else missing = true
     }
-    if (targets !== null && targets.length > 0 && targets.every((t) => t.done)) continue
+    if (targets !== null && targets.length > 0 && settled === targets.length) continue
     if (rest.length === 0 || missing) {
       skipped.push({ partId: d.partId, name: d.name, reason: 'noBoard' })
       continue
@@ -128,8 +145,7 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
     const s1 = d.cutSize[a1]
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
     const grain = part?.grain ?? 'any'
-    let seq = 0
-    for (const { board, quantity } of rest) {
+    for (const { board, quantity, start } of rest) {
       const orientations = orientationsOn(board, s0, s1, a0, a1, grain, job)
       let g = byBoard.get(board.id)
       if (!g) {
@@ -138,12 +154,10 @@ export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
       }
       if (orientations.length === 0) {
         g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
-        seq += quantity
         continue
       }
       for (let i = 1; i <= quantity; i++) {
-        seq++
-        g.pieces.push({ pieceId: `${d.partId}#${seq}`, partId: d.partId, name: d.name, sizeLabel, orientations })
+        g.pieces.push({ pieceId: `${d.partId}#${start + i}`, partId: d.partId, name: d.name, sizeLabel, orientations })
       }
     }
   }
