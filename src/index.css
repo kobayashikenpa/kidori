@@ -697,9 +697,6 @@ select.input {
   line-clamp: 2;
   overflow: hidden;
 }
-.expr-status-text.ok {
-  color: var(--muted);
-}
 .pad {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -709,17 +706,43 @@ select.input {
   flex-direction: column;
   gap: 8px;
 }
-.pad-refs {
+/* 部材・厚み・調整寸法を1つの欄にまとめ、タブで切り替える。高さは決めておき、多いときは中でスクロール（下の数字のボタンがずれない） */
+.pad-refbox {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* 部材が多くても数字のボタンまで画面に入るよう、部材名は2段ほどにする（3段目を少しのぞかせ、多いときは中でスクロール） */
-  max-height: 104px;
+}
+.pad-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.pad-tab {
+  appearance: none;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--sunk);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pad-tab.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pad-refs {
+  /* 部材名は2段ほど（3段目を少しのぞかせる） */
+  height: 104px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.pad-parts,
-.pad-axes {
+.pad-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
@@ -762,15 +785,6 @@ select.input {
 }
 .pad-ref .ref-val {
   font-size: 11px;
-  color: var(--muted);
-}
-.pad-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pad-title {
-  font-size: 12px;
   color: var(--muted);
 }
 .pad-chips {
