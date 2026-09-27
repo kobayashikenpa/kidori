@@ -30,7 +30,7 @@ const same = (a: Rect, b: Rect) =>
  * 最後に残った長方形の中に、配置した片がそのままの形で1つずつあることを確かめる。
  * 刃厚は、測った側（右端・上端から◯mm の◯mm の側）の反対側で消える。
  * 縦に切るときは線の左、「上端から」の横の切断は線の下。端切りの幅は刃厚を含むので、端切りでは刃厚を引かない
- * （縦切り優先：右の長手、横切り優先：上の長手 → 右の妻手）
+ * （縦切り優先：右の長手、横切り優先：下の長手 → 右の妻手）
  */
 function expectGuillotine(cuts: CutStep[], placements: Placement[], whole: Rect, kerf: number) {
   let rects: Rect[] = [whole]
@@ -50,7 +50,7 @@ function expectGuillotine(cuts: CutStep[], placements: Placement[], whole: Rect,
       if (leftEnd > r.x) next.push({ x: r.x, y: r.y, w: leftEnd - r.x, h: r.h })
     } else {
       // 横の切断は、上側（線より上）が測った側。刃厚は線の下で消える
-      expect(c.label).toMatch(c.kind === 'trim' ? /^端切り：上の長手/ : /^上端から /)
+      expect(c.label).toMatch(c.kind === 'trim' ? /^端切り：下の長手/ : /^上端から /)
       expect(c.at).toBeGreaterThan(r.y)
       expect(c.at).toBeLessThan(r.y + r.h)
       next.push({ x: r.x, y: c.at, w: r.w, h: r.y + r.h - c.at })
@@ -105,35 +105,42 @@ describe('buildCuts（切る順番）', () => {
     }
   })
 
-  it('見本・横切り優先の1枚目：端切り（上の長手 → 右の妻手）→ 右端から1810mmの縦 → 上端から410mmの横 ×2', () => {
+  it('見本・横切り優先の1枚目：端切り（下の長手 → 右の妻手）→ 右端から1810mmの縦 → 上端から410mmの横 ×2', () => {
     const [s1] = cutsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
     expect(s1.cuts.map((c) => [c.no, c.kind, c.direction, c.at, c.label])).toEqual([
-      [1, 'trim', 'horizontal', 905, '端切り：上の長手を 5mm 落とす（横に切る）'],
+      [1, 'trim', 'horizontal', 5, '端切り：下の長手を 5mm 落とす（横に切る）'],
       [2, 'trim', 'vertical', 1815, '端切り：右の妻手を 5mm 落とす（縦に切る）'],
       [3, 'strip', 'vertical', 5, '右端から 1810mm で縦に切る'],
-      [4, 'crosscut', 'horizontal', 495, '上端から 410mm で横に切る'],
-      [5, 'crosscut', 'horizontal', 82, '上端から 410mm で横に切る'],
+      [4, 'crosscut', 'horizontal', 500, '上端から 410mm で横に切る'],
+      [5, 'crosscut', 'horizontal', 87, '上端から 410mm で横に切る'],
     ])
     expect(s1.cuts.map((c) => c.within)).toEqual([
       { x: 0, y: 0, w: 1820, h: 910 },
-      { x: 0, y: 0, w: 1820, h: 905 },
-      { x: 0, y: 0, w: 1815, h: 905 },
-      { x: 5, y: 0, w: 1810, h: 905 },
-      { x: 5, y: 0, w: 1810, h: 492 },
+      { x: 0, y: 5, w: 1820, h: 905 },
+      { x: 0, y: 5, w: 1815, h: 905 },
+      { x: 5, y: 5, w: 1810, h: 905 },
+      { x: 5, y: 5, w: 1810, h: 492 },
     ])
+  })
+
+  it('横切り優先：片は下の長手の端切り（y 0〜5）に掛からず、上端（y 910）にぴったり届く', () => {
+    for (const s of cutsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')) {
+      for (const p of s.placements) expect(p.y).toBeGreaterThanOrEqual(5)
+      expect(Math.max(...s.placements.map((p) => p.y + p.h))).toBe(910)
+    }
   })
 
   it('見本・横切り優先の2枚目：2本目の帯も残りの右端から測る（右端から 873mm）', () => {
     const [, s2] = cutsOf(bookshelfJob(), LUMBER_18_ID, 'horizontal')
     expect(s2.cuts.map((c) => [c.kind, c.at, c.label])).toEqual([
-      ['trim', 905, '端切り：上の長手を 5mm 落とす（横に切る）'],
+      ['trim', 5, '端切り：下の長手を 5mm 落とす（横に切る）'],
       ['trim', 1815, '端切り：右の妻手を 5mm 落とす（縦に切る）'],
       ['strip', 941, '右端から 874mm で縦に切る'],
-      ['crosscut', 495, '上端から 410mm で横に切る'],
-      ['crosscut', 82, '上端から 410mm で横に切る'],
+      ['crosscut', 500, '上端から 410mm で横に切る'],
+      ['crosscut', 87, '上端から 410mm で横に切る'],
       ['strip', 65, '右端から 873mm で縦に切る'],
-      ['crosscut', 515, '上端から 390mm で横に切る'],
-      ['crosscut', 122, '上端から 390mm で横に切る'],
+      ['crosscut', 520, '上端から 390mm で横に切る'],
+      ['crosscut', 127, '上端から 390mm で横に切る'],
     ])
   })
 
@@ -149,7 +156,7 @@ describe('buildCuts（切る順番）', () => {
   })
 
   it('横切り優先で帯より細い片は、縦に切って長さを切り揃える（右端から）', () => {
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], { x: 0, y: 0, w: 1815, h: 905 }, 3, 'horizontal')
+    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], usableRect(BOARD, 5, 'horizontal'), 3, 'horizontal')
     const cuts = buildCuts(r.sheets[0], r.frame, BOARD, 5)
     expect(cuts.at(-1)).toMatchObject({ kind: 'rip', direction: 'vertical', at: 1015, label: '右端から 800mm で縦に切る' })
     expectGuillotine(cuts, r.sheets[0].strips[0].items.map((i) => i.placement), LANDSCAPE, 3)

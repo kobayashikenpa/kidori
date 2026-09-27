@@ -43,6 +43,13 @@ interface Props {
   onOpenChange: (open: boolean) => void
 }
 
+type RefTab = 'part' | 'thick' | 'nige'
+const REF_TABS: { id: RefTab; label: string }[] = [
+  { id: 'part', label: '部材' },
+  { id: 'thick', label: '厚み' },
+  { id: 'nige', label: '調整寸法' },
+]
+
 /** 式の中で色つきの塊として見せる単位 */
 const CHIP_CLASS: Partial<Record<string, string>> = {
   partRef: 'chip-ref',
@@ -61,6 +68,14 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
   const [cursorRaw, setCursor] = useState(units.length)
   const cursor = Math.min(cursorRaw, units.length)
   const fieldRef = useRef<HTMLDivElement>(null)
+  // 部材の寸法・材料の厚み・調整寸法は、タブで切り替える1つの欄にまとめる（部材が多くても式の欄とボタンが画面に収まるように）
+  const hasThick = thicknessId !== null && thickLabel !== null
+  const tabs = REF_TABS.filter((t) => (t.id === 'part' ? parts.length > 0 : t.id === 'thick' ? hasThick : job.settings.nige.length > 0))
+  const [tabRaw, setTab] = useState<RefTab | null>(null)
+  const tab = tabs.some((t) => t.id === tabRaw) ? tabRaw : (tabs[0]?.id ?? null)
+  // 部材の参照は2段階：まず部材名、次に W・H・D
+  const [refPartId, setRefPartId] = useState<string | null>(null)
+  const refPart = open && tab === 'part' ? (parts.find((p) => p.id === refPartId) ?? null) : null
   const padRef = useRef<HTMLDivElement>(null)
 
   // ボタンの並びを開いたら、式の欄とボタンが見やすい位置に来るようにスクロールする（キーボードは出ないので、それを待たない）
@@ -94,18 +109,46 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
 
   const openAtEnd = () => {
     setCursor(units.length)
+    setTab(null)
+    setRefPartId(null)
+    setErrFullFor(null)
     onOpenChange(true)
   }
 
   const spoken = labels.length > 0 ? labels.join(' ') : '空'
   const errorText = errors.map((e) => e.message).join('。')
+  // エラーの全文を出しているか（押したときだけ。ふだんは1行に切り詰める）
+  // 全文を出したときのエラーの文を覚えておき、文が変わったり消えたりしたら自動で1行に戻す
+  const [errFullFor, setErrFullFor] = useState<string | null>(null)
+  const errFull = errors.length > 0 && errFullFor === errorText
 
   return (
     <div className="field" ref={fieldRef}>
-      <span className="label" aria-hidden="true">
-        {axis}（{AXIS_NAME[axis]}）
-        {finished !== null && <span className="expr-result num"> 仕上がり {fmt(finished)}</span>}
-      </span>
+      {/* 欄の上の1行：ふだんは仕上がりの値、エラーのときは同じ行にエラーを赤で出す（1行に切り詰め、押すと全文）。
+          行の高さは変わらないので、エラーが出ても消えても下のボタンの位置がずれない */}
+      <div className="label expr-head">
+        <span aria-hidden="true">
+          {axis}（{AXIS_NAME[axis]}）
+        </span>
+        {errors.length > 0 ? (
+          <button
+            type="button"
+            className={`expr-err${errFull ? ' full' : ''}`}
+            aria-expanded={errFull}
+            onClick={() => setErrFullFor(errFull ? null : errorText)}
+          >
+            <span id={`${id}-err`} role="alert">
+              {errorText}
+            </span>
+          </button>
+        ) : (
+          finished !== null && (
+            <span className="expr-result num" aria-hidden="true">
+              仕上がり {fmt(finished)}
+            </span>
+          )
+        )}
+      </div>
       <button
         type="button"
         className={`expr-box${open ? ' active' : ''}${errors.length > 0 ? ' bad' : ''}`}
@@ -130,78 +173,98 @@ export function FormulaInput({ axis, value, onChange, job, thicknessId, parts, f
         })}
         {open && cursor === units.length && <span className="caret" aria-hidden="true" />}
       </button>
-      {open ? (
-        // ボタンの並びを開いているあいだは、エラーの場所の高さを決めておく（エラーが出ても消えてもボタンの位置がずれない）
-        <div className={`expr-status${errors.length > 0 ? ' msg err' : ''}`} id={`${id}-err`} role={errors.length > 0 ? 'alert' : undefined}>
-          {errors.length > 0 ? (
-            <span className="expr-status-text">{errorText}</span>
-          ) : (
-            <span className="expr-status-text ok num">
-              {finished !== null ? `＝ 仕上がり ${fmt(finished)}` : units.length === 0 ? '数値か式を入れてください' : ''}
-            </span>
-          )}
-        </div>
-      ) : (
-        errors.length > 0 && (
-          <p className="msg err" id={`${id}-err`} role="alert">
-            {errorText}
-          </p>
-        )
-      )}
-
       {open && (
         <div className="pad" id={`${id}-pad`} ref={padRef}>
-          {parts.length > 0 && (
-            <div className="pad-refs" aria-label="部材の寸法">
-              {parts.map((p) => {
-                const f = finishedOf(p.id)
-                return AXES.map((a) => (
-                  <button
-                    key={`${p.id}-${a}`}
-                    type="button"
-                    className="pad-ref"
-                    onPointerDown={keep}
-                    onClick={() => put(`${p.name}.${a}`)}
-                  >
-                    <span className="ref-name">
-                      {p.name}.{a}
-                    </span>
-                    <span className="ref-val num">{f ? fmt(f[a]) : '―'}</span>
-                  </button>
-                ))
-              })}
-            </div>
-          )}
-          {thicknessId !== null && thickLabel !== null && (
-            <div className="pad-group">
-              <span className="pad-title">材料の厚み</span>
-              <div className="pad-chips">
-                <button
-                  type="button"
-                  className="pad-chip chip-thick"
-                  onPointerDown={keep}
-                  onClick={() => put(`{t:${thicknessId}}`)}
-                >
-                  {thickLabel}
-                </button>
-              </div>
-            </div>
-          )}
-          {job.settings.nige.length > 0 && (
-            <div className="pad-group">
-              <span className="pad-title">調整寸法</span>
-              <div className="pad-chips">
-                {job.settings.nige.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    className="pad-chip chip-nige"
-                    onPointerDown={keep}
-                    onClick={() => put(`{n:${n.id}}`)}
-                  >
-                    {nigeName(n)}
-                  </button>
-                ))}
+          {tab !== null && (
+            <div className="pad-refbox">
+              {tabs.length > 1 && (
+                <div className="pad-tabs" role="tablist" aria-label="式に入れるもの">
+                  {tabs.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={tab === t.id}
+                      className={`pad-tab${tab === t.id ? ' on' : ''}`}
+                      onPointerDown={keep}
+                      onClick={() => {
+                        setTab(t.id)
+                        setRefPartId(null)
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="pad-refs" role="tabpanel" aria-label={REF_TABS.find((t) => t.id === tab)?.label}>
+                {tab === 'part' &&
+                  (refPart ? (
+                    // 2段階目：選んだ部材の W・H・D。押すと式に入れて、部材名の並びに戻る
+                    <div className="pad-grid">
+                      <button
+                        type="button"
+                        className="pad-ref back"
+                        aria-label={`${refPart.name} の選択をやめて部材の一覧に戻る`}
+                        onPointerDown={keep}
+                        onClick={() => setRefPartId(null)}
+                      >
+                        <span className="ref-name">{refPart.name}</span>
+                        <span className="ref-val">◀ 戻る</span>
+                      </button>
+                      {AXES.map((a) => {
+                        const f = finishedOf(refPart.id)
+                        return (
+                          <button
+                            key={a}
+                            type="button"
+                            className="pad-ref"
+                            aria-label={`${refPart.name}.${a}（${f ? fmt(f[a]) : '計算できない'}）を入れる`}
+                            onPointerDown={keep}
+                            onClick={() => {
+                              put(`${refPart.name}.${a}`)
+                              setRefPartId(null)
+                            }}
+                          >
+                            <span className="ref-name">{a}</span>
+                            <span className="ref-val num">{f ? fmt(f[a]) : '―'}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    // 1段階目：部材名の並び（多いときは中でスクロール）
+                    <div className="pad-grid">
+                      {parts.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="pad-ref part"
+                          aria-label={`${p.name} の寸法を選ぶ`}
+                          onPointerDown={keep}
+                          onClick={() => setRefPartId(p.id)}
+                        >
+                          <span className="ref-name">{p.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                {tab === 'thick' && hasThick && (
+                  <div className="pad-chips">
+                    <button type="button" className="pad-chip chip-thick" onPointerDown={keep} onClick={() => put(`{t:${thicknessId}}`)}>
+                      {thickLabel}
+                    </button>
+                  </div>
+                )}
+                {tab === 'nige' && (
+                  <div className="pad-chips">
+                    {job.settings.nige.map((n) => (
+                      <button key={n.id} type="button" className="pad-chip chip-nige" onPointerDown={keep} onClick={() => put(`{n:${n.id}}`)}>
+                        {nigeName(n)}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

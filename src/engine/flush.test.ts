@@ -98,7 +98,7 @@ describe('フラッシュの部材の厚みの判定', () => {
     )
     expect(dims(job)['幕板'].finished).toEqual({ W: 900, H: 50, D: 4 })
     const e = explainDimension(job, 'p2', 'H')!
-    expect(explanationText(e)).toBe('天板.H 25 + フラッシュ25 = 50')
+    expect(explanationText(e)).toBe('天板.H 25 + フラッシュ25')
   })
 
   it('削除したフラッシュを式で使うとエラー（削除した材料と同じ）', () => {

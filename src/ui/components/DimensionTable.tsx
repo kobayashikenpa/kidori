@@ -144,9 +144,6 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
                 {openAxis && (
                   <tr className="dim-explain">
                     <td colSpan={6}>
-                      <span className="dim-explain-head">
-                        {p.name}.{openAxis} の内訳
-                      </span>
                       {openEx && openEx.pieces.length > 0 && !onlyFlush && (
                         <span className="dim-explain-text num">{explanationText(openEx)}</span>
                       )}

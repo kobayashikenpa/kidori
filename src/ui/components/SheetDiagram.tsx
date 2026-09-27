@@ -1,4 +1,4 @@
-// 配置図（SVG）：板を engine の置き方（sheet.orientation）で置き、端切り（sheet.trims）、部材（名前・寸法）、端材（点線・寸法）、木目の線を描く。
+// 配置図（SVG）：板を engine の置き方（sheet.orientation）で置き、端切り（sheet.trims）、部材（名前・寸法）、木目の線を描く。
 // 縦長（portrait）は長辺が縦、横長（landscape、横切り優先）は長辺が横。
 // 位置と大きさはすべて engine の結果（SheetLayout）をそのまま使い、viewBox を板の寸法（mm）にして画面幅に合わせる。
 // engine は左下が原点（y は上が +）なので、描くときに上下を反転する
@@ -100,7 +100,7 @@ export function SheetDiagram({ sheet, no, grain, colorOf, checked = [], remainin
       className={landscape ? 'diagram landscape' : 'diagram'}
       viewBox={`0 0 ${W} ${L}`}
       role="img"
-      aria-label={`${no}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚、端材 ${sheet.scraps.length}枚`}
+      aria-label={`${no}枚目の配置図：材料 ${fmt(sheet.boardWidth)}×${fmt(sheet.boardLength)}、部材 ${sheet.placements.length}枚`}
     >
       <defs>
         <pattern
@@ -111,7 +111,7 @@ export function SheetDiagram({ sheet, no, grain, colorOf, checked = [], remainin
         >
           <path d={grainPath} className="dg-grain" />
         </pattern>
-        {[...sheet.placements, ...sheet.scraps].map((p, i) => {
+        {sheet.placements.map((p, i) => {
           const r = flipY(p, L)
           return (
             <clipPath key={i} id={`clip-${uid}-${i}`}>
@@ -121,13 +121,8 @@ export function SheetDiagram({ sheet, no, grain, colorOf, checked = [], remainin
         })}
       </defs>
 
-      {/* 板（部材・端材のすき間は刃で消える部分） */}
+      {/* 板（部材のすき間は刃で消える部分） */}
       <rect className="dg-board" x={0} y={0} width={W} height={L} />
-
-      {sheet.scraps.map((s, i) => {
-        const r = flipY(s, L)
-        return <rect key={i} className="dg-scrap" x={r.x} y={r.y} width={r.w} height={r.h} />
-      })}
 
       {sheet.placements.map((p) => {
         const r = flipY(p, L)
@@ -165,18 +160,6 @@ export function SheetDiagram({ sheet, no, grain, colorOf, checked = [], remainin
           label && (
             <g key={p.pieceId} clipPath={`url(#clip-${uid}-${i})`}>
               <LabelText r={r} label={label} className={done ? 'dg-text done' : 'dg-text'} />
-            </g>
-          )
-        )
-      })}
-      {sheet.scraps.map((s, i) => {
-        const r = flipY(s, L)
-        const size = `${fmt(s.w)}×${fmt(s.h)}`
-        const label = fitLabel(r.w, r.h, [['端材', size], [size]], maxFont * 0.9, minFont)
-        return (
-          label && (
-            <g key={i} clipPath={`url(#clip-${uid}-${sheet.placements.length + i})`}>
-              <LabelText r={r} label={label} className="dg-text scrap" />
             </g>
           )
         )

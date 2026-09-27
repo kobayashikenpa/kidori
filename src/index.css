@@ -480,10 +480,44 @@ select.input {
   min-width: 0;
 }
 
+.expr-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.expr-head > span:first-child {
+  flex: none;
+}
 .expr-result {
-  float: right;
+  margin-left: auto;
   font-weight: 400;
   color: var(--fin);
+}
+/* エラーは仕上がりの値と同じ行に赤で出す。1行に切り詰め、押すと全文 */
+.expr-err {
+  appearance: none;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 見た目の高さは1行のまま、押せる範囲だけ上下に広げる */
+  margin: -12px 0 -12px auto;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--err);
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.expr-err.full {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 /* ---------- 仕事の一覧 ---------- */
@@ -680,26 +714,6 @@ select.input {
   }
 }
 /* ボタンの並びを開いているあいだのエラーの場所：高さを決めておき、長い文は2行で打ち切る */
-.expr-status {
-  box-sizing: border-box;
-  height: calc(2 * 1.35em + 12px);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.35;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.expr-status-text {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-.expr-status-text.ok {
-  color: var(--muted);
-}
 .pad {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -709,14 +723,59 @@ select.input {
   flex-direction: column;
   gap: 8px;
 }
-.pad-refs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* 部材・厚み・調整寸法を1つの欄にまとめ、タブで切り替える。高さは決めておき、多いときは中でスクロール（下の数字のボタンがずれない） */
+.pad-refbox {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  /* 数字のボタンまで画面に入るよう低めにする（多いときは中でスクロール） */
-  max-height: 26vh;
+}
+.pad-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.pad-tab {
+  appearance: none;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--sunk);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pad-tab.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pad-refs {
+  /* 部材名は2段ほど（3段目を少しのぞかせる） */
+  height: 104px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.pad-ref.part {
+  align-items: center;
+  text-align: center;
+}
+.pad-ref.part .ref-name {
+  font-size: 13px;
+}
+.pad-ref.back {
+  background: var(--sunk);
+}
+.pad-ref.back .ref-name {
+  font-size: 13px;
 }
 .pad-ref {
   appearance: none;
@@ -743,15 +802,6 @@ select.input {
 }
 .pad-ref .ref-val {
   font-size: 11px;
-  color: var(--muted);
-}
-.pad-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pad-title {
-  font-size: 12px;
   color: var(--muted);
 }
 .pad-chips {
@@ -984,8 +1034,6 @@ select.input {
   --dg-grain: rgba(120, 85, 40, 0.28);
   --dg-line: #3d3a33;
   --dg-text: #1b211e;
-  --dg-scrap: #6b6456;
-  --dg-scrap-fill: #faf6ee;
   --dg-trim: #d4331f;
   --dg-done: #d9d6cf;
   --pc0: #bcd9ee;
@@ -1001,9 +1049,7 @@ select.input {
     --dg-grain: rgba(230, 200, 150, 0.2);
     --dg-line: #cfc8b8;
     --dg-text: #f1f4f2;
-    --dg-scrap: #bdb4a2;
-    --dg-scrap-fill: #3d382d;
-    --dg-trim: #ff7a66;
+        --dg-trim: #ff7a66;
     --dg-done: #3a3a38;
     --pc0: #24506e;
     --pc1: #6e4424;
@@ -1018,8 +1064,6 @@ select.input {
   --dg-grain: rgba(230, 200, 150, 0.2);
   --dg-line: #cfc8b8;
   --dg-text: #f1f4f2;
-  --dg-scrap: #bdb4a2;
-  --dg-scrap-fill: #3d382d;
   --dg-trim: #ff7a66;
   --dg-done: #3a3a38;
   --pc0: #24506e;
@@ -1074,13 +1118,6 @@ select.input {
   stroke-dasharray: 10 5;
   vector-effect: non-scaling-stroke;
 }
-.dg-scrap {
-  fill: var(--dg-scrap-fill);
-  stroke: var(--dg-scrap);
-  stroke-width: 1.5px;
-  stroke-dasharray: 5 4;
-  vector-effect: non-scaling-stroke;
-}
 .dg-trim {
   fill: var(--dg-trim);
   stroke: var(--dg-trim);
@@ -1101,12 +1138,6 @@ select.input {
 }
 .dg-text .l2 {
   font-family: var(--mono);
-}
-.dg-text.scrap {
-  fill: var(--dg-scrap);
-}
-.dg-text.scrap .l1 {
-  font-weight: 400;
 }
 .dg-legend {
   display: flex;
@@ -1142,9 +1173,6 @@ select.input {
   margin: 6px 0 0;
   font-weight: 700;
   color: var(--accent);
-}
-.dg-key.scrap {
-  border: 1.5px dashed var(--dg-scrap);
 }
 .dg-key.grain {
   background: var(--dg-board);
@@ -1230,133 +1258,6 @@ select.input {
 }
 .kd-sheet.finished .diagram {
   opacity: 0.6;
-}
-
-/* ---------- 切る順番・端材 ---------- */
-.steps-fold {
-  margin: 8px 0 6px;
-}
-.cut-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cut-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 4px 6px;
-  border-radius: 8px;
-}
-.cut-no {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cut-item.trim .cut-no {
-  background: var(--dg-trim);
-  color: #fff;
-}
-.cut-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-.cut-label {
-  overflow-wrap: anywhere;
-  line-height: 1.4;
-}
-.cut-tag {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  border: 1px solid currentColor;
-}
-.cut-item.done {
-  color: var(--muted);
-}
-.cut-item.done .cut-no {
-  background: var(--line);
-  color: var(--muted);
-}
-.cut-item.done .cut-label {
-  text-decoration: line-through;
-}
-.cut-item.next {
-  background: var(--accent-soft);
-  outline: 2px solid var(--accent);
-  font-weight: 700;
-  color: var(--accent);
-}
-.cut-item.next .cut-label {
-  font-size: 16px;
-}
-.steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.fold {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-.fold > summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-  touch-action: manipulation;
-}
-.fold > summary::-webkit-details-marker {
-  display: none;
-}
-.fold > summary::after {
-  content: '▼';
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
-  transition: transform 0.15s;
-}
-.fold[open] > summary::after {
-  transform: rotate(180deg);
-}
-.fold-count {
-  font-weight: 400;
-  font-size: 13px;
-  color: var(--muted);
-}
-.fold > :not(summary) {
-  margin-left: 12px;
-  margin-right: 12px;
-}
-.fold > :last-child:not(summary) {
-  margin-bottom: 10px;
-}
-.scrap-list {
-  margin-top: 4px;
-  padding-left: 1.4em;
-  font-size: 16px;
 }
 
 /* 削除の確認：ふつうの行とはっきり見分けられるように、赤の枠と薄い赤の地にする */
@@ -1583,11 +1484,6 @@ select.input {
   padding: 6px 8px 8px;
   background: var(--fin-soft);
 }
-.dim-explain-head {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-}
 .dim-explain-text {
   display: block;
   font-size: 14px;
@@ -1688,9 +1584,6 @@ select.input {
 .cl-size {
   flex: none;
   white-space: nowrap;
-}
-.cl-qty {
-  font-weight: 400;
 }
 .cl-row.done {
   background: var(--bg);

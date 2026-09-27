@@ -1,7 +1,7 @@
 // 板の置き方・使える範囲（端切り）と、刃厚込みで入るかの判定
 // - 縦切り優先：板を縦長に置く（portrait）。x：短辺方向 0〜width、y：長辺方向 0〜length。端切りは右の長手
 // - 横切り優先：板を横長に置く（landscape）。x：長辺方向 0〜length、y：短辺方向 0〜width。
-//   端切りは上の長手 → 右の妻手の順（右上の角の矩を出す）
+//   端切りは下の長手 → 右の妻手の順（右下の角の矩を出す）。部材は右上から詰める
 // どちらも左下を原点とし、端切りの幅は刃厚を含む
 import { round1 } from '../round'
 import type { Board, Rect, SheetOrientation } from '../types'
@@ -17,12 +17,12 @@ type BoardSize = Pick<Board, 'width' | 'length'>
 
 /**
  * 端切り後に使える範囲（その置き方の座標）。
- * サブロク・端切り5：縦切り優先なら x 0〜905・y 0〜1820、横切り優先なら x 0〜1815・y 0〜905
+ * サブロク・端切り5：縦切り優先なら x 0〜905・y 0〜1820、横切り優先なら x 0〜1815・y 5〜910（下の長手を落とす）
  */
 export function usableRect(board: BoardSize, trim: number, mode: StripMode = 'vertical'): Rect {
   const short = round1(Math.max(0, board.width - trim))
   if (mode === 'horizontal') {
-    return { x: 0, y: 0, w: round1(Math.max(0, board.length - trim)), h: short }
+    return { x: 0, y: round1(board.width - short), w: round1(Math.max(0, board.length - trim)), h: short }
   }
   return { x: 0, y: 0, w: short, h: board.length }
 }
@@ -39,10 +39,10 @@ export function trimRects(board: BoardSize, trim: number, mode: StripMode): Rect
   const u = usableRect(board, trim, mode)
   if (mode === 'horizontal') {
     return [
-      // 上の長手（全長）
-      { x: 0, y: u.h, w: board.length, h: round1(board.width - u.h) },
-      // 右の妻手（上を落とした残りの高さ）
-      { x: u.w, y: 0, w: round1(board.length - u.w), h: u.h },
+      // 下の長手（全長）
+      { x: 0, y: 0, w: board.length, h: u.y },
+      // 右の妻手（下を落とした残りの高さ）
+      { x: u.w, y: u.y, w: round1(board.length - u.w), h: u.h },
     ]
   }
   return [{ x: u.w, y: 0, w: round1(board.width - u.w), h: board.length }]

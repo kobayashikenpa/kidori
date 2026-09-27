@@ -1,5 +1,5 @@
 // 切る順番：端切り → 帯を右端から切り離す → その帯を上端から片ごとに切り分ける → 細い片の幅を切り揃える
-// 端切り：縦切り優先（縦長）は右の長手。横切り優先（横長）は上の長手 → 右の妻手の順（右上の角の矩を出す）
+// 端切り：縦切り優先（縦長）は右の長手。横切り優先（横長）は下の長手 → 右の妻手の順（右下の角の矩を出す）
 // 位置の表し方：その時点で残っている板（切る範囲）の端から測った長さ（＝切り離す片・帯の大きさ）
 // - 縦の切断は「右端から」、横の切断は「上端から」（どちらの置き方でも、配置図の上で見た向き）
 // 刃厚は測った側の反対側（余りの側）で消える：縦は線の左、横は線の下。
@@ -42,10 +42,11 @@ export function buildCuts(
   // 端切り
   const t = fmt(trim)
   if (frame.mode === 'horizontal') {
-    const [topTrim, rightTrim] = trimRects(board, trim, 'horizontal')
-    if (topTrim && rightTrim) {
-      push('horizontal', topTrim.y, { x: 0, y: 0, w: board.length, h: board.width }, 'trim', `端切り：上の長手を ${t}mm 落とす（横に切る）`)
-      push('vertical', rightTrim.x, { x: 0, y: 0, w: board.length, h: topTrim.y }, 'trim', `端切り：右の妻手を ${t}mm 落とす（縦に切る）`)
+    const [bottomTrim, rightTrim] = trimRects(board, trim, 'horizontal')
+    if (bottomTrim && rightTrim) {
+      const kept = round1(board.width - bottomTrim.h)
+      push('horizontal', bottomTrim.h, { x: 0, y: 0, w: board.length, h: board.width }, 'trim', `端切り：下の長手を ${t}mm 落とす（横に切る）`)
+      push('vertical', rightTrim.x, { x: 0, y: bottomTrim.h, w: board.length, h: kept }, 'trim', `端切り：右の妻手を ${t}mm 落とす（縦に切る）`)
     }
   } else {
     const [rightTrim] = trimRects(board, trim, 'vertical')

@@ -2,7 +2,9 @@
 // 済んだ工程：チェックした片を取り出すのに要る工程（within がその片を含む工程＝ギロチンカットの木の先祖）を合わせたもの。
 // 残りの材料：板全体（端切り前）から始め、済んだ工程を no の順に当てて長方形を2つに分けていく。
 //   刃厚は測った側の反対側（余りの側）で消える：縦に切るなら線の左、横に切るなら線の下。
-//   端切りは落とす側（縦は右、横は上）を捨て、残す側は刃厚を引かない（端切りの幅は刃厚を含む）
+//   端切りは落とす側を捨て、残す側は刃厚を引かない（端切りの幅は刃厚を含む）。
+//   残す側は、その1枚の使える範囲（layout.usable）のある側。縦は左を残す。横は、今の横切り優先（第1.9版〜）は
+//   下の長手を落として上を残し、以前に保存した写しは上の長手を落として下を残す（写しのまま読み替えない）
 import { MIN_SCRAP } from '../packing/scraps'
 import { round1 } from '../round'
 import type { CutStep, Rect, SheetLayout } from '../types'
@@ -48,20 +50,42 @@ function rect(x: number, y: number, w: number, h: number): Rect {
   return { x: round1(x), y: round1(y), w: round1(w), h: round1(h) }
 }
 
+/** 端切りで残す側が、線より上（横）・右（縦）か。使える範囲がその側にあるかで決める */
+function keepsHigh(c: CutStep, usable: Rect): boolean {
+  return c.direction === 'vertical' ? le(c.at, usable.x) : le(c.at, usable.y)
+}
+
 /** 工程 c で長方形 r を2つに分ける（大きさが 0 以下になる側・端切りで落とす側は捨てる） */
-function split(r: Rect, c: CutStep, kerf: number): Rect[] {
-  const k = c.kind === 'trim' ? 0 : kerf
+function split(r: Rect, c: CutStep, kerf: number, usable: Rect): Rect[] {
+  const trim = c.kind === 'trim'
+  const high = !trim || keepsHigh(c, usable)
+  const low = !trim || !high
+  const k = trim ? 0 : kerf
   const out: Rect[] = []
   if (c.direction === 'vertical') {
     const right = r.x + r.w
-    if (c.kind !== 'trim' && round1(right - c.at) > 0) out.push(rect(c.at, r.y, right - c.at, r.h))
+    if (high && round1(right - c.at) > 0) out.push(rect(c.at, r.y, right - c.at, r.h))
     const leftW = c.at - k - r.x
-    if (round1(leftW) > 0) out.push(rect(r.x, r.y, leftW, r.h))
+    if (low && round1(leftW) > 0) out.push(rect(r.x, r.y, leftW, r.h))
   } else {
     const top = r.y + r.h
-    if (c.kind !== 'trim' && round1(top - c.at) > 0) out.push(rect(r.x, c.at, r.w, top - c.at))
+    if (high && round1(top - c.at) > 0) out.push(rect(r.x, c.at, r.w, top - c.at))
     const downH = c.at - k - r.y
-    if (round1(downH) > 0) out.push(rect(r.x, r.y, r.w, downH))
+    if (low && round1(downH) > 0) out.push(rect(r.x, r.y, r.w, downH))
+  }
+  return out
+}
+
+/**
+ * 片ごとに、その片を取り出す最後の工程（CutStep.no）。within がその片を含む工程のうち一番大きい no。
+ * 工程が1つも要らない片（板全体がその片）は 0
+ */
+export function pieceReleaseSteps(layout: Pick<SheetLayout, 'placements' | 'cuts'>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const p of layout.placements) {
+    let last = 0
+    for (const c of layout.cuts) if (c.no > last && contains(c.within, p)) last = c.no
+    out.set(p.pieceId, last)
   }
   return out
 }
@@ -95,7 +119,7 @@ export function sheetProgress(layout: SheetLayout, kerf: number, checked: readon
     if (!doneSet.has(c.no)) continue
     const i = rects.findIndex((r) => contains(r, c.within))
     if (i < 0) continue
-    rects = [...rects.slice(0, i), ...split(rects[i], c, kerf), ...rects.slice(i + 1)]
+    rects = [...rects.slice(0, i), ...split(rects[i], c, kerf, layout.usable), ...rects.slice(i + 1)]
   }
 
   const withPieces: RemainingPiece[] = []

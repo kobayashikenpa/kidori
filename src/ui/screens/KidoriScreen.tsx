@@ -12,8 +12,6 @@ import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sh
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
 import { boardLabel, clearLegacyCut, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
-import { CutSteps } from '../components/CutSteps'
-import { ScrapList } from '../components/ScrapList'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
 import { SheetChecklist } from '../components/SheetChecklist'
@@ -414,8 +412,7 @@ function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, o
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
       </header>
       <p className="band-note num">
-        材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚・端材{' '}
-        {sheet.scraps.length}枚
+        材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚
       </p>
       <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
       {remaining.length > 0 && (
@@ -427,7 +424,7 @@ function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, o
         {sheet.trims.length > 0 && (
           <span>
             <i className="dg-key trim" />
-            端切り {fmt(trim)}mm（{landscape ? '上・右' : '右'}）
+            端切り {fmt(trim)}mm（{landscape ? (sheet.usable.y > 0 ? '下・右' : '上・右') : '右'}）
           </span>
         )}
         {entry.checked.length > 0 && (
@@ -443,18 +440,12 @@ function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, o
           </span>
         )}
         <span>
-          <i className="dg-key scrap" />
-          端材
-        </span>
-        <span>
           <i className={`dg-key grain ${grainAcross ? 'across' : 'down'}`} />
           木目：{grain === 'long' ? '長手方向' : '妻手方向'}
         </span>
-        <span>部材は右上から詰める・部材の寸法は木取り寸法・端材は 横×縦</span>
+        <span>部材は右上から詰める・部材の寸法は木取り寸法</span>
       </p>
       <SheetChecklist label={`${label} の ${no}枚目`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
-      <CutSteps sheet={sheet} progress={entry.progress} />
-      <ScrapList sheet={sheet} />
     </article>
   )
 }
