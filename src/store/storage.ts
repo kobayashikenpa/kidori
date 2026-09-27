@@ -353,6 +353,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     boards,
     flushes,
     parts,
+    frozenSheets: [],
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }

@@ -79,6 +79,7 @@ export function createJob(
     boards,
     flushes,
     parts: [],
+    frozenSheets: [],
     createdAt: t,
     updatedAt: t,
   }
@@ -155,6 +156,8 @@ export function copyJob(
     boards,
     flushes,
     parts,
+    // 固定した1枚（切った記録）は写さない（第1.8版。未決事項 32）
+    frozenSheets: [],
     createdAt: t,
     updatedAt: t,
   }

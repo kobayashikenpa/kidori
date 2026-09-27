@@ -156,6 +156,8 @@ export interface Job {
   flushes: Flush[]
   /** 並び順＝画面の並び順 */
   parts: Part[]
+  /** 固定した1枚（第1.8版。固定した順）。以前のデータは読み込むときに [] */
+  frozenSheets: FrozenSheet[]
   /** ISO 文字列 */
   createdAt: string
   updatedAt: string
@@ -324,4 +326,37 @@ export interface PackingResult {
    * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
+}
+
+// ---------- 切りながら進める木取り（第1.8版） ----------
+
+/**
+ * 固定した1枚（第1.8版。architecture.md 11.2）。1つ目の部材にチェックしたときに、画面に出ていた1枚を写して作る。
+ * 部材や設定が変わっても、この写しは変わらない
+ */
+export interface FrozenSheet {
+  /** 仕事の中で重複しない */
+  id: string
+  /** 切っている材料（フラッシュの表面材なら表面材の材料） */
+  boardId: string
+  /** 固定したときの材料名（材料を削除・変更しても表示できるように） */
+  material: string
+  /** 固定したときの材料の厚み */
+  thickness: number
+  /** 固定したときの材料の木目の方向 */
+  grain: BoardGrain
+  /** 固定したときの切り方（おまかせなら選ばれたほう） */
+  mode: 'vertical' | 'horizontal'
+  /** 固定したときの刃厚（残りの材料の計算に使う） */
+  kerf: number
+  /** 固定したときの端切り */
+  trim: number
+  /** 固定したときの1枚（深いコピー。index は使わない＝表示のときに振り直す） */
+  layout: SheetLayout
+  /** チェックした片の pieceId（layout.placements にあるものだけ・重複なし） */
+  checked: string[]
+  /** ISO */
+  frozenAt: string
+  /** すべての片にチェックした時刻（ISO）。あれば「切り終わり」 */
+  completedAt?: string
 }
