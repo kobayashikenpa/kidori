@@ -4,6 +4,7 @@ import { round1 } from '../round'
 import type { Board, BoardGrain, DimensionResult, Job, PackingResult, Part, PartDimensions, UnplacedReason } from '../types'
 import { usableSides, type StripMode } from './sheet'
 import { stackPlan, type StackGroup, type StackMismatch, type StackPlan } from './stack'
+import { usesStock } from './stock'
 
 /**
  * 板の辺に対する片の向き（置き方＝縦長／横長によらない）。x：短辺（妻手）方向の大きさ、y：長辺（長手）方向の大きさ。
@@ -174,14 +175,18 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
     const partGrain = part?.grain ?? 'any'
     const shape: PieceShape = { s0, s1, grain: partGrain === a0 ? 0 : partGrain === a1 ? 1 : 'any' }
-    const place = (g: BoardPieces, board: Board, from: number, count: number) => {
+    // stock：手持ちで並べる（第2.2版）。向きは手持ちの行ごとに決め直すので、選んだサイズに入らなくても片にする
+    // twinFrom：重ね切りの組の片の、b の表面材の番号の始まり
+    const place = (g: BoardPieces, board: Board, from: number, count: number, stock: boolean, twinFrom?: number) => {
       const orientations = orientationsOn(board, shape, job)
-      if (orientations.length === 0) {
+      if (orientations.length === 0 && !stock) {
         if (!g.unplaced.some((u) => u.partId === d.partId)) g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
         return
       }
       for (let i = 1; i <= count; i++) {
-        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape })
+        const piece: Piece = { pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape }
+        if (twinFrom !== undefined) piece.twin = `${d.partId}#${twinFrom + i}`
+        g.pieces.push(piece)
       }
     }
     // 重ね切り：a・b の両方に残りがあるぶんだけ組に入れる
@@ -199,7 +204,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
         g = { board: pair.ra.board, stack: { key: group.key, boardIds: group.boardIds }, pieces: [], unplaced: [] }
         byStack.set(group.key, g)
       }
-      place(g, pair.ra.board, pair.ra.start, pair.n)
+      place(g, pair.ra.board, pair.ra.start, pair.n, usesStock(pair.ra.board) || usesStock(pair.rb.board), pair.rb.start)
       pair.ra.used = pair.n
       pair.rb.used = pair.n
     }
@@ -213,7 +218,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
         g = { board, pieces: [], unplaced: [] }
         byBoard.set(board.id, g)
       }
-      place(g, board, start + used, quantity - used)
+      place(g, board, start + used, quantity - used, usesStock(board))
     }
   }
 

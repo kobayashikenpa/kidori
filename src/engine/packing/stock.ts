@@ -1,7 +1,7 @@
 // 手持ちの材料（第2.2版。architecture.md 14.3）。
 // どの材料も「手持ち」で木取りする。サイズを1つ選んだ材料は、そのサイズが無限にある手持ち（1行・枚数 Infinity）とみなす
 import { round1 } from '../round'
-import type { Board, BoardGrain, BoardSizeKind } from '../types'
+import type { Board, BoardGrain, BoardSizeKind, Job } from '../types'
 
 /** 材料の手持ちの1行（木取りに使う形） */
 export interface StockKind {
@@ -75,4 +75,22 @@ export function commonStock(a: readonly StockKind[], b: readonly StockKind[]): S
     }
   }
   return out
+}
+
+/**
+ * 固定した1枚（切り終わりを含む。未決事項 40）の分を引いた、材料の手持ち（architecture.md 14.6）。
+ * 固定した1枚ごとに、大きさ（layout の短辺・長辺、小数第1位）と木目（FrozenSheet.grain）がそろう最初の行（残り1以上）から1枚引く。
+ * そろう行が無ければ引かない。重ね切りの1枚（stackWith）は a・b の両方から引く。材料が無ければ空
+ */
+export function availableStock(job: Pick<Job, 'boards' | 'frozenSheets'>, boardId: string): StockKind[] {
+  const board = job.boards.find((b) => b.id === boardId)
+  if (!board) return []
+  const kinds = stockKinds(board)
+  for (const f of job.frozenSheets) {
+    if (f.boardId !== boardId && f.stackWith?.boardId !== boardId) continue
+    const size = { width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain }
+    const k = kinds.find((x) => x.count >= 1 && sameStockSize(x, size))
+    if (k) k.count -= 1
+  }
+  return kinds
 }
