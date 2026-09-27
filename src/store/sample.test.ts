@@ -36,20 +36,13 @@ const partOf = (job: Job, name: string) => job.parts.find((p) => p.name === name
 const boardOf = (job: Job, material: string, thickness: number) =>
   job.boards.filter((b) => b.material === material && b.thickness === thickness)
 
-describe('sampleFromTemplate（見本をひな形から作る。天地板がフラッシュ）', () => {
-  it('初期値のひな形から：材料6つ・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
+describe('sampleFromTemplate（見本をひな形から作る。フラッシュ25 と ラワン4 だけ）', () => {
+  it('初期値のひな形から：材料は初期の4つのまま・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     expect(job.name).toBe(SAMPLE_NAME)
-    expect(orderedBoards(job).map(boardLabel)).toEqual([
-      'シナランバー 18mm',
-      'シナベニヤ 4mm',
-      'メラミン 1mm',
-      'ラワン 2.5mm',
-      'ラワン 4mm',
-      'ラワン 5.5mm',
-    ])
+    expect(orderedBoards(job).map(boardLabel)).toEqual(['メラミン 1mm', 'ラワン 2.5mm', 'ラワン 4mm', 'ラワン 5.5mm'])
     // 見本で使う材料は 3×6、使わない材料は 4×8 のまま
-    for (const [m, t] of [['シナランバー', 18], ['シナベニヤ', 4], ['メラミン', 1], ['ラワン', 4]] as const) {
+    for (const [m, t] of [['メラミン', 1], ['ラワン', 4]] as const) {
       expect(boardOf(job, m, t)[0]).toMatchObject({ sizeKind: 'saburoku', width: 910, length: 1820 })
     }
     expect(boardOf(job, 'ラワン', 2.5)[0].sizeKind).toBe('shihachi')
@@ -57,32 +50,40 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
     expect(job.flushes.map((f) => [f.name, f.core, flushThickness(f, job.boards)])).toEqual([['フラッシュ25', 15, 25]])
 
     expect(computeDimensions(job).errors).toEqual([])
-    expect(finishedOf(job, '側板')).toEqual({ W: 18, H: 1800, D: 400 })
-    expect(finishedOf(job, '天地板')).toEqual({ W: 864, H: 25, D: 400 })
-    expect(finishedOf(job, '棚板')).toEqual({ W: 863, H: 18, D: 380 })
+    expect(finishedOf(job, '側板')).toEqual({ W: 25, H: 1800, D: 400 })
+    expect(finishedOf(job, '天地板')).toEqual({ W: 850, H: 25, D: 400 })
+    expect(finishedOf(job, '棚板')).toEqual({ W: 849, H: 25, D: 380 })
     expect(finishedOf(job, '背板')).toEqual({ W: 900, H: 1800, D: 4 })
-    expect(dimOf(job, '天地板').cutSize).toMatchObject({ W: 874, D: 410 })
-    expect(partOf(job, '天地板').flushId).toBe(job.flushes[0].id)
+    expect(dimOf(job, '側板').cutSize).toMatchObject({ H: 1810, D: 410 })
+    expect(dimOf(job, '天地板').cutSize).toMatchObject({ W: 860, D: 410 })
+    expect(dimOf(job, '棚板').cutSize).toMatchObject({ W: 859, D: 390 })
+    expect(dimOf(job, '背板').cutSize).toMatchObject({ W: 900, H: 1800 })
+    for (const name of ['側板', '天地板', '棚板']) expect(partOf(job, name).flushId).toBe(job.flushes[0].id)
+    expect(partOf(job, '背板').boardId).toBe(boardOf(job, 'ラワン', 4)[0].id)
 
-    const r = packJob(job, computeDimensions(job))
-    expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
-      ['メラミン 1mm', 1],
-      ['ラワン 4mm', 1],
-      ['シナランバー 18mm', 2],
-      ['シナベニヤ 4mm', 1],
-    ])
-    expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([86.5, 86.5, 85.9, 97.8])
-    expect(Math.round(r.totalYieldRate * 1000) / 10).toBe(88.5)
-    expect(r.skipped).toEqual([])
+    for (const cutMode of ['vertical', 'horizontal', 'auto'] as const) {
+      const j = must(updateSettings(job, { cutMode }))
+      const r = packJob(j, computeDimensions(j))
+      expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
+        ['メラミン 1mm', 5],
+        ['ラワン 4mm', 6],
+      ])
+      expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([85.2, 87.3])
+      expect(Math.round(r.totalYieldRate * 1000) / 10).toBe(86.4)
+      expect(r.skipped).toEqual([])
+    }
   })
 
   it('厚みは式の厚みで書く：材料・フラッシュの厚みを変えると寸法がついてくる', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
-    const lumber = boardOf(job, 'シナランバー', 18)[0]
-    expect(partOf(job, '側板').expr.W).toBe(`{t:${lumber.id}}`)
-    expect(partOf(job, '天地板').expr.H).toBe(`{t:${job.flushes[0].id}}`)
+    const flushT = `{t:${job.flushes[0].id}}`
+    expect(partOf(job, '側板').expr.W).toBe(flushT)
+    expect(partOf(job, '天地板').expr.H).toBe(flushT)
+    expect(partOf(job, '棚板').expr.H).toBe(flushT)
+    expect(partOf(job, '背板').expr.D).toBe(`{t:${boardOf(job, 'ラワン', 4)[0].id}}`)
     const thicker = { ...job, flushes: [{ ...job.flushes[0], core: 18 }] }
     expect(finishedOf(thicker, '天地板')!.H).toBe(28)
+    expect(finishedOf(thicker, '天地板')!.W).toBe(844)
   })
 
   it('追加するたびに別の仕事（id が新しい）', () => {
@@ -109,8 +110,8 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
     ])
     expect(boardOf(job, 'シナランバー', 18)).toHaveLength(1)
     expect(boardOf(job, 'タモ', 20)).toHaveLength(1)
-    expect(job.boards).toHaveLength(7)
-    expect(partOf(job, '側板').boardId).toBe(boardOf(job, 'シナランバー', 18)[0].id)
+    expect(job.boards).toHaveLength(6)
+    expect(partOf(job, '側板').boardId).toBeNull()
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ21', 'フラッシュ25'])
     expect(dimOf(job, '側板').cutSize).toMatchObject({ H: 1805, D: 405 })
   })
@@ -138,6 +139,7 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.flushes).toHaveLength(1)
     expect(finishedOf(job, '天地板')!.H).toBe(23)
+    expect(finishedOf(job, '天地板')!.W).toBe(854)
     expect(computeDimensions(job).errors).toEqual([])
     expect(boardOf(job, 'メラミン', 1)[0].sizeKind).toBe('saburoku')
   })
@@ -153,13 +155,13 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
     expect(computeDimensions(job).errors).toEqual([])
   })
 
-  it('逃げ1 を消して逃げ2 だけのひな形：逃げ1 が足され、棚板の仕上がり W が 863', () => {
+  it('逃げ1 を消して逃げ2 だけのひな形：逃げ1 が足され、棚板の仕上がり W が 849', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
     a = must(removeNiges(a, ['nige-0.5', 'nige-1']))
     a = must(addNige(a, '逃げ', 2, 'nige-2'))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings.nige.map((n) => n.value)).toEqual([2, 1])
-    expect(finishedOf(job, '棚板')!.W).toBe(863)
+    expect(finishedOf(job, '棚板')!.W).toBe(849)
   })
 
   it('寸法 1 の逃げが別の id でも、その逃げを使う', () => {
@@ -182,7 +184,12 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
       ['逃げ', 1],
     ])
     expect(partOf(job, '棚板').expr.W).not.toContain('hozo-1')
-    expect(finishedOf(job, '棚板')!.W).toBe(863)
+    expect(finishedOf(job, '棚板')!.W).toBe(849)
+  })
+
+  it('シナランバー・シナベニヤは足さない', () => {
+    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    expect(job.boards.some((b) => b.material.startsWith('シナ'))).toBe(false)
   })
 
   it('ひな形を変えない', () => {
@@ -196,30 +203,32 @@ describe('sampleFromTemplate（見本をひな形から作る。天地板がフ�
 describe('setCutChecklistRow（切り出しのチェックリストの完了）', () => {
   const rowsOf = (job: Job) => cuttingChecklist(job, computeDimensions(job))
 
-  it('見本：メラミン1 の天地板を完了にすると、木取りで メラミン1 だけ除かれる。外すと戻る', () => {
+  it('見本：メラミン1 の天地板を完了にすると、木取りで メラミン1 の天地板だけ除かれる。外すと戻る', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     const groups = rowsOf(job)
     expect(groups.map((g) => [g.board ? boardLabel(g.board) : null, g.rows.map((r) => `${r.partName} ${r.sizeLabel} ×${r.count}`)])).toEqual([
-      ['シナランバー 18mm', ['側板 1810×410 ×2', '棚板 873×390 ×4']],
-      ['シナベニヤ 4mm', ['背板 900×1800 ×1']],
-      ['メラミン 1mm', ['天地板 874×410 ×4']],
-      ['ラワン 4mm', ['天地板 874×410 ×4']],
+      ['メラミン 1mm', ['側板 1810×410 ×4', '天地板 860×410 ×4', '棚板 859×390 ×8']],
+      ['ラワン 4mm', ['側板 1810×410 ×4', '天地板 860×410 ×4', '棚板 859×390 ×8', '背板 900×1800 ×1']],
     ])
-    const mel = groups[2].rows[0]
+    const sheets = (j: Job) => packJob(j, computeDimensions(j)).materials.map((m) => [boardLabel(m), m.sheetCount])
+    const mel = groups[0].rows[1]
     const done = must(setCutChecklistRow(job, mel, true))
-    expect(rowsOf(done)[2].rows[0].done).toBe(true)
-    const r = packJob(done, computeDimensions(done))
-    expect(r.materials.map(boardLabel)).toEqual(['ラワン 4mm', 'シナランバー 18mm', 'シナベニヤ 4mm'])
+    expect(rowsOf(done)[0].rows.map((r) => r.done)).toEqual([false, true, false])
+    expect(rowsOf(done)[1].rows.every((r) => !r.done)).toBe(true)
+    expect(sheets(done)).toEqual([
+      ['メラミン 1mm', 4],
+      ['ラワン 4mm', 6],
+    ])
     const undone = must(setCutChecklistRow(done, mel, false))
-    expect(packJob(undone, computeDimensions(undone)).materials).toHaveLength(4)
+    expect(sheets(undone)).toEqual(sheets(job))
   })
 
   it('ふつうの部材は checks.cut を変える（仕上がりの完了は変えない）', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
-    const side = rowsOf(job)[0].rows[0]
-    const done = must(setCutChecklistRow(job, side, true))
-    expect(partOf(done, '側板').checks).toEqual({ finished: false, cut: true })
-    expect(rowsOf(done)[0].rows[0].done).toBe(true)
+    const back = rowsOf(job)[1].rows[3]
+    const done = must(setCutChecklistRow(job, back, true))
+    expect(partOf(done, '背板').checks).toEqual({ finished: false, cut: true })
+    expect(rowsOf(done)[1].rows[3].done).toBe(true)
   })
 
   it('無い部材・表面材でない材料は断る', () => {

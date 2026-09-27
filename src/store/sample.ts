@@ -1,4 +1,4 @@
-// 見本（本棚 W900・天地板がフラッシュ）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
+// 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { eq1 } from '../engine/round'
 import { BOARD_SIZES, type Board, type Flush, type Job, type Part } from '../engine/types'
@@ -30,10 +30,10 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
 /**
  * ひな形から見本を作る。追加するたびに新しい仕事（id は新しく）。
  * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
- * - 見本で使うものが無ければ足す：材料 シナランバー18・シナベニヤ4（天地板のフラッシュを足すときは メラミン1・ラワン4 も）、
+ * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは メラミン1 も）、
  *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
  * - 見本で使う材料は 3×6（未決事項 24）
- * - 天地板はフラッシュ25、側板・棚板はシナランバー18、背板はシナベニヤ4。厚みは式の厚み（{t:…}）で書く
+ * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。シナランバー・シナベニヤは使わない）。厚みは式の厚み（{t:…}）で書く
  */
 export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
   const job = createJob(SAMPLE_NAME, template, now)
@@ -52,9 +52,6 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
     boards.push({ id, material, thickness, ...sheet })
     return id
   }
-
-  const lumber = boardFor('シナランバー', 18)
-  const veneer = boardFor('シナベニヤ', 4)
 
   // フラッシュ25：同じ名前があればそれを使う（表面材の材料も 3×6 にする）。無ければ足す
   let flushes: Flush[] = job.flushes
@@ -76,6 +73,7 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
     }
     flushes = [...flushes, flush]
   }
+  const lauan4 = boardFor('ラワン', 4)
 
   // 逃げ1：あればその id、無ければ足す
   let nige = job.settings.nige
@@ -85,27 +83,22 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
     nige = [...nige, { id: nigeId, name: NIGE_DEFAULT_NAME, value: 1 }]
   }
 
+  const t = `{t:${flush.id}}`
   const parts: Part[] = [
     part({ name: '全体', expr: { W: '900', H: '1800', D: '400' }, quantity: 0 }),
-    part({ name: '側板', boardId: lumber, expr: { W: `{t:${lumber}}`, H: '全体.H', D: '全体.D' }, quantity: 2, grain: 'H' }),
-    part({
-      name: '天地板',
-      flushId: flush.id,
-      expr: { W: '全体.W - 側板.W * 2', H: `{t:${flush.id}}`, D: '全体.D' },
-      quantity: 2,
-      grain: 'W',
-    }),
+    part({ name: '側板', flushId: flush.id, expr: { W: t, H: '全体.H', D: '全体.D' }, quantity: 2, grain: 'H' }),
+    part({ name: '天地板', flushId: flush.id, expr: { W: '全体.W - 側板.W * 2', H: t, D: '全体.D' }, quantity: 2, grain: 'W' }),
     part({
       name: '棚板',
-      boardId: lumber,
-      expr: { W: `天地板.W - {n:${nigeId}}`, H: `{t:${lumber}}`, D: '全体.D - 20' },
+      flushId: flush.id,
+      expr: { W: `天地板.W - {n:${nigeId}}`, H: t, D: '全体.D - 20' },
       quantity: 4,
       grain: 'W',
     }),
     part({
       name: '背板',
-      boardId: veneer,
-      expr: { W: '全体.W', H: '全体.H', D: `{t:${veneer}}` },
+      boardId: lauan4,
+      expr: { W: '全体.W', H: '全体.H', D: `{t:${lauan4}}` },
       quantity: 1,
       grain: 'H',
       allowance: 0,
