@@ -1070,8 +1070,8 @@ select.input {
 .dg-remain {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 3px;
-  stroke-dasharray: 8 4;
+  stroke-width: 4px;
+  stroke-dasharray: 10 5;
   vector-effect: non-scaling-stroke;
 }
 .dg-scrap {
