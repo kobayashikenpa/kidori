@@ -3,6 +3,7 @@ import { orderedBoards } from '../engine/boards'
 import { computeDimensions } from '../engine/dimensions'
 import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
+import { stackKey } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
 import {
   addBoard,
@@ -13,6 +14,7 @@ import {
   newBoard,
   removeBoards,
   removeNiges,
+  updateFlush,
   updateSettings,
   type JobOp,
   type OpResult,
@@ -59,17 +61,31 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     for (const name of ['側板', '天地板', '棚板']) expect(partOf(job, name).flushId).toBe(job.flushes[0].id)
     expect(partOf(job, '背板').boardId).toBe(boardOf(job, 'ラワン', 4)[0].id)
 
+    // 見本が足したフラッシュ25 は重ね切りオン（第2.1版）：組 5枚・ラワン 4 のふつうの1枚は背板の1枚
+    expect(job.flushes[0].stack).toBe(true)
+    const mel = boardOf(job, 'メラミン', 1)[0].id
+    const lauan = boardOf(job, 'ラワン', 4)[0].id
     for (const cutMode of ['vertical', 'horizontal', 'auto'] as const) {
       const j = must(updateSettings(job, { cutMode }))
       const r = packJob(j, computeDimensions(j))
-      expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
-        ['メラミン 1mm', 5],
-        ['ラワン 4mm', 6],
+      expect(r.materials.map((m) => [m.boardId, m.stack?.boardIds ?? null, m.sheetCount])).toEqual([
+        [stackKey(mel, lauan), [mel, lauan], 5],
+        [lauan, null, 1],
       ])
-      expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([85.2, 87.3])
+      expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([85.2, 97.8])
       expect(Math.round(r.totalYieldRate * 1000) / 10).toBe(86.4)
       expect(r.skipped).toEqual([])
+      expect(r.stackMismatches).toEqual([])
     }
+    // 重ね切りをオフにすると第1.7版の見本（S-14）の値
+    const { stack: _s, ...offDraft } = job.flushes[0]
+    const off = must(updateFlush(job, job.flushes[0].id, offDraft))
+    const r = packJob(off, computeDimensions(off))
+    expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
+      ['メラミン 1mm', 5],
+      ['ラワン 4mm', 6],
+    ])
+    expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([85.2, 87.3])
   })
 
   it('厚みは式の厚みで書く：材料・フラッシュの厚みを変えると寸法がついてくる', () => {
@@ -136,10 +152,27 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     a = must(addFlush(a, { name: 'フラッシュ25', core: 21, faces: [{ boardId: mel.id, count: 2 }] }))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.flushes).toHaveLength(1)
+    // ひな形のフラッシュ25 の重ね切りの設定はそのまま（このフラッシュは表面材1種類なのでオフ）
+    expect(job.flushes[0].stack).toBeUndefined()
     expect(finishedOf(job, '天地板')!.H).toBe(23)
     expect(finishedOf(job, '天地板')!.W).toBe(854)
     expect(computeDimensions(job).errors).toEqual([])
     expect(boardOf(job, 'メラミン', 1)[0].sizeKind).toBe('saburoku')
+  })
+
+  it('ひな形にある重ね切りオフのフラッシュ25（メラミン1×2・ラワン4×2）は、オフのまま使う（オンならオン）', () => {
+    const base = createJob('A', undefined, NOW, 'job-a')
+    const mel = base.boards.find((b) => b.material === 'メラミン')!
+    const lauan = base.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
+    const faces = [
+      { boardId: mel.id, count: 2 },
+      { boardId: lauan.id, count: 2 },
+    ]
+    const off = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces }))
+    expect(off.flushes[0].stack).toBeUndefined()
+    expect(sampleFromTemplate(templateOf(off), NOW).flushes[0].stack).toBeUndefined()
+    const on = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces, stack: true }))
+    expect(sampleFromTemplate(templateOf(on), NOW).flushes[0].stack).toBe(true)
   })
 
   it('メラミン1・ラワン4 を消したひな形：フラッシュ25 のために足す', () => {

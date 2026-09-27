@@ -31,7 +31,7 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
  * ひな形から見本を作る。追加するたびに新しい仕事（id は新しく）。
  * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
  * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは メラミン1 も）、
- *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
+ *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
  * - 見本で使う材料は 3×6（未決事項 24）
  * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。シナランバー・シナベニヤは使わない）。厚みは式の厚み（{t:…}）で書く
  */
@@ -53,7 +53,7 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
     return id
   }
 
-  // フラッシュ25：同じ名前があればそれを使う（表面材の材料も 3×6 にする）。無ければ足す
+  // フラッシュ25：同じ名前があればそれを使う（表面材の材料も 3×6 にする。重ね切りの設定はひな形のまま）。無ければ重ね切りオンで足す
   let flushes: Flush[] = job.flushes
   let flush = flushes.find((f) => key(f.name) === key(SAMPLE_FLUSH_NAME))
   if (flush) {
@@ -70,6 +70,8 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
         { boardId: boardFor('メラミン', 1), count: 2 },
         { boardId: boardFor('ラワン', 4), count: 2 },
       ],
+      // 重ね切りは初期オン（第2.1版。仕様書 4）
+      stack: true,
     }
     flushes = [...flushes, flush]
   }

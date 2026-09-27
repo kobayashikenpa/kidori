@@ -144,8 +144,8 @@ describe('保存・引き継ぎ・コピー', () => {
     const sample = sampleFromTemplate(tpl, NOW)
     expect(sample.flushes[0].stack).toBe(true)
     expect(pack(sample).materials.map((x) => x.sheetCount)).toEqual([5, 1])
-    // 初期のひな形の見本はオフ
-    expect('stack' in sampleFromTemplate(defaultTemplate(), NOW).flushes[0]).toBe(false)
+    // 初期のひな形の見本は、見本がフラッシュ25 を足すので重ね切りオン（第2.1版）
+    expect(sampleFromTemplate(defaultTemplate(), NOW).flushes[0].stack).toBe(true)
   })
 
   it('仕事をコピーすると stack が残る（表面材は新しい材料を指す）', () => {

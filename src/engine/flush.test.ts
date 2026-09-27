@@ -5,6 +5,7 @@ import { FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID } from './f
 import {
   autoFlushName,
   defaultFlushFaces,
+  defaultFlushStack,
   isAutoFlushName,
   flushBreakdown,
   flushBreakdownText,
@@ -202,5 +203,28 @@ describe('autoFlushName（自動の名前）・isAutoFlushName', () => {
     expect(isAutoFlushName('天板用')).toBe(false)
     expect(isAutoFlushName('フラッシュ')).toBe(false)
     expect(isAutoFlushName('フラッシュ25 白')).toBe(false)
+  })
+})
+
+describe('defaultFlushStack（新しいフラッシュの「表面材を重ねて切る」の初期値。第2.1版）', () => {
+  it('表面材が2種類で枚数が同じならオン（メラミン1×2・ラワン4×2）', () => {
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 2 }])).toBe(true)
+  })
+
+  it('重ねられない表面材ならオフ（枚数が違う・1種類・3種類・表面材なし）', () => {
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 1 }])).toBe(false)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }])).toBe(false)
+    expect(
+      defaultFlushStack([
+        { boardId: 'm1', count: 1 },
+        { boardId: 'l4', count: 1 },
+        { boardId: 'l25', count: 1 },
+      ]),
+    ).toBe(false)
+    expect(defaultFlushStack([])).toBe(false)
+  })
+
+  it('初期の材料の表面材の初期値（defaultFlushFaces）ならオン', () => {
+    expect(defaultFlushStack(defaultFlushFaces({ boards: defaultBoards((p) => `${p}-x${Math.random()}`) }))).toBe(true)
   })
 })

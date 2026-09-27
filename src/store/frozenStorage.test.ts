@@ -194,8 +194,9 @@ describe('clearLegacyCut（以前の木取り済みを外す）', () => {
     expect(ok(clearLegacyCut(nb, tana.id, null)).parts.find((p) => p.id === tana.id)!.checks.cut).toBe(false)
   })
 
-  it('見本：棚板の メラミン 1 の完了を外すと packJob に棚板が戻る（ラワン 4 の完了は残る）', () => {
-    const job0 = sampleFromTemplate(defaultTemplate(), NOW)
+  it('見本（重ね切りオフ）：棚板の メラミン 1 の完了を外すと packJob に棚板が戻る（ラワン 4 の完了は残る）', () => {
+    const on = sampleFromTemplate(defaultTemplate(), NOW)
+    const job0 = { ...on, flushes: on.flushes.map(({ stack: _s, ...f }) => f) }
     const mel = job0.boards.find((b) => b.material === 'メラミン' && b.thickness === 1)!.id
     const lau = job0.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!.id
     const tana = job0.parts.find((p) => p.name === '棚板')!.id
