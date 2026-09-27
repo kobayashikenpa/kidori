@@ -1813,3 +1813,84 @@ button.dim-name {
 .kd-mat-stack {
   border-left: 4px solid var(--accent);
 }
+
+/* 木取り：手持ちの材料（第2.2版） */
+.stk {
+  margin-top: 14px;
+}
+.stk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stk-mat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.stk-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.stk-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stk-row {
+  background: var(--sunk);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.stk-row .seg {
+  background: var(--surface);
+}
+.stk-dims {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.stk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.stk-foot {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.stk-count {
+  flex: 0 1 110px;
+}
+.stk-use {
+  flex: 1 1 auto;
+  font-size: 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.stk-use b {
+  font-size: 17px;
+  margin: 0 2px;
+}
+.stk-del {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+}

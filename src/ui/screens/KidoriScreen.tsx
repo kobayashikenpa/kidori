@@ -9,7 +9,13 @@ import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
-import { frozenSheetViews, materialSummaries, type FrozenSheetView, type MaterialSummary } from '../../engine/progress/frozen'
+import {
+  frozenSheetViews,
+  materialSummaries,
+  stockUsage,
+  type FrozenSheetView,
+  type MaterialSummary,
+} from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
@@ -20,6 +26,7 @@ import { Segmented } from '../components/Segmented'
 import { SheetChecklist } from '../components/SheetChecklist'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { SheetSizePicker } from '../components/SheetSizePicker'
+import { StockEditor } from '../components/StockEditor'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 import { Help } from '../components/Help'
@@ -80,11 +87,17 @@ const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
-  const { result, compare, views, summaries } = useMemo(() => {
+  const { result, compare, views, summaries, usage } = useMemo(() => {
     const dims = computeDimensions(job)
     const result = packJob(job, dims)
     const views = frozenSheetViews(job, dims)
-    return { result, compare: compareStandardSizes(job, dims), views, summaries: materialSummaries(job, result, views) }
+    return {
+      result,
+      compare: compareStandardSizes(job, dims),
+      views,
+      summaries: materialSummaries(job, result, views),
+      usage: stockUsage(job, result),
+    }
   }, [job])
   // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
   // 押した行が消えたとき（その1枚が切り終わり）は、材料の段の見出しを同じ位置に残す
@@ -124,6 +137,10 @@ export function KidoriScreen() {
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
+  // 手持ちの段に出す材料：木取りする片のある材料（組だけで使う材料を含む）と、手持ちで木取りにしている材料
+  const stockBoards = orderedBoards(job).filter(
+    (b) => b.stockOn === true || result.materials.some((m) => (m.stack ? m.stack.boardIds.includes(b.id) : m.boardId === b.id)),
+  )
 
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
   // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
@@ -253,6 +270,18 @@ export function KidoriScreen() {
             ))}
           </ul>
         </div>
+      )}
+
+      {stockBoards.length > 0 && (
+        <section aria-label="手持ちの材料" className="stk">
+          <h3>
+            <Help title="手持ちの材料">
+              材料ごとに、サイズを1つ選ぶかわりに、手元にある材料（例：4×8 ×3枚、3×6 ×2枚）を登録して、その範囲で木取りできます。
+              大きい部材から順に、それが収まる一番小さい材料を選んで並べます。「サイズを選ぶ」に戻しても、登録した手持ちは残ります。
+            </Help>
+          </h3>
+          <StockEditor boards={stockBoards} usage={usage} />
+        </section>
       )}
 
       {unplaced.length > 0 && (
