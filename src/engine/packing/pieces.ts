@@ -1,8 +1,8 @@
 // 部材を1枚ずつの「片」に展開し、板ごとに分ける。板の木目に部材の木目を合わせて向き（x・y）を決める
 import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
-import type { Axis, Board, DimensionResult, Job, PackingResult, Part, PartDimensions, PartGrain } from '../types'
-import { usableSides } from './sheet'
+import type { Board, BoardGrain, DimensionResult, Job, PackingResult, Part, PartDimensions, UnplacedReason } from '../types'
+import { usableSides, type StripMode } from './sheet'
 import { stackPlan, type StackGroup, type StackMismatch, type StackPlan } from './stack'
 
 /**
@@ -29,9 +29,23 @@ export interface Piece {
    * おまかせでは広いほう（縦切り優先）の範囲で判定するので、横切り優先で入らない向きが残ることがある（配置で除く）
    */
   orientations: Orientation[]
+  /**
+   * 面の木取り寸法と木目（第2.2版）。手持ちの大きさ・木目ごとに向きを決め直すのに使う（orientationsFor）。
+   * expandPieces が作る片には必ずある
+   */
+  shape?: PieceShape
+  /** 重ね切りの組の片（第2.2版）：2つ目の材料 b の片の id（b の表面材の番号）。組に置けなかったときに b の片にする */
+  twin?: string
 }
 
-export type Unplaced = { partId: string; name: string; reason: 'tooLarge' }
+/** 片の形：面の2軸の木取り寸法（s0：face[0]、s1：face[1]）と、木目を通す軸（0：face[0]、1：face[1]、any：どちらでもよい） */
+export interface PieceShape {
+  s0: number
+  s1: number
+  grain: 0 | 1 | 'any'
+}
+
+export type Unplaced = { partId: string; name: string; reason: UnplacedReason }
 
 export interface BoardPieces {
   /** 片の向き・配置に使う材料。重ね切りの組では1つ目の材料 a（sameSheet なので b も同じ大きさ・木目） */
@@ -158,15 +172,16 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     const s0 = d.cutSize[a0]
     const s1 = d.cutSize[a1]
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
-    const grain = part?.grain ?? 'any'
+    const partGrain = part?.grain ?? 'any'
+    const shape: PieceShape = { s0, s1, grain: partGrain === a0 ? 0 : partGrain === a1 ? 1 : 'any' }
     const place = (g: BoardPieces, board: Board, from: number, count: number) => {
-      const orientations = orientationsOn(board, s0, s1, a0, a1, grain, job)
+      const orientations = orientationsOn(board, shape, job)
       if (orientations.length === 0) {
         if (!g.unplaced.some((u) => u.partId === d.partId)) g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
         return
       }
       for (let i = 1; i <= count; i++) {
-        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations })
+        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape })
       }
     }
     // 重ね切り：a・b の両方に残りがあるぶんだけ組に入れる
@@ -218,21 +233,34 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
   return { groups, skipped, done, stackMismatches }
 }
 
-/** 板に置いてよい向き（木目と、使える範囲に入るか） */
-function orientationsOn(board: Board, s0: number, s1: number, a0: Axis, a1: Axis, grain: PartGrain, job: Job): Orientation[] {
+/**
+ * 大きさ・木目が決まった1枚に置いてよい向き（木目と、使える範囲に入るか）。
+ * mode は使える範囲を決める切り方（横切り優先は長手も端切りする）
+ */
+export function orientationsFor(
+  shape: PieceShape,
+  sheet: Pick<Board, 'width' | 'length'> & { grain: BoardGrain },
+  trim: number,
+  mode: StripMode,
+): Orientation[] {
+  const { s0, s1, grain } = shape
   // face[0] を y に置く向きと、face[1] を y に置く向き
   const upright: Orientation = { x: s1, y: s0, rotated: false }
   const turned: Orientation = { x: s0, y: s1, rotated: true }
   let candidates: Orientation[]
-  if (grain === a0 || grain === a1) {
+  if (grain !== 'any') {
     // 木目の軸を、板の木目の方向（長辺＝y／短辺＝x）に合わせる
-    const grainOnY = board.grain === 'long'
-    candidates = [(grain === a0) === grainOnY ? upright : turned]
+    const grainOnY = sheet.grain === 'long'
+    candidates = [(grain === 0) === grainOnY ? upright : turned]
   } else {
     // どちらでもよい（または面にない軸が残っている）→ 回転してよい
     candidates = round1(s0) === round1(s1) ? [upright] : [upright, turned]
   }
-  // 横切り優先は長手も端切りする。おまかせは広いほう（縦切り優先）で判定する
-  const sides = usableSides(board, job.settings.trim, job.settings.cutMode === 'horizontal' ? 'horizontal' : 'vertical')
+  const sides = usableSides(sheet, trim, mode)
   return candidates.filter((o) => round1(o.x) <= round1(sides.short) && round1(o.y) <= round1(sides.long))
+}
+
+/** サイズを選んだ材料に置いてよい向き。おまかせは広いほう（縦切り優先）の範囲で判定する */
+export function orientationsOn(board: Board, shape: PieceShape, job: Pick<Job, 'settings'>): Orientation[] {
+  return orientationsFor(shape, board, job.settings.trim, job.settings.cutMode === 'horizontal' ? 'horizontal' : 'vertical')
 }

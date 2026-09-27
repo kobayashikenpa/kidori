@@ -864,7 +864,7 @@
 
 ### 計算ロジック（engine）
 
-### [ ] E-55 手持ちのデータの形と、材料の手持ちの取り出し
+### [x] E-55 手持ちのデータの形と、材料の手持ちの取り出し
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：9（手持ちの材料）
 - やること：`types.ts` に `StockSheet`・`Board.stockOn?: true`・`Board.stock?`・`SheetLayout.sheet?`・入らない理由 `'noStock'`・`stackMismatches` の `reason`（今は `'size'` だけ返す）を足す（14.2）。`packing/stock.ts` に `stockKinds`・`stockSizeLabel`・`commonStock` を作る（14.3。`availableStock` は E-57）。`Piece` に `shape`（面の木取り寸法と木目の軸）を足す（14.4）
 - 完了の条件：手持ちの無い材料（4×8 を選択）の `stockKinds` は 4×8 1行・枚数 Infinity。`stockOn` で 4×8 ×3・3×6 ×2 なら その2行（登録順）。`stockOn` を外すと行があっても選んだサイズ1行。`stockSizeLabel` は 3×6 → "3×6"、自由入力 450×900 → "450×900"。`commonStock`（a：3×6 ×5・4×8 ×2、b：3×6 ×3）は 3×6 ×3 の1行、b が 3×6 の選択（無限）なら 3×6 ×5。自由入力 910×1820 木目 長手 は 3×6 とそろい、木目 短手 はそろわない
