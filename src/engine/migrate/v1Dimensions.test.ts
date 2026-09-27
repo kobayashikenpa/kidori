@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultNige } from '../defaults'
-import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
+import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID } from '../fixtures/bookshelf'
 import type { Axis, Job, Part } from '../types'
 import { computeV1Dimensions } from './v1Dimensions'
 
@@ -12,7 +12,8 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
     grain: 'any',
     memo: '',
     checks: { finished: false, cut: false },
-    allowance: null,
+    // 切り代は今の決め方（第2.1版：フラッシュでない部材は上書きしないと 0）。今までの値で確かめるため 10 を入れる
+    allowance: LUMBER_ALLOWANCE,
     ...p,
   }
 }
@@ -25,6 +26,11 @@ function jobOf(parts: Part[]): Job {
 type Clr = Map<string, Partial<Record<Axis, number>>>
 
 describe('computeV1Dimensions（以前の版の寸法の計算）', () => {
+  it('切り代は今の決め方にそろえる：フラッシュでない部材で上書きが無ければ 0（切り代の決め方の違いを移し替えの変化として知らせない）', () => {
+    const job = jobOf([part({ id: 'p', name: 'P', expr: { W: '19', H: '600', D: '18' }, allowance: null })])
+    expect(computeV1Dimensions(job, new Map([['p', { W: 1 }]]) as Clr).get('p')?.cutSize).toEqual({ W: 18, H: 600, D: 18 })
+  })
+
   it('以前の見本：棚板 W = 天地板.W・逃げ W1 → 仕上がり 863×18×380・木取り 873×18×390・厚みは H', () => {
     const job = bookshelfJob()
     const parts = job.parts.map((p) => (p.name === '棚板' ? { ...p, expr: { ...p.expr, W: '天地板.W' } } : p))

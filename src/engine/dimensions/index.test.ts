@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
+import { FLUSH_25_ID, flushJob, flushPart } from '../fixtures/flush'
 import type { Job, Part } from '../types'
 import { cutSizeOf } from './cutSize'
-import { computeDimensions } from './index'
+import { computeDimensions, partAllowance } from './index'
 
 function byName(job: Job) {
   const r = computeDimensions(job)
@@ -56,12 +57,20 @@ describe('computeDimensions（寸法表のまとめ）', () => {
     expect(d['側板'].allowance).toBe(10)
   })
 
-  it('仕事の切り代を変えると、上書きしていない部材だけ変わる', () => {
+  it('仕事の切り代を変えても、上書きした部材（見本の側板 10・背板 0）は変わらない', () => {
     const job = bookshelfJob()
     job.settings.allowance = 5
     const d = byName(job)
-    expect(d['側板'].cutSize).toEqual({ W: 18, H: 1805, D: 405 })
+    expect(d['側板'].cutSize).toEqual({ W: 18, H: 1810, D: 410 })
     expect(d['背板'].cutSize).toEqual({ W: 900, H: 1800, D: 4 })
+  })
+
+  it('見本の側板の上書きを空欄にすると、フラッシュでないので切り代 0（1800×400）', () => {
+    const job = bookshelfJob()
+    job.parts.find((p) => p.name === '側板')!.allowance = null
+    const d = byName(job)
+    expect(d['側板'].allowance).toBe(0)
+    expect(d['側板'].cutSize).toEqual({ W: 18, H: 1800, D: 400 })
   })
 
   it('入力値と板・名前を部材の並び順で返す。見本はエラーなし', () => {
@@ -253,5 +262,56 @@ describe('式の中の 材料の厚み・逃げ（E-20）', () => {
     const job = bookshelfJob()
     part(job, '天地板').expr.W = `全体.W - {t:${LUMBER_18_ID}} * 2`
     expect(byName(job)['天地板'].finished!.W).toBe(864)
+  })
+})
+
+describe('切り代はフラッシュの部材だけ（第2.1版。仕様書 4・7）', () => {
+  /** フラッシュの天板と、ラワン 4 の天板（W900×D600）を並べた仕事 */
+  function mixedJob(flushOverride: number | null, boardOverride: number | null): Job {
+    const job = flushJob()
+    const flushTop = job.parts.find((p) => p.flushId === FLUSH_25_ID)!
+    job.parts = [
+      { ...flushTop, id: 'f', name: 'フラッシュ天板', expr: { W: '900', H: `{t:${FLUSH_25_ID}}`, D: '600' }, allowance: flushOverride },
+      flushPart({
+        id: 'b',
+        name: 'ラワン天板',
+        boardId: job.boards[1].id,
+        expr: { W: '900', H: '4', D: '600' },
+        allowance: boardOverride,
+      }),
+    ]
+    return job
+  }
+  const cut = (job: Job, name: string) => computeDimensions(job).parts.find((p) => p.name === name)!
+
+  it('切り代 10：フラッシュの天板 W900×D600 → 910×610、フラッシュでない天板は 900×600（切り代 0）', () => {
+    const job = mixedJob(null, null)
+    expect(cut(job, 'フラッシュ天板').cutSize).toEqual({ W: 910, H: 25, D: 610 })
+    expect(cut(job, 'フラッシュ天板').allowance).toBe(10)
+    expect(cut(job, 'ラワン天板').cutSize).toEqual({ W: 900, H: 4, D: 600 })
+    expect(cut(job, 'ラワン天板').allowance).toBe(0)
+  })
+
+  it('部材ごとの上書きは、フラッシュでない部材にも効く（5 → 905×605）。フラッシュの上書き 0 → 900×600', () => {
+    const job = mixedJob(0, 5)
+    expect(cut(job, 'フラッシュ天板').cutSize).toEqual({ W: 900, H: 25, D: 600 })
+    expect(cut(job, 'ラワン天板').cutSize).toEqual({ W: 905, H: 4, D: 605 })
+    expect(cut(job, 'ラワン天板').allowance).toBe(5)
+  })
+
+  it('設定の切り代を変えても、フラッシュでない部材は変わらない', () => {
+    const job = mixedJob(null, null)
+    job.settings.allowance = 3
+    expect(cut(job, 'フラッシュ天板').cutSize).toEqual({ W: 903, H: 25, D: 603 })
+    expect(cut(job, 'ラワン天板').cutSize).toEqual({ W: 900, H: 4, D: 600 })
+  })
+
+  it('partAllowance：上書き → それ、無ければ フラッシュは設定の切り代・それ以外は 0', () => {
+    const s = { allowance: 10 }
+    expect(partAllowance({ allowance: null, flushId: 'x' }, s)).toBe(10)
+    expect(partAllowance({ allowance: null }, s)).toBe(0)
+    expect(partAllowance({ allowance: 7, flushId: 'x' }, s)).toBe(7)
+    expect(partAllowance({ allowance: 0 }, s)).toBe(0)
+    expect(partAllowance({ allowance: 2.5 }, s)).toBe(2.5)
   })
 })
