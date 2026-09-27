@@ -8,13 +8,17 @@ import { boardTokenLabel } from '../../engine/defaults'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
+import { usesStock } from '../../engine/packing/stock'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
 import {
   frozenSheetViews,
+  layoutSizeLabel,
+  materialSizeCounts,
   materialSummaries,
   stockUsage,
   type FrozenSheetView,
   type MaterialSummary,
+  type SizeCount,
 } from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
@@ -65,6 +69,8 @@ interface Section {
   sheets: SheetEntry[]
   /** 切り終わった1枚（通常の一覧には出さない） */
   finished: SheetEntry[]
+  /** 手持ちで木取りする材料（組なら a・b のどちらか）。1枚ごとに大きさを添え、まとめはサイズ別の枚数 */
+  stocked: boolean
 }
 
 const DRIFT_REASON: Record<FrozenSheetView['drift'][number]['reason'], string> = {
@@ -87,7 +93,7 @@ const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
-  const { result, compare, views, summaries, usage } = useMemo(() => {
+  const { result, compare, views, summaries, usage, sizeCounts } = useMemo(() => {
     const dims = computeDimensions(job)
     const result = packJob(job, dims)
     const views = frozenSheetViews(job, dims)
@@ -97,6 +103,7 @@ export function KidoriScreen() {
       views,
       summaries: materialSummaries(job, result, views),
       usage: stockUsage(job, result),
+      sizeCounts: materialSizeCounts(job, result, views),
     }
   }, [job])
   // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
@@ -172,7 +179,7 @@ export function KidoriScreen() {
         ? { kind: 'computed', boardId: pair[0], stackWith: pair[1], mode: m?.mode ?? 'vertical', layout: sh }
         : { kind: 'computed', boardId, mode: m?.mode ?? 'vertical', layout: sh },
       checked: [],
-      grain: board?.grain ?? 'long',
+      grain: sh.sheet?.grain ?? board?.grain ?? 'long',
       trim: s.trim,
       progress: sheetProgress(sh, s.kerf, []),
       view: null,
@@ -193,6 +200,10 @@ export function KidoriScreen() {
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
         finished: mine.filter((v) => v.complete).map(frozenEntry),
+        stocked: (pair ?? [boardId]).some((id) => {
+          const b = boardOf(id)
+          return b !== null && usesStock(b)
+        }),
       },
     ]
   })
@@ -243,7 +254,10 @@ export function KidoriScreen() {
         const [a, b] = x.boardIds.map((id) => boardOf(id))
         return (
           <p key={x.boardIds.join('+')} className="msg warn" role="note">
-            {a ? boardTokenLabel(a) : ''}＋{b ? boardTokenLabel(b) : ''}：サイズがそろっていないので、重ねずに木取りしています
+            {a ? boardTokenLabel(a) : ''}＋{b ? boardTokenLabel(b) : ''}：
+            {x.reason === 'stock'
+              ? '同じサイズの手持ちが無いので、重ねずに木取りしています'
+              : 'サイズがそろっていないので、重ねずに木取りしています'}
           </p>
         )
       })}
@@ -266,6 +280,7 @@ export function KidoriScreen() {
                 auto={s.cutMode === 'auto'}
                 board={boardOf(sec.stack ? sec.stack[0] : sec.boardId)}
                 comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
+                bySize={sec.stocked ? (sizeCounts.find((c) => c.boardId === sec.boardId)?.bySize ?? []) : null}
               />
             ))}
           </ul>
@@ -373,6 +388,7 @@ export function KidoriScreen() {
                   count={sec.finished.length}
                   finished
                   label={sec.label}
+                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -389,6 +405,7 @@ export function KidoriScreen() {
                   no={i + 1}
                   count={sec.sheets.length}
                   label={sec.label}
+                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -413,9 +430,11 @@ interface MaterialRowProps {
   auto: boolean
   board: Board | null
   comparison: MaterialSizeComparison | null
+  /** 手持ちで木取りする材料（組）なら、サイズ別の枚数（サイズの選択のかわりに出す） */
+  bySize: SizeCount[] | null
 }
 
-function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison }: MaterialRowProps) {
+function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison, bySize }: MaterialRowProps) {
   const n = summary.sheetCount
   return (
     <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
@@ -436,7 +455,15 @@ function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison }
           {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
-      {board && m && <SheetSizePicker board={board} boardIds={stack} label={label} compare={comparison} current={m} />}
+      {bySize ? (
+        bySize.length > 0 && (
+          <div className="kd-mat-mode num">
+            手持ち：<b>{bySize.map((c) => `${c.label} ×${c.count}`).join('・')}</b>
+          </div>
+        )
+      ) : (
+        board && m && <SheetSizePicker board={board} boardIds={stack} label={label} compare={comparison} current={m} />
+      )}
     </li>
   )
 }
@@ -449,12 +476,14 @@ interface SheetCardProps {
   /** 切り終わった1枚（グレーで開く） */
   finished?: boolean
   label: string
+  /** 手持ちの1枚の大きさ（「4×8」）。サイズを選んだ材料は null */
+  size: string | null
   rows: SheetChecklistRow[]
   colorOf: (partId: string) => number
   onToggle: (row: SheetChecklistRow, key: string, el: HTMLElement) => void
 }
 
-function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, onToggle }: SheetCardProps) {
+function SheetCard({ entry, no, count, finished = false, label, size, rows, colorOf, onToggle }: SheetCardProps) {
   const { layout: sheet, grain, trim } = entry
   const drift = entry.view?.drift ?? []
   const landscape = sheet.orientation === 'landscape'
@@ -477,6 +506,7 @@ function SheetCard({ entry, no, count, finished = false, label, rows, colorOf, o
         <span className="kd-sheet-no">
           {finished ? '切り終わり ' : ''}
           {no}枚目<span className="kd-of"> / {count}枚</span>
+          {size && <span className="kd-of num">（{size}）</span>}
         </span>
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
       </header>
