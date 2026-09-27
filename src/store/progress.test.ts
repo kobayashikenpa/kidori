@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import { compareStandardSizes } from '../engine/packing/sizes'
-import { freezeSheet, frozenDemand } from '../engine/progress/frozen'
+import { freezeSheet, frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { sheetProgress } from '../engine/progress/sheetProgress'
 import type { Job, MaterialResult } from '../engine/types'
+import { removePart, updatePart } from './jobs'
 import { sampleFromTemplate } from './sample'
 import { defaultTemplate } from './template'
 
@@ -129,5 +130,45 @@ describe('E-44 見本：メラミン 1 の1枚目の進み具合', () => {
     expect(s.placements.map((p) => p.sizeLabel)).toEqual(['1810×410', '1810×410'])
     const top = s.placements.find((p) => p.y > 400)!.pieceId
     expect(sheetProgress(s, 3, [top])).toMatchObject({ doneSteps: [1, 2, 3, 4], nextStep: 5 })
+  })
+})
+
+describe('E-45 見本：部材が変わっています・材料のまとめ', () => {
+  const must = (r: ReturnType<typeof updatePart>): Job => {
+    if (!r.ok) throw new Error(r.message)
+    return r.job
+  }
+  const drift = (job: Job) => frozenSheetViews(job, computeDimensions(job))[0].drift.map((d) => `${d.name}:${d.reason}`)
+
+  it('ラワン 4 の1枚目（背板）を固定：全体.W 880 → 背板 size、背板 0枚 → count、背板を消す → removed、棚板を増やす → なし', () => {
+    const job0 = sample()
+    const job = freezeAt(job0, boardId(job0, 'ラワン', 4), 0)
+    expect(drift(job)).toEqual([])
+    const all = partId(job, '全体')
+    expect(drift(must(updatePart(job, all, { expr: { W: '880', H: '1800', D: '400' } })))).toEqual(['背板:size'])
+    expect(drift(must(updatePart(job, partId(job, '背板'), { quantity: 0 })))).toEqual(['背板:count'])
+    expect(drift(must(removePart(job, partId(job, '背板'))))).toEqual(['背板:removed'])
+    expect(drift(must(updatePart(job, partId(job, '棚板'), { quantity: 6 })))).toEqual([])
+    // 写しは 900×1800 のまま
+    const changed = must(updatePart(job, all, { expr: { W: '880', H: '1800', D: '400' } }))
+    expect(frozenSheetViews(changed, computeDimensions(changed))[0].sheet.layout.placements[0].sizeLabel).toBe('900×1800')
+  })
+
+  it('メラミン 1 の1枚目：チェック1つ → 枚数 5、チェック2つ（切り終わり）→ 枚数 4・切り終わり 1', () => {
+    const job0 = sample()
+    const mel = boardId(job0, 'メラミン', 1)
+    const summary = (job: Job) => {
+      const dims = computeDimensions(job)
+      return materialSummaries(job, packJob(job, dims), frozenSheetViews(job, dims)).materials.find((m) => m.boardId === mel)!
+    }
+    expect(summary(job0)).toMatchObject({ sheetCount: 5, completedCount: 0 })
+    const one = freezeAt(job0, mel, 0)
+    expect(summary(one)).toMatchObject({ sheetCount: 5, completedCount: 0 })
+    const f = one.frozenSheets[0]
+    const both: Job = {
+      ...one,
+      frozenSheets: [{ ...f, checked: f.layout.placements.map((p) => p.pieceId), completedAt: NOW.toISOString() }],
+    }
+    expect(summary(both)).toMatchObject({ sheetCount: 4, completedCount: 1 })
   })
 })
