@@ -76,6 +76,20 @@ function split(r: Rect, c: CutStep, kerf: number, usable: Rect): Rect[] {
   return out
 }
 
+/**
+ * 片ごとに、その片を取り出す最後の工程（CutStep.no）。within がその片を含む工程のうち一番大きい no。
+ * 工程が1つも要らない片（板全体がその片）は 0
+ */
+export function pieceReleaseSteps(layout: Pick<SheetLayout, 'placements' | 'cuts'>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const p of layout.placements) {
+    let last = 0
+    for (const c of layout.cuts) if (c.no > last && contains(c.within, p)) last = c.no
+    out.set(p.pieceId, last)
+  }
+  return out
+}
+
 const byArea = (a: RemainingPiece, b: RemainingPiece) => b.rect.w * b.rect.h - a.rect.w * a.rect.h
 
 /**

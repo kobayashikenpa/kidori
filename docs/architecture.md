@@ -997,7 +997,7 @@ export interface SheetChecklistRow {
 }
 export function sheetChecklist(job: Job, layout: SheetLayout, checked: readonly string[]): SheetChecklistRow[]
 ```
-- 行は `layout.placements` の並び（右の帯から、帯の中は上から＝切る順番に近い並び）。1片1行（仕様書 9 の例：天地板 874×410 □、天地板 874×410 □ …）
+- 行は切る順番に取り出される順（第1.9版）：`pieceReleaseSteps(layout)`（`progress/sheetProgress.ts`。その片を含む工程のうち一番大きい no）の小さい順、同じなら `layout.placements` の順。帯より細い片は幅を切り揃える工程で取り出すので、同じ帯のあとの片より後になる。1片1行（仕様書 9 の例：天地板 874×410 □、天地板 874×410 □ …）
 - ふつうの部材もフラッシュの表面材も同じ形（その1枚の材料が表面材）
 - 材料ごとのチェックリスト（`cuttingChecklist`）と、その完了を付け外す `setCutChecklistRow`・`setFlushCutCheck` は使わなくなったので削除した。以前の「木取り済み」を外すのは `clearLegacyCut`（11.9）だけ
 
