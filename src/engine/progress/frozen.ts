@@ -160,10 +160,10 @@ export interface MaterialSummary {
   stack?: { boardIds: [string, string] }
   /**
    * 画面に出す材料の枚数 ＝ 固定した1枚（切り終わりを除く）＋ 計算した1枚。
-   * 材料の行には、その材料が入っている組の1枚（固定・計算とも、切り終わりを除く）も足す
+   * 材料の行は、その材料をふつうに木取りする分だけ（重ね切りの組の1枚は組の行だけに数える。第2.1版）
    */
   sheetCount: number
-  /** sheetCount のうち重ね切りの組の1枚の数（組の行は sheetCount と同じ） */
+  /** 重ね切りの組の1枚の数。組の行は sheetCount と同じ、材料の行はいつも 0（第2.1版から材料の行に組の1枚を足さないため） */
   stackedCount: number
   /** 同じ1枚たちの歩留まり */
   yieldRate: number
@@ -183,7 +183,8 @@ function sheetStackKey(sheet: FrozenSheet): string | null {
  * 並びは材料の保存の並び。固定した1枚しか無い材料・切り終わりしか無い材料も入れる。
  * 削除した材料の固定した1枚は最後に（固定した順）。
  * 重ね切り（第2.0版。architecture.md 12.5）：組の行を a の行の直後に足す（固定した組の1枚しか無い組も）。
- * 材料の行には組の1枚も数える。全体の歩留まりは材料の行の1枚たちで出す（組の1枚は a・b で2回数える）
+ * 第2.1版（13.3）：材料の行には組の1枚を数えない（ふつうの1枚・固定した1枚・切り終わりが無い材料は行を出さない）。
+ * 全体の歩留まりは今までどおり、組の1枚を a・b で2回数える
  */
 export function materialSummaries(
   job: Job,
@@ -223,20 +224,21 @@ export function materialSummaries(
   for (const boardId of ids) {
     const computed = result.materials.find((m) => m.boardId === boardId && !m.stack)
     const mine = views.filter((v) => v.sheet.boardId === boardId && !v.sheet.stackWith)
-    const stacked = stacks.filter((s) => s.boardIds.includes(boardId)).flatMap((s) => s.active)
-    if (computed || mine.length > 0 || stacked.length > 0) {
-      const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? []), ...stacked]
+    if (computed || mine.length > 0) {
+      const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? [])]
       all.push(...sheets)
       materials.push({
         boardId,
         sheetCount: sheets.length,
-        stackedCount: stacked.length,
+        stackedCount: 0,
         yieldRate: combineYield(sheets.map(areasOf)).yieldRate,
         completedCount: mine.filter((v) => v.complete).length,
       })
     }
     for (const s of stacks) {
       if (s.boardIds[0] !== boardId) continue
+      // 組の1枚は a・b の2種類の材料を1枚ずつ使うので、全体の歩留まりには2回数える
+      all.push(...s.active, ...s.active)
       materials.push({
         boardId: s.key,
         stack: { boardIds: [s.boardIds[0], s.boardIds[1]] },
