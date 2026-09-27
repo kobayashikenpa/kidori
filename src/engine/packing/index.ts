@@ -93,5 +93,5 @@ export function packJob(job: Job, dims: DimensionResult): PackingResult {
   })
 
   const total = combineYield(materials.flatMap((m) => m.sheets.map(areasOf)))
-  return { materials, totalYieldRate: total.yieldRate, skipped, done }
+  return { materials, totalYieldRate: total.yieldRate, skipped, done, stackMismatches: [] }
 }
