@@ -10,7 +10,7 @@ import { frozenSheetViews, materialSummaries, type FrozenSheetView, type Materia
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
-import { boardLabel, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
+import { boardLabel, clearLegacyCut, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { CutSteps } from '../components/CutSteps'
 import { ScrapList } from '../components/ScrapList'
@@ -187,7 +187,11 @@ export function KidoriScreen() {
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
-          <p style={{ margin: '6px 0 0' }}>部材の画面で、枚数と材料を入れてください。</p>
+          <p style={{ margin: '6px 0 0' }}>
+            {result.done.length > 0 && result.skipped.length === 0
+              ? 'すべての部材が以前の版で木取り済みです（下の一覧で「外す」を押すと、木取りに戻ります）。'
+              : '部材の画面で、枚数と材料を入れてください。'}
+          </p>
         </div>
       ) : (
         <SavingHints job={job} />
@@ -240,6 +244,33 @@ export function KidoriScreen() {
                 <b>{k.name}</b>：{SKIP_REASON[k.reason]}
               </li>
             ))}
+          </ul>
+        </div>
+      )}
+
+      {result.done.length > 0 && (
+        <div className="card kd-issues done">
+          <h4>木取り済み（計算から除いています）</h4>
+          <p className="band-note">以前の版で部材ごとに付けた木取り済みです。「外す」を押すと、木取りの計算に戻ります。</p>
+          <ul className="kd-done-list">
+            {result.done.map((d) => {
+              const b = d.boardId === null ? null : boardOf(d.boardId)
+              return (
+                <li key={`${d.partId}-${d.boardId ?? ''}`} className="kd-done-row">
+                  <span className="kd-done-name num">
+                    <b>{d.name}</b>（{b ? boardLabel(b) : '材料が未設定'}）{d.quantity}枚
+                  </span>
+                  <button
+                    type="button"
+                    className="btn kd-done-btn"
+                    aria-label={`${d.name} の木取り済みを外す`}
+                    onClick={() => run((j) => clearLegacyCut(j, d.partId, d.boardId))}
+                  >
+                    外す
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}

@@ -1157,6 +1157,34 @@ select.input {
   background-image: repeating-linear-gradient(0deg, var(--dg-grain) 0 1px, transparent 1px 4px);
 }
 
+/* ---------- 以前の木取り済み（第1.8版で「外す」を置いた） ---------- */
+.kd-issues.done {
+  border-left-color: var(--ok);
+}
+.kd-issues.done h4 {
+  color: var(--ok);
+}
+.kd-issues .kd-done-list {
+  list-style: none;
+  padding: 0;
+}
+.kd-done-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.kd-done-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kd-done-btn {
+  flex: none;
+  min-height: 44px;
+  min-width: 64px;
+}
+
 /* ---------- 部材が変わっています・切り終わり（第1.8版） ---------- */
 .kd-drift {
   margin: 0 0 8px;
