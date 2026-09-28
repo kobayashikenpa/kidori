@@ -1325,7 +1325,7 @@ export function stockShortage(job: Job, dims: DimensionResult): StockShortage[]
 
 ### 14.9 比較・まとめ（`packing/sizes.ts`・`progress/frozen.ts`）
 
-- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない
+- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない（**第2.3版の修正で変更**：15.5 のとおり手持ちの行も 3×6／4×8 にして比べ、画面に出す）
 - `MaterialSummary.bySize: { label: string; count: number }[]`：その行の1枚（固定した1枚（切り終わりを除く）＋計算した1枚）を大きさごとに数えたもの。並びは大きい面積から（例：`4×8 ×2`・`3×6 ×1`）。サイズを選んだ材料でも1つ出す（画面は手持ちの材料のときだけ出す）
 - `stockUsage(job, result): { boardId; rows: { stockId; label; count; used; left }[] }[]`：`stockOn` の材料ごとに、手持ちの行ごとの 使った枚数（固定した1枚（切り終わりを含む）＋組の1枚＋計算した1枚）と残り（count − used。0 未満にしない）。手持ちの編集欄に出す
 
@@ -1442,6 +1442,7 @@ availableStackStock(job, boardIds): StockKind[]       // 組の手持ち。組�
 ### 15.5 比較・まとめ・足りないとき（`packing/sizes.ts`・`progress/frozen.ts`・`hints/shortage.ts`）
 
 - `compareStandardSizes`：3×6／4×8 にした写しで、手持ちでない材料に加えて **手持ちでない組の設定も同じサイズにする**（写しの `stackSheets` に、今の組すべての行を 3×6／4×8 で入れる）。`packJob` 2回のまま。今の仕事の `stackPlan` を渡す処理（12.7）は、組がサイズで決まらなくなったので要らない（渡しても同じ）
+- （修正）手持ちで木取りする行（材料の行・組の行とも）も、写しでは手持ちを外して 3×6／4×8 にする。どの行でも 3×6／4×8 の本当の枚数・歩留まりを並べるため（仕様書 9）。画面は手持ちの行でも数字を出す
 - `materialSummaries`：変えない（組の行は今までどおり）
 - `materialSizeCounts`：組の行も、その組の1枚を大きさごとに数える（今もそうなっていれば変えない）
 - `stockUsage(job, result)`：組の行も出す（`boardId: stackKey`・`stack: { boardIds }`。組の手持ちの行ごとに 使う（組の固定した1枚＋組の計算した1枚）／残り）。材料の行は、その材料のふつうの1枚だけを数える（組の1枚は数えない）

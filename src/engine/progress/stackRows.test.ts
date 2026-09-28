@@ -44,13 +44,13 @@ describe('compareStandardSizes と組の行', () => {
     expect(job.stackSheets[0].sizeKind).toBe('saburoku')
   })
 
-  it('手持ちの組は手持ちのまま比べる（3×6・4×8 どちらも同じ枚数）', () => {
+  it('手持ちの組も 3×6・4×8 にして比べる（手持ち 3×6 ×3 でも、手持ちなしと同じ枚数・入らない 0）', () => {
     const job = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]])
     const g = compareStandardSizes(job, computeDimensions(job)).find((x) => x.boardId === KEY)!
-    expect(g.options.map((o) => [o.sheetCount, o.unplacedCount])).toEqual([
-      [3, 1],
-      [3, 1],
-    ])
+    const plain = sampleFlushJob(true)
+    const p = compareStandardSizes(plain, computeDimensions(plain)).find((x) => x.boardId === KEY)!
+    expect(g.options.map((o) => [o.sheetCount, o.unplacedCount])).toEqual(p.options.map((o) => [o.sheetCount, 0]))
+    expect(g.options[0].sheetCount).toBe(5)
   })
 })
 

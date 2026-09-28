@@ -3,7 +3,6 @@ import { BOARD_SIZES, type Board, type DimensionResult, type Job, type StackShee
 import { round1 } from '../round'
 import { packJob } from './index'
 import { stackPlan } from './stack'
-import { findStackSheet, usesStock } from './stock'
 
 export type StandardSize = 'saburoku' | 'shihachi'
 
@@ -48,19 +47,20 @@ export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pi
 
 /**
  * 仕事の「サイズを選ぶ」行（材料の行・重ね切りの組の行。第2.3版）をすべて指定のサイズ（木目は長手方向）にした写し。
- * 部材・設定は元の仕事のものを共有する（packJob は書き換えない）。手持ちで木取りする行（stockOn）はそのまま残す
- * （手持ちの行の比較は画面では使わない）。組の行が無い組（4×8 で計算する組）も、そのサイズの行を入れる
+ * 部材・設定は元の仕事のものを共有する（packJob は書き換えない）。手持ちで木取りする行（stockOn）も、写しでは
+ * 手持ちを使わずそのサイズにする（どの行でも 3×6・4×8 の本当の枚数・歩留まりを並べる。仕様書 9）。
+ * 組の行が無い組（4×8 で計算する組）も、そのサイズの行を入れる
  */
 function withAllRows(job: Job, kind: StandardSize): Job {
   const [width, length] = BOARD_SIZES[kind]
   const size = { sizeKind: kind, width, length, grain: 'long' as const }
-  const stackSheets = stackPlan(job).groups.map((g): StackSheet => {
-    const cur = findStackSheet(job, g.boardIds)
-    return cur && usesStock(cur) ? cur : { boardIds: [g.boardIds[0], g.boardIds[1]], ...size }
-  })
+  const stackSheets = stackPlan(job).groups.map((g): StackSheet => ({ boardIds: [g.boardIds[0], g.boardIds[1]], ...size }))
   return {
     ...job,
-    boards: job.boards.map((b): Board => (usesStock(b) ? b : { ...b, ...size })),
+    boards: job.boards.map((b): Board => {
+      const { stockOn: _stockOn, stock: _stock, ...rest } = b
+      return { ...rest, ...size }
+    }),
     stackSheets,
   }
 }
@@ -68,7 +68,7 @@ function withAllRows(job: Job, kind: StandardSize): Job {
 /**
  * 材料・組ごとに 3×6 と 4×8 で木取りした結果を返す。材料の並びと対象は packJob(job, dims).materials と同じ
  * （片か入らない部材のある材料・組だけ）。切り方・刃厚・端切り・切り代は今の設定のまま。
- * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。手持ちで木取りする行は手持ちのまま（第2.2版。サイズは替えない）。
+ * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。手持ちで木取りする行も 3×6・4×8 にして比べる（手持ちは使わない）。
  * 重ね切り（第2.3版。architecture.md 15.5）：組はサイズで決まらないので、組の行も同じサイズにした写しで比べる（boardId が stackKey）
  */
 export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialSizeComparison[] {

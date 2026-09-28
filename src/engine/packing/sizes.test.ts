@@ -3,7 +3,7 @@ import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part } from '../types'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
-import { withStock } from '../fixtures/stock'
+import { withStackStock, withStock } from '../fixtures/stock'
 import { packJob } from './index'
 import { stackKey } from './stack'
 import { compareStandardSizes, pickBetterSize, type SizeSummary } from './sizes'
@@ -206,5 +206,20 @@ describe('compareStandardSizes と手持ちの材料（第2.2版）', () => {
     expect(ids).toEqual(real)
     // 元の仕事は変えない
     expect(job.boards.find((b) => b.id === LAUAN_4_ID)?.stockOn).toBe(true)
+  })
+
+  it('手持ちで木取りする材料の行も、3×6・4×8 にしたときの本当の枚数・歩留まりを出す（手持ちの枚数・大きさによらない）', () => {
+    // シナランバー 18 を手持ち 900×900 ×1 だけにしても、比べる値は手持ちなしのときと同じ
+    const plain = summary(bookshelfJob())
+    const job = withStock(bookshelfJob(), LUMBER_18_ID, [{ width: 900, length: 900, grain: 'long', count: 1 }])
+    expect(summary(job)).toEqual(plain)
+    expect(job.boards.find((b) => b.id === LUMBER_18_ID)?.stockOn).toBe(true)
+  })
+
+  it('手持ちで木取りする組の行も、3×6・4×8 にしたときの本当の枚数・歩留まりを出す', () => {
+    const plain = summary(sampleFlushJob(true))
+    const job = withStackStock(sampleFlushJob(true), [MELAMINE_1_ID, LAUAN_4_ID], [['3×6', 1]])
+    expect(summary(job)).toEqual(plain)
+    expect(job.stackSheets.find((s) => s.boardIds.includes(LAUAN_4_ID))?.stockOn).toBe(true)
   })
 })
