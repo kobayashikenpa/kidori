@@ -293,49 +293,54 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
     }
   })
 
-  it('第2.2版のデータの移し替え：今まで重ねていた組は配置が変わらない。重ねていなかった組は a のサイズで重ねる', () => {
+  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は配置が変わらない。そろわない組は重ね切りを外し、第2.2版と同じ配置（S-23）', () => {
     // v22StackGolden.json は第2.2版（コミット dc8e29d）の packJob の結果の要約（legacy の乱数の仕事 150 件）
     const table = golden as Record<string, string[]>
     let unchanged = 0
-    let changed = 0
+    let unstackedJobs = 0
+    let customCommon = 0
     for (let seed = 1; seed <= 150; seed++) {
       const legacyJob = randomJob(rng(seed), seed, false, true)
       const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
       delete raw.stackSheets
-      const { jobs, fixes } = sanitizeJobs([raw])
+      const { jobs, fixes, unstacked } = sanitizeJobs([raw])
       expect(fixes).toBe(0)
       const job = jobs[0]
-      const groups = stackPlan(job).groups
-      // 組の行は組ごとに1つ、サイズは a の材料のサイズ
-      expect(job.stackSheets.map((x) => x.boardIds)).toEqual(groups.map((g) => g.boardIds))
+      // 第2.2版の組を3つに分ける：3×6／4×8 でそろう・自由入力でそろう・そろわない
+      const kinds = stackPlan(legacyJob).groups.map((g) => {
+        const [a, b] = g.boardIds.map((id) => legacyJob.boards.find((x) => x.id === id)!)
+        const same = round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain
+        const kind = !same ? 'mismatch' : a.sizeKind !== 'custom' || b.sizeKind !== 'custom' ? 'standard' : 'custom'
+        return { g, a, kind }
+      })
+      // 3×6／4×8 でそろう組だけが組の行になり、大きさは 2つの材料の大きさ
+      expect(job.stackSheets.map((x) => x.boardIds)).toEqual(kinds.filter((k) => k.kind === 'standard').map((k) => k.g.boardIds))
       for (const x of job.stackSheets) {
         const a = job.boards.find((b) => b.id === x.boardIds[0])!
-        expect([x.sizeKind, x.width, x.length, x.grain]).toEqual([a.sizeKind, a.width, a.length, a.grain])
+        expect(x.sizeKind).not.toBe('custom')
+        expect([x.width, x.length, x.grain]).toEqual([a.width, a.length, a.grain])
       }
+      // それ以外の組のフラッシュは重ね切りが外れ、名前を知らせる
+      const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
+      expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
+      expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
+      expect(job.flushes.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      if (unstacked.length > 0) unstackedJobs++
       const r = checkJob(job)
-      // 組は 3×6／4×8 だけ（E-64）なので、共通の大きさが自由入力の組は 4×8 で並び、配置が変わる
-      const sameSize = groups.every((g) => {
-        const [a, b] = g.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
-        return round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain && a.sizeKind !== 'custom'
-      })
-      if (sameSize) {
-        // 今まで重ねていた（またはどの組もない）仕事は、配置がまったく同じ
+      if (kinds.some((k) => k.kind === 'custom')) {
+        // 第2.2版では自由入力の大きさで重ねていた組：重ねなくなるので配置が変わる
+        expect(r.materials.some((m) => m.stack && kinds.some((k) => k.kind === 'custom' && m.boardId === k.g.key))).toBe(false)
+        customCommon++
+      } else {
+        // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
         expect(digest(r), `seed ${seed}`).toEqual(table[`s${seed}`])
         unchanged++
-      } else {
-        // 今まで重ねていなかった組（サイズがそろわない）も組として並ぶ（第2.3版の変更）
-        const keys = new Set(r.materials.filter((m) => m.stack).map((m) => m.boardId))
-        const before = new Set(table[`s${seed}`].map((d) => d.split('|')[0]))
-        const mismatch = groups.some((g) => {
-          const [x, y] = g.boardIds.map((id) => job.boards.find((b) => b.id === id)!)
-          return round1(x.width) !== round1(y.width) || round1(x.length) !== round1(y.length) || x.grain !== y.grain
-        })
-        if (mismatch) expect([...keys].some((k) => !before.has(k)) || keys.size === 0).toBe(true)
-        changed++
       }
     }
     expect(unchanged).toBeGreaterThan(50)
-    expect(changed).toBeGreaterThan(3)
+    expect(unstackedJobs).toBeGreaterThan(3)
+    // 自由入力どうしでそろう組は乱数ではほぼ出ない（stackStorage.test.ts で確かめる）
+    expect(customCommon).toBeGreaterThanOrEqual(0)
   })
 })
 

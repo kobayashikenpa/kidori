@@ -335,6 +335,8 @@ export type SizeTarget = string | readonly [string, string]
 export type StockDraft = Omit<StockSheet, 'id'>
 
 const STOCK_COUNT_MESSAGE = '枚数は1以上の整数にしてください'
+/** 重ね切りの組の行は 3×6／4×8 だけ（仕様書 4。自由入力・手持ちは使えない。architecture.md 15.9） */
+export const STACK_SIZE_MESSAGE = '重ね切りの組は 3×6 か 4×8 を選んでください'
 const SIZE_MESSAGE = '材料の大きさは 0 より大きい数を入れてください'
 
 /** 手持ちの行をそろえる：3×6・4×8 は寸法と木目を決まった値に、自由入力は短辺≦長辺に並べ直す。おかしければ理由 */
@@ -360,7 +362,13 @@ function normalizeSize(size: BoardSheet): BoardSheet | string {
   return { sizeKind: size.sizeKind, width, length, grain: 'long' }
 }
 
-/** 行の設定を変える。change は今の設定から新しい設定（または断る理由）を返す。組の行が無ければ 4×8 の行を作ってから変える */
+/** 組の行（2つの id）か */
+const isPair = (target: SizeTarget): target is readonly [string, string] => typeof target !== 'string'
+
+/**
+ * 行の設定を変える。change は今の設定から新しい設定（または断る理由）を返す。組の行が無ければ 4×8 の行を作ってから変える。
+ * 組の行は手持ちを持たない（以前の版の手持ちが残っていても、変えた行には残さない。15.9）
+ */
 function updateRow(job: Job, target: SizeTarget, change: (cur: SheetChoice) => SheetChoice | string): OpResult {
   if (typeof target === 'string') {
     const cur = job.boards.find((b) => b.id === target)
@@ -376,7 +384,8 @@ function updateRow(job: Job, target: SizeTarget, change: (cur: SheetChoice) => S
   const cur = findStackSheet(job, boardIds)
   const next = change(cur ?? { boardIds, ...defaultSheet() })
   if (typeof next === 'string') return fail(next)
-  const row = withChoice({ boardIds: cur?.boardIds ?? boardIds }, next)
+  const { stockOn: _on, stock: _stock, ...size } = next
+  const row = withChoice({ boardIds: cur?.boardIds ?? boardIds }, size)
   return ok({
     ...job,
     stackSheets: cur ? job.stackSheets.map((s) => (s === cur ? row : s)) : [...job.stackSheets, row],
@@ -395,20 +404,22 @@ function withChoice<T extends object>(base: T, c: SheetChoice): T & SheetChoice 
 
 /**
  * 行（材料の行・組の行）のサイズを選ぶ（木取りの画面の 3×6／4×8）。3×6・4×8 は寸法が決まり木目は長手方向。
- * 自由入力の大きさ（以前の版の自由入力）も渡せる（短辺・長辺・木目。0 以下の寸法は断る）。
+ * 材料の行には自由入力の大きさ（以前の版の自由入力）も渡せる（短辺・長辺・木目。0 以下の寸法は断る）。組の行は 3×6／4×8 だけ（15.9）。
  * 自由入力（手持ち）を外す（stockOn を外す。手持ちの行は残す）。その行だけを変える（組の相手・材料の行は変えない。第2.3版）
  */
 export function setRowSize(job: Job, target: SizeTarget, size: BoardSheet): OpResult {
+  if (isPair(target) && size.sizeKind === 'custom') return fail(STACK_SIZE_MESSAGE)
   const n = normalizeSize(size)
   if (typeof n === 'string') return updateRow(job, target, () => n)
   return updateRow(job, target, (cur) => ({ ...n, ...(cur.stock ? { stock: cur.stock } : {}) }))
 }
 
 /**
- * 行の「自由入力（＝手持ち）」の切り替え。オンにするとき手持ちの行が無ければ、今の大きさ ×1 の行を1つ入れる
- * （組の行が無ければ 4×8 ×1）。オフは stockOn を外すだけ（行は残す。もう一度オンにすると同じ行）
+ * 材料の行の「自由入力（＝手持ち）」の切り替え。オンにするとき手持ちの行が無ければ、今の大きさ ×1 の行を1つ入れる。
+ * オフは stockOn を外すだけ（行は残す。もう一度オンにすると同じ行）。組の行は手持ちを使わないので断る（15.9）
  */
 export function setRowStockMode(job: Job, target: SizeTarget, on: boolean, id: string = newId('stock')): OpResult {
+  if (isPair(target)) return fail(STACK_SIZE_MESSAGE)
   return updateRow(job, target, (cur) => {
     const { stockOn: _on, ...rest } = cur
     if (!on) return rest
@@ -419,14 +430,16 @@ export function setRowStockMode(job: Job, target: SizeTarget, on: boolean, id: s
   })
 }
 
-/** 手持ちの行を足す（最後に）。枚数は1以上の整数。stockOn は変えない */
+/** 材料の行に手持ちの行を足す（最後に）。枚数は1以上の整数。stockOn は変えない。組の行は断る（15.9） */
 export function addRowStock(job: Job, target: SizeTarget, draft: StockDraft, id: string = newId('stock')): OpResult {
+  if (isPair(target)) return fail(STACK_SIZE_MESSAGE)
   const row = normalizeStock({ ...draft, id })
   return updateRow(job, target, (cur) => (typeof row === 'string' ? row : { ...cur, stock: [...(cur.stock ?? []), row] }))
 }
 
-/** 手持ちの行を変える（渡した項目だけ）。サイズの種類を変えたら 3×6・4×8 は寸法と木目を決まった値にする */
+/** 材料の行の手持ちの行を変える（渡した項目だけ）。サイズの種類を変えたら 3×6・4×8 は寸法と木目を決まった値にする。組の行は断る（15.9） */
 export function updateRowStock(job: Job, target: SizeTarget, stockId: string, patch: Partial<StockDraft>): OpResult {
+  if (isPair(target)) return fail(STACK_SIZE_MESSAGE)
   return updateRow(job, target, (cur) => {
     const old = cur.stock?.find((s) => s.id === stockId)
     if (!old) return '手持ちの行が見つかりません'
@@ -437,11 +450,12 @@ export function updateRowStock(job: Job, target: SizeTarget, stockId: string, pa
 }
 
 /**
- * 手持ちの行を消す。最後の1行を消すと stockOn も外れる（withChoice が、行が0の手持ちを持たないため）。
+ * 材料の行の手持ちの行を消す（組の行は断る。15.9）。最後の1行を消すと stockOn も外れる（withChoice が、行が0の手持ちを持たないため）。
  * その行は自由入力をやめ、選んでいた 3×6／4×8（setRowStockMode でオンにする前のサイズ）で木取りする。
  * 行が0のまま自由入力に残すと、手持ちでも選んだサイズでもない中途半端な状態（usesStock が false）になるので、そうしない
  */
 export function removeRowStock(job: Job, target: SizeTarget, stockId: string): OpResult {
+  if (isPair(target)) return fail(STACK_SIZE_MESSAGE)
   return updateRow(job, target, (cur) => {
     if (!cur.stock?.some((s) => s.id === stockId)) return '手持ちの行が見つかりません'
     return { ...cur, stock: cur.stock.filter((s) => s.id !== stockId) }

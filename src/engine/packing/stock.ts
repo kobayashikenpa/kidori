@@ -51,33 +51,6 @@ export function sameStockSize(a: SheetSize, b: SheetSize): boolean {
   return round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain
 }
 
-/**
- * 重ね切りの組の手持ち：大きさ・木目がそろう行どうしで、枚数は少ないほう。並びは a の順。
- * 同じ大きさの行がいくつあっても、相手の枚数を二重には使わない（前の行から順に割り当てる）。
- * id は a の行の id（a がサイズを選んだ材料なら b の行の id）。どちらもサイズを選んだ材料なら、そろえば無限の1行。
- * 第2.3版からは組が自分の手持ちを持つので、木取りには使わない（第2.2版までのデータの移し替え＝store/storage.ts だけで使う）
- */
-export function commonStock(a: readonly StockKind[], b: readonly StockKind[]): StockKind[] {
-  const rest = b.map((k) => k.count)
-  const out: StockKind[] = []
-  for (const ka of a) {
-    let left = ka.count
-    while (left > 0) {
-      const j = b.findIndex((kb, i) => rest[i] > 0 && sameStockSize(ka, kb))
-      if (j < 0) break
-      const n = Math.min(left, rest[j])
-      const stockId = ka.stockId ?? b[j].stockId
-      const last = out[out.length - 1]
-      if (last && last.stockId === stockId && last.stockId !== null && sameStockSize(last, ka)) last.count += n
-      else out.push({ ...ka, stockId, count: n })
-      if (n === Infinity) break
-      left -= n
-      rest[j] -= n
-    }
-  }
-  return out
-}
-
 /** 組の2つの材料が同じか（並びを問わない） */
 export function samePair(x: readonly [string, string], y: readonly [string, string]): boolean {
   return (x[0] === y[0] && x[1] === y[1]) || (x[0] === y[1] && x[1] === y[0])
