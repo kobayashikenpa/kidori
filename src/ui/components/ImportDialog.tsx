@@ -27,7 +27,7 @@ export function ImportDialog({ read, canSave, onImport, onCancel }: Props) {
     <Sheet title="ファイルから取り込む" onClose={onCancel}>
       <div className="stack">
         {read.kind === 'share' && (
-          <p style={{ margin: 0 }}>
+          <p style={{ margin: 0, overflowWrap: 'anywhere' }}>
             共有された仕事：<strong>{read.job.name}</strong>（部材 {read.summary.rows}種類・{read.summary.count}枚）
           </p>
         )}
