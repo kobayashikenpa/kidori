@@ -1,181 +1,100 @@
-// 木取りの画面の材料のサイズの選択（仕様書 9「材料のサイズの選択」・architecture.md 8.6・8.7）。
-// 3×6・4×8 の必要な枚数・歩留まり（engine の compareStandardSizes の結果）を並べ、押して選ぶ。
-// 自由入力は短辺・長辺・木目の方向を入れて「このサイズにする」で決める。選ぶと setBoardSize で仕事に保存する
+// 木取りの画面のまとめの行（材料の行・重ね切りの組の行）のサイズの選択（仕様書 9「材料のサイズの選択」・architecture.md 15.8）。
+// 3×6・4×8 の必要な枚数・歩留まり（engine の compareStandardSizes の結果）と 自由入力 を並べ、押して選ぶ。
+// 3×6・4×8 は setRowSize、自由入力は setRowStockMode（＝その行の手持ちで木取り）。自由入力を選んでいる行の下に、その行の手持ちの編集。
+// 重ね切りの組の行は 3×6・4×8 だけ（自由入力・手持ちの編集は出さない。仕様書 4・architecture.md 15.9）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
-import type { Board, BoardGrain, MaterialResult } from '../../engine/types'
-import { setBoardSize, setBoardsSize } from '../../store/jobs'
+import type { StockUsage } from '../../engine/progress/frozen'
+import { BOARD_SIZES, type MaterialResult, type SheetChoice } from '../../engine/types'
+import { setRowSize, setRowStockMode, type SizeTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
-import { closeKeyboard } from '../keyboard'
-import { fmt, pct } from '../format'
-import { NumberField } from './NumberField'
-import { Segmented } from './Segmented'
+import { pct } from '../format'
+import { selectedSize, sizeChoices } from '../sheetSize'
+import { StockEditor } from './StockEditor'
 
 const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4×8' }
 
 interface Props {
-  /** 材料（重ね切りの組なら1つ目の材料。今のサイズの表示に使う） */
-  board: Board
-  /** 重ね切りの組の2つの材料（第2.0版）。選ぶと setBoardsSize で2つとも同じサイズにする */
-  boardIds?: readonly [string, string] | null
-  /** 選択の読み上げ名（組の表示名など） */
-  label?: string
+  /** 操作する行（材料の id、組なら2つの材料の id） */
+  target: SizeTarget
+  /** その行の今の設定（材料の行は Board、組の行は stackChoice） */
+  choice: SheetChoice
+  /** 行の表示名（読み上げ用） */
+  label: string
   /** compareStandardSizes の結果（3×6、4×8 の順の options と、枚数が少ない方・歩留まりが高い方） */
   compare: MaterialSizeComparison | null
-  /** 今選んでいるサイズでの結果（自由入力の枚数・歩留まりに使う） */
-  current: MaterialResult
+  /** 今の設定での結果（自由入力の枚数・歩留まりに使う） */
+  current: MaterialResult | null
+  /** その行の stockUsage */
+  usage: StockUsage | null
 }
 
-export function SheetSizePicker({ board, boardIds = null, label, compare, current }: Props) {
+export function SheetSizePicker({ target, choice, label, compare, current, usage }: Props) {
   const { run } = useCurrentJob()
-  // 材料の行で選んでも、重ね切りの相手の材料は store 側で同じサイズにそろう（未決事項 36）
-  const apply = (size: Parameters<typeof setBoardSize>[2]) =>
-    run((j) => (boardIds ? setBoardsSize(j, boardIds, size) : setBoardSize(j, board.id, size)))
-  const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const isCustom = board.sizeKind === 'custom'
-  const options = compare?.options ?? null
-  const fewer = compare?.fewer ?? null
-  const higher = compare?.higher ?? null
+  // 自由入力：手持ちで木取り中（stockOn）か、以前の版の自由入力（大きさだけ）。組の行には自由入力が無い
+  const options = sizeChoices(target)
+  const selected = selectedSize(target, choice)
+  const isFree = selected === 'free'
+  const report = (r: { ok: boolean; message?: string }) => setError(r.ok ? null : (r.message ?? '変えられませんでした'))
 
-  const choose = (o: SizeSummary) => {
-    setEditing(false)
-    setError(null)
-    if (board.sizeKind === o.kind && !boardIds) return
-    apply({ sizeKind: o.kind, width: o.width, length: o.length, grain: 'long' })
+  const choose = (kind: StandardSize) => {
+    if (selected === kind) return
+    const [width, length] = BOARD_SIZES[kind]
+    report(run((j) => setRowSize(j, target, { sizeKind: kind, width, length, grain: 'long' })))
+  }
+  // 計算した結果の無い行（部材がすべて固定した1枚にある）は比較が無いので、数字なしで 3×6・4×8 を出す
+  const kinds = options.filter((o): o is StandardSize => o !== 'free')
+  const optionOf = (kind: StandardSize): SizeSummary | null => compare?.options.find((o) => o.kind === kind) ?? null
+  const chooseFree = () => {
+    if (isFree) return
+    report(run((j) => setRowStockMode(j, target, true)))
   }
 
   return (
     <div className="sz">
       <div className="sz-head">
         <span className="kd-k">材料のサイズ（押して選ぶ）</span>
-        <span className="kd-k num">
-          今：{board.sizeKind === 'custom' ? '自由入力' : SIZE_NAME[board.sizeKind]} {fmt(board.width)}×{fmt(board.length)}
-        </span>
       </div>
-      <div className="sz-opts" role="group" aria-label={`材料のサイズ：${label ?? board.material}`}>
-        {options?.map((o) => (
-          <button
-            key={o.kind}
-            type="button"
-            className="sz-opt"
-            aria-pressed={board.sizeKind === o.kind}
-            onClick={() => choose(o)}
-          >
-            <span className="sz-name">{SIZE_NAME[o.kind]}</span>
-            <span className="sz-n num">{o.sheetCount}枚</span>
-            <span className="sz-y num">{o.sheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
-            <span className="sz-tags">
-              {o.unplacedCount > 0 && <span className="sz-tag err">入らない {o.unplacedCount}</span>}
-              {fewer === o.kind && <span className="sz-tag ok">枚数が少ない</span>}
-              {higher === o.kind && <span className="sz-tag ok">歩留まりが高い</span>}
-            </span>
+      <div className={options.length === 2 ? 'sz-opts sz-two' : 'sz-opts'} role="group" aria-label={`材料のサイズ：${label}`}>
+        {kinds.map((kind) => {
+          const o = optionOf(kind)
+          return (
+            <button key={kind} type="button" className="sz-opt" aria-pressed={selected === kind} onClick={() => choose(kind)}>
+              <span className="sz-name">{SIZE_NAME[kind]}</span>
+              {o && compare && (
+                <>
+                  <span className="sz-n num">{o.sheetCount}枚</span>
+                  <span className="sz-y num">{o.sheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
+                  <span className="sz-tags">
+                    {o.unplacedCount > 0 && <span className="sz-tag err">入らない {o.unplacedCount}</span>}
+                    {compare.fewer === kind && <span className="sz-tag ok">枚数が少ない</span>}
+                    {compare.higher === kind && <span className="sz-tag ok">歩留まりが高い</span>}
+                  </span>
+                </>
+              )}
+            </button>
+          )
+        })}
+        {options.includes('free') && (
+          <button type="button" className="sz-opt" aria-pressed={isFree} onClick={chooseFree}>
+            <span className="sz-name">自由入力</span>
+            {isFree && current ? (
+              <>
+                <span className="sz-n num">{current.sheetCount}枚</span>
+                <span className="sz-y num">{current.sheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
+                <span className="sz-tags">
+                  {current.unplaced.length > 0 && <span className="sz-tag err">入らない {current.unplaced.length}</span>}
+                </span>
+              </>
+            ) : (
+              <span className="sz-y sz-muted">手持ち</span>
+            )}
           </button>
-        ))}
-        <button
-          type="button"
-          className="sz-opt"
-          aria-pressed={isCustom}
-          aria-expanded={editing}
-          onClick={() => {
-            setError(null)
-            setEditing((v) => !v)
-          }}
-        >
-          <span className="sz-name">自由入力</span>
-          {isCustom ? (
-            <>
-              <span className="sz-n num">{current.sheetCount}枚</span>
-              <span className="sz-y num">{current.sheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
-              <span className="sz-tags">
-                {current.unplaced.length > 0 && <span className="sz-tag err">入らない {current.unplaced.length}</span>}
-              </span>
-            </>
-          ) : (
-            <span className="sz-y sz-muted">寸法を入れる</span>
-          )}
-        </button>
-      </div>
-      {editing && (
-        <CustomForm
-          board={board}
-          onDone={(size) => {
-            const r = apply({ sizeKind: 'custom', ...size })
-            if (!r.ok) return setError(r.message)
-            closeKeyboard()
-            setError(null)
-            setEditing(false)
-          }}
-          onCancel={() => {
-            setError(null)
-            setEditing(false)
-          }}
-          error={error}
-          setError={setError}
-        />
-      )}
-    </div>
-  )
-}
-
-interface FormProps {
-  board: Board
-  onDone: (size: { width: number; length: number; grain: BoardGrain }) => void
-  onCancel: () => void
-  error: string | null
-  setError: (e: string | null) => void
-}
-
-/** 自由入力の欄。初めは今の材料のサイズ・木目を入れておく */
-function CustomForm({ board, onDone, onCancel, error, setError }: FormProps) {
-  const [width, setWidth] = useState<number | null>(board.width)
-  const [length, setLength] = useState<number | null>(board.length)
-  const [grain, setGrain] = useState<BoardGrain>(board.sizeKind === 'custom' ? board.grain : 'long')
-  const pre = `sz-${board.id}`
-
-  const apply = () => {
-    if (width === null || length === null) return setError('短辺と長辺を入れてください')
-    if (!(width > 0 && length > 0)) return setError('短辺と長辺は 0 より大きい数を入れてください')
-    onDone({ width, length, grain })
-  }
-
-  return (
-    <div className="sz-form">
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <div className="field" style={{ flex: 1, minWidth: 0 }}>
-          <label className="label" htmlFor={`${pre}-w`}>
-            短辺（妻手）
-          </label>
-          <NumberField id={`${pre}-w`} ariaLabel="短辺（妻手）" allowEmpty value={width} onChange={(v) => (setWidth(v), setError(null))} />
-        </div>
-        <div className="field" style={{ flex: 1, minWidth: 0 }}>
-          <label className="label" htmlFor={`${pre}-l`}>
-            長辺（長手）
-          </label>
-          <NumberField id={`${pre}-l`} ariaLabel="長辺（長手）" allowEmpty value={length} onChange={(v) => (setLength(v), setError(null))} />
-        </div>
-      </div>
-      <div className="field">
-        <span className="label">木目の方向</span>
-        <Segmented<BoardGrain>
-          ariaLabel="木目の方向"
-          value={grain}
-          options={[
-            { value: 'long', label: '長手方向' },
-            { value: 'short', label: '妻手方向' },
-          ]}
-          onChange={setGrain}
-        />
+        )}
       </div>
       {error && <p className="msg err">{error}</p>}
-      <div className="sheet-foot">
-        <button type="button" className="btn" onClick={onCancel}>
-          やめる
-        </button>
-        <button type="button" className="btn primary" onClick={apply}>
-          このサイズにする
-        </button>
-      </div>
+      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} />}
     </div>
   )
 }

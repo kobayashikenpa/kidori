@@ -2,7 +2,8 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
-import { canStack } from '../engine/packing/stack'
+import { canStack, stackPlan } from '../engine/packing/stack'
+import { samePair, sameStockSize, usesStock } from '../engine/packing/stock'
 import { eq1 } from '../engine/round'
 import {
   AXES,
@@ -21,6 +22,7 @@ import {
   type Job,
   type Nige,
   type PartGrain,
+  type StackSheet,
   type StockSheet,
 } from '../engine/types'
 import { newId } from './jobs'
@@ -104,6 +106,8 @@ interface Fixes {
    * 読んでいるデータの版。第1版には逃げ・メモ・チェックが無いのが当たり前なので、無くても直した数に数えない
    */
   version: 1 | 2
+  /** 読み込むときに重ね切りを外したフラッシュの名前（サイズがそろわない組。15.9）。知らせに出す */
+  unstacked: string[]
 }
 
 const isNonNegative = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -249,6 +253,98 @@ function sanitizeStock(v: Record<string, unknown>, fx: Fixes): Pick<Board, 'stoc
   }
   if (out.stock && out.stock.length === 0) delete out.stock
   return out
+}
+
+/** 読めた大きさ（sanitizeBoard と同じ検査）。読めなければ null */
+function sanitizeSize(v: Record<string, unknown>, fx: Fixes): Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'> | null {
+  if (!isPositive(v.width) || !isPositive(v.length)) return null
+  return {
+    sizeKind: pick(v.sizeKind, (x): x is BoardSizeKind => SIZE_KINDS.includes(x as BoardSizeKind), 'custom', fx),
+    width: v.width > v.length ? (fx.count++, v.length) : v.width,
+    length: Math.max(v.width, v.length),
+    grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
+  }
+}
+
+/**
+ * 重ね切りの組の設定（第2.3版。architecture.md 15.6）。配列でなければ []。
+ * 行ごとに、boardIds が仕事にある違う2つの材料で、同じ組（並びを問わず）の行が前に無いこと、大きさが読めること、でなければ外す。
+ * 大きさ・手持ちは材料と同じ検査・修復（sanitizeBoard・sanitizeStock）。どれも直した数に数える
+ */
+function sanitizeStackSheets(v: unknown, boards: readonly Board[], fx: Fixes): StackSheet[] {
+  if (!Array.isArray(v)) {
+    fx.count++
+    return []
+  }
+  const ids = new Set(boards.map((b) => b.id))
+  const out: StackSheet[] = []
+  for (const x of v) {
+    const pair = isRecord(x) && Array.isArray(x.boardIds) && x.boardIds.length === 2 ? (x.boardIds as unknown[]) : null
+    const ok =
+      pair !== null &&
+      pair.every((id) => typeof id === 'string' && ids.has(id)) &&
+      pair[0] !== pair[1] &&
+      !out.some((s) => samePair(s.boardIds, pair as [string, string]))
+    const size = ok ? sanitizeSize(x as Record<string, unknown>, fx) : null
+    if (!ok || !size) {
+      fx.count++
+      continue
+    }
+    out.push({ boardIds: [pair[0] as string, pair[1] as string], ...size, ...sanitizeStock(x as Record<string, unknown>, fx) })
+  }
+  return out
+}
+
+/** 組の行の 3×6／4×8（寸法と木目は決まった値）。自由入力なら null */
+function standardSize(sizeKind: BoardSizeKind): Pick<StackSheet, 'sizeKind' | 'width' | 'length' | 'grain'> | null {
+  if (sizeKind === 'custom') return null
+  const [width, length] = BOARD_SIZES[sizeKind]
+  return { sizeKind, width, length, grain: 'long' }
+}
+
+/**
+ * 組の設定（第2.3版）と、重ね切りを外すフラッシュ（architecture.md 15.6・15.9）。組は 3×6／4×8 だけ（仕様書 4）。
+ * - stackSheets が無い仕事（第2.2版まで）は1回移し替える：stackPlan の組ごとに、a・b がどちらも手持ちを使わず、
+ *   大きさ・木目がそろい（第2.2版の決まり）、a か b が 3×6／4×8 なら、その大きさで組の行を作る。
+ *   それ以外（そろわない・手持ちで重ねていた・共通の大きさが自由入力）は、その組で重ねていたフラッシュの重ね切りを外す
+ * - stackSheets がある仕事は、組の行の手持ちを外す。自由入力の行は消す。行が手持ち（stockOn）か自由入力で、
+ *   その組を重ねているフラッシュがあれば、そのフラッシュの重ね切りを外す
+ * どちらも壊れていたわけではないので直した数に数えない（知らせは外したフラッシュの名前で出す）。固定した組の1枚は変えない（切った記録）
+ */
+function settleStacks(
+  boards: Board[],
+  flushes: Flush[],
+  rows: StackSheet[] | null,
+): { stackSheets: StackSheet[]; flushes: Flush[]; unstacked: string[] } {
+  const byId = new Map(boards.map((b) => [b.id, b]))
+  const off = new Set<string>()
+  const stackSheets: StackSheet[] = []
+  const groups = stackPlan({ boards, flushes }).groups
+  if (rows === null) {
+    for (const g of groups) {
+      const a = byId.get(g.boardIds[0])!
+      const b = byId.get(g.boardIds[1])!
+      const size = !usesStock(a) && !usesStock(b) && sameStockSize(a, b) ? (standardSize(a.sizeKind) ?? standardSize(b.sizeKind)) : null
+      if (size) stackSheets.push({ boardIds: [a.id, b.id], ...size })
+      else for (const id of g.flushIds) off.add(id)
+    }
+  } else {
+    for (const row of rows) {
+      const size = standardSize(row.sizeKind)
+      if (size) stackSheets.push({ boardIds: row.boardIds, ...size })
+      if (!size || usesStock(row)) {
+        for (const g of groups) if (samePair(g.boardIds, row.boardIds)) for (const id of g.flushIds) off.add(id)
+      }
+    }
+  }
+  const unstacked: string[] = []
+  const next = flushes.map((f) => {
+    if (!off.has(f.id)) return f
+    unstacked.push(f.name)
+    const { stack: _stack, ...rest } = f
+    return rest
+  })
+  return { stackSheets, flushes: next, unstacked }
 }
 
 const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
@@ -534,7 +630,14 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   }
 
   const boardIds = new Set(boards.map((b) => b.id))
-  const flushes = sanitizeFlushes(v.flushes, boardIds, fx)
+  // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える。組は 3×6／4×8 だけ（15.9）
+  const stacks = settleStacks(
+    boards,
+    sanitizeFlushes(v.flushes, boardIds, fx),
+    v.stackSheets === undefined ? null : sanitizeStackSheets(v.stackSheets, boards, fx),
+  )
+  const flushes = stacks.flushes
+  if (stacks.unstacked.length > 0) fx.unstacked.push(...stacks.unstacked)
   const flushIds = new Set(flushes.map((f) => f.id))
   const parts: LegacyPart[] = []
   if (!Array.isArray(v.parts)) fx.count++
@@ -562,6 +665,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     flushes,
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
+    stackSheets: stacks.stackSheets,
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }
@@ -574,8 +678,8 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
 export function sanitizeJobs(
   list: readonly unknown[],
   version: 1 | 2 = 2,
-): { jobs: Job[]; fixes: number; changed: string[] } {
-  const fx: Fixes = { count: 0, version }
+): { jobs: Job[]; fixes: number; changed: string[]; unstacked: string[] } {
+  const fx: Fixes = { count: 0, version, unstacked: [] }
   const jobs: Job[] = []
   const changed: string[] = []
   for (const raw of list) {
@@ -588,13 +692,15 @@ export function sanitizeJobs(
     jobs.push(m.job)
     if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
-  return { jobs, fixes: fx.count, changed }
+  return { jobs, fixes: fx.count, changed, unstacked: [...new Set(fx.unstacked)] }
 }
 
-/** 移し替えで寸法が変わった部材の知らせ。無ければ null */
-function changedMessage(changed: readonly string[]): string | null {
-  if (changed.length === 0) return null
-  return `以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`
+/** 移し替えで寸法が変わった部材・重ね切りを外したフラッシュの知らせ（「。」でつなぐ）。無ければ null */
+function changedMessage(changed: readonly string[], unstacked: readonly string[] = []): string | null {
+  const out: string[] = []
+  if (changed.length > 0) out.push(`以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`)
+  if (unstacked.length > 0) out.push(`サイズがそろっていないので、重ね切りを外しました：${unstacked.join('、')}`)
+  return out.length > 0 ? out.join('。') : null
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
@@ -700,7 +806,7 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   const { jobs, fixes } = sanitized
   const currentJobId = current !== null && jobs.some((j) => j.id === current) ? current : null
-  const notice = changedMessage(sanitized.changed)
+  const notice = changedMessage(sanitized.changed, sanitized.unstacked)
   if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId }, ...(notice ? { message: notice } : {}) }
   const canSave = backupBroken(storage, raw, now)
   const repaired = canSave
@@ -785,7 +891,7 @@ export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job
   try {
     const data: unknown = JSON.parse(raw)
     if (!isRecord(data) || data.version !== 1 || !isRecord(data.template)) return defaultTemplate()
-    const fx: Fixes = { count: 0, version: 2 }
+    const fx: Fixes = { count: 0, version: 2, unstacked: [] }
     const settings = sanitizeSettings(data.template.settings, fx)
     return {
       settings: { ...settings, nige: settings.nige ?? defaultNige() },

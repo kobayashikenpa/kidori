@@ -1,6 +1,8 @@
 // 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
 import { useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
+import { boardTokenLabel } from '../../engine/defaults'
+import { swapThicknessRef } from '../../engine/formula/usages'
 import { computeDimensions } from '../../engine/dimensions'
 import { flushBreakdown, flushBreakdownText, flushThickness, partThicknessSource } from '../../engine/flush'
 import { partAllowance } from '../../engine/dimensions/cutSize'
@@ -31,6 +33,27 @@ export function PartEditor({ part, onClose }: Props) {
   const patch = (p: Partial<Part>) => {
     setDraft((d) => ({ ...d, ...p }))
     setError(null)
+  }
+  // 材料を変えたときの厚みの置き換えの知らせ（仕様書 5.4・architecture.md 15.7）。before は置き換える前の下書きの式（元に戻す用）
+  const [swapped, setSwapped] = useState<{ message: string; before: Part['expr'] } | null>(null)
+  // 材料・フラッシュの表示名（式の {t:…} の名前と同じ）
+  const thicknessName = (id: string | null): string => {
+    const f = job.flushes.find((x) => x.id === id)
+    if (f) return f.name
+    const b = job.boards.find((x) => x.id === id)
+    return b ? boardTokenLabel(b) : ''
+  }
+  // 材料の欄を変える。下書きの式の前の材料の厚みを新しい材料の厚みに置き換える（計算は engine の swapThicknessRef）
+  const changeMaterial = (p: Pick<Part, 'boardId' | 'flushId'>) => {
+    const from = draft.flushId ?? draft.boardId
+    const to = p.flushId ?? p.boardId
+    const r = swapThicknessRef(draft.expr, from, to)
+    patch({ ...p, expr: r.expr })
+    setSwapped(
+      r.axes.length > 0
+        ? { message: `${r.axes.join('・')} の式の${thicknessName(from)} を${thicknessName(to)} に置き換えました`, before: draft.expr }
+        : null,
+    )
   }
 
   // 入力中の内容で寸法を計算し直す（計算は engine に任せる）
@@ -64,6 +87,7 @@ export function PartEditor({ part, onClose }: Props) {
       setError(`厚みの寸法が材料の厚みと合わないので${part ? '保存' : '追加'}できません。寸法か厚みを直してください`)
       return
     }
+    setSwapped(null)
     const next = { ...draft, grain }
     const r = run((j) => (part ? updatePart(j, part.id, next) : addPart(j, next)))
     if (r.ok) onClose()
@@ -118,8 +142,8 @@ export function PartEditor({ part, onClose }: Props) {
             value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
             onChange={(e) => {
               const v = e.target.value
-              if (v.startsWith('flush:')) patch({ flushId: v.slice(6), boardId: null })
-              else patch({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
+              if (v.startsWith('flush:')) changeMaterial({ flushId: v.slice(6), boardId: null })
+              else changeMaterial({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
             }}
           >
             <option value="">（材料が未設定）</option>
@@ -142,6 +166,23 @@ export function PartEditor({ part, onClose }: Props) {
           </select>
           {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
           {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
+          {swapped && (
+            <div className="swap-note" role="status">
+              <p className="msg ok" style={{ margin: 0 }}>
+                {swapped.message}
+              </p>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  patch({ expr: swapped.before })
+                  setSwapped(null)
+                }}
+              >
+                元に戻す
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -152,7 +193,10 @@ export function PartEditor({ part, onClose }: Props) {
           value={draft.expr[axis]}
           job={job}
           thicknessId={draft.flushId ?? draft.boardId}
-          onChange={(v) => patch({ expr: { ...draft.expr, [axis]: v } })}
+          onChange={(v) => {
+            setSwapped(null)
+            patch({ expr: { ...draft.expr, [axis]: v } })
+          }}
           parts={job.parts.filter((p) => p.id !== draft.id)}
           finished={dims.finished?.[axis] ?? null}
           finishedOf={finishedOf}

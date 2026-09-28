@@ -75,7 +75,6 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
       expect(r.materials.map((m) => Math.round(m.yieldRate * 1000) / 10)).toEqual([85.2, 97.8])
       expect(Math.round(r.totalYieldRate * 1000) / 10).toBe(86.4)
       expect(r.skipped).toEqual([])
-      expect(r.stackMismatches).toEqual([])
     }
     // 重ね切りをオフにすると第1.7版の見本（S-14）の値
     const { stack: _s, ...offDraft } = job.flushes[0]

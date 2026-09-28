@@ -63,13 +63,10 @@ export const BOARD_SIZES: Readonly<Record<Exclude<BoardSizeKind, 'custom'>, read
 /** 板の木目の方向：長辺方向 / 短辺方向 */
 export type BoardGrain = 'long' | 'short'
 
-/** 板（材料）。材料名＋厚みで区別する。同じ組み合わせの板は2つ作れない */
-export interface Board {
-  id: string
-  /** 材料名（例：シナランバー） */
-  material: string
-  /** 厚み（mm） */
-  thickness: number
+/**
+ * まとめの1行のサイズの設定（第2.3版。architecture.md 15.2）。材料の行は Board、重ね切りの組の行は StackSheet がこの形を持つ
+ */
+export interface SheetChoice {
   sizeKind: BoardSizeKind
   /** 短辺（mm） */
   width: number
@@ -77,15 +74,33 @@ export interface Board {
   length: number
   /** 木目の方向。初期値 'long'。サブロク・シハチは 'long' 固定 */
   grain: BoardGrain
+  /** 自由入力（＝手持ちで木取り。第2.2版）を選んでいる。オンのときだけ true を持つ */
+  stockOn?: true
+  /** 手持ちの材料（登録順）。3×6／4×8 に戻しても消さずに残す（切り替えて戻せるように） */
+  stock?: StockSheet[]
+}
+
+/** 板（材料）。材料名＋厚みで区別する。同じ組み合わせの板は2つ作れない */
+export interface Board extends SheetChoice {
+  id: string
+  /** 材料名（例：シナランバー） */
+  material: string
+  /** 厚み（mm） */
+  thickness: number
   /**
    * 新しい仕事に最初から入っている材料の印（defaultBoards が付ける）。あとから足した材料には付けない。
    * 画面の並び順（boards.ts の orderedBoards）に使う。第1.1版までのデータには無い
    */
   builtIn?: true
-  /** 手持ちで木取りする（第2.2版）。オンのときだけ true を持つ */
-  stockOn?: true
-  /** 手持ちの材料（登録順）。オフにしても消さずに残す（切り替えて戻せるように） */
-  stock?: StockSheet[]
+}
+
+/**
+ * 重ね切りの組の行のサイズの設定（第2.3版）。組は2つの材料で決まる（違うフラッシュでも同じ2つの材料なら1つの組）。
+ * 行が無い組は 4×8（packing/stock.ts の stackChoice）
+ */
+export interface StackSheet extends SheetChoice {
+  /** 組の2つの材料（a・b。材料の保存の並び）。探すときは並びを問わない */
+  boardIds: [string, string]
 }
 
 /** 手持ちの材料の1行（第2.2版）。例：4×8 ×3枚 */
@@ -183,6 +198,11 @@ export interface Job {
   parts: Part[]
   /** 固定した1枚（第1.8版。固定した順）。以前のデータは読み込むときに [] */
   frozenSheets: FrozenSheet[]
+  /**
+   * 重ね切りの組の行のサイズの設定（第2.3版）。組ごとに1つ（並びを問わず同じ2つの材料の行は1つだけ）。
+   * 以前のデータは読み込むときに作る（architecture.md 15.6）
+   */
+  stackSheets: StackSheet[]
   /** ISO 文字列 */
   createdAt: string
   updatedAt: string
@@ -348,12 +368,6 @@ export interface MaterialResult {
   stack?: { boardIds: [string, string] }
 }
 
-/**
- * 重ねなかった理由（第2.2版）。size：サイズ・木目がそろっていない（どちらも手持ちを使わない）。
- * stock：どちらかが手持ちで、同じサイズの手持ちが無い。今までの結果と同じ形にするため、size のときは持たない（無ければ size）
- */
-export type StackMismatchReason = 'size' | 'stock'
-
 export interface PackingResult {
   /** 板の登録順 */
   materials: MaterialResult[]
@@ -370,11 +384,6 @@ export interface PackingResult {
    * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
-  /**
-   * サイズ・木目がそろっていないので重ねずに木取りした組（第2.0版）。重ねる片があった組だけ。
-   * 並びは 1つ目の材料の保存の並び → 2つ目の材料の保存の並び
-   */
-  stackMismatches: { boardIds: [string, string]; flushIds: string[]; reason?: StackMismatchReason }[]
 }
 
 // ---------- 切りながら進める木取り（第1.8版） ----------

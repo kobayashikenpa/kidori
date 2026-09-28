@@ -3,8 +3,8 @@ import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
 import type { Board, BoardGrain, DimensionResult, Job, PackingResult, Part, PartDimensions, UnplacedReason } from '../types'
 import { usableSides, type StripMode } from './sheet'
-import { stackPlan, type StackGroup, type StackMismatch, type StackPlan } from './stack'
-import { usesStock } from './stock'
+import { stackPlan, type StackGroup, type StackPlan } from './stack'
+import { stackChoice, usesStock } from './stock'
 
 /**
  * 板の辺に対する片の向き（置き方＝縦長／横長によらない）。x：短辺（妻手）方向の大きさ、y：長辺（長手）方向の大きさ。
@@ -35,8 +35,6 @@ export interface Piece {
    * expandPieces が作る片には必ずある
    */
   shape?: PieceShape
-  /** 重ね切りの組の片（第2.2版）：2つ目の材料 b の片の id（b の表面材の番号）。組に置けなかったときに b の片にする */
-  twin?: string
 }
 
 /** 片の形：面の2軸の木取り寸法（s0：face[0]、s1：face[1]）と、木目を通す軸（0：face[0]、1：face[1]、any：どちらでもよい） */
@@ -49,7 +47,10 @@ export interface PieceShape {
 export type Unplaced = { partId: string; name: string; reason: UnplacedReason }
 
 export interface BoardPieces {
-  /** 片の向き・配置に使う材料。重ね切りの組では1つ目の材料 a（sameSheet なので b も同じ大きさ・木目） */
+  /**
+   * 片の向き・配置に使う材料。重ね切りの組では、1つ目の材料 a（id・材料名・厚み）に組の行のサイズの設定
+   * （stackChoice の大きさ・木目・手持ち。第2.3版）をかぶせたもの
+   */
   board: Board
   /** 重ね切りの組（第2.0版）。あれば、この片たちは a・b を重ねて切る */
   stack?: { key: string; boardIds: [string, string] }
@@ -65,8 +66,6 @@ export interface ExpandResult {
   skipped: PackingResult['skipped']
   /** 木取り済み（checks.cut。フラッシュは表面材ごとの checks.cutByBoard）で除いた部材 */
   done: PackingResult['done']
-  /** 重ねる片があったのに、サイズ・木目がそろっていないので重ねなかった組（plan.mismatches の並び） */
-  stackMismatches: PackingResult['stackMismatches']
 }
 
 function fmt(v: number): string {
@@ -100,7 +99,8 @@ function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[
  * 固定した1枚（第1.8版）の片の数は、部材（表面材）の枚数から数だけで引く（寸法は見ない。0 未満にはしない）。
  * 引いて 0 になった部材（表面材）は片にせず、done にも skipped にも入れない。
  * 重ね切り（第2.0版。architecture.md 12.4）：plan の組のフラッシュの部材は、残りの枚数から
- * 重ねる数＝min(a の残り, b の残り) だけ組の“材料”に入れ（片の id は a の番号）、差はそれぞれの材料にふつうに入れる
+ * 重ねる数＝min(a の残り, b の残り) だけ組の“材料”に入れ（片の id は a の番号）、差はそれぞれの材料にふつうに入れる。
+ * 組の片の向きは組の行のサイズの設定（stackChoice。第2.3版）で決める
  */
 export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = stackPlan(job)): ExpandResult {
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
@@ -112,9 +112,15 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
   const frozen = frozenDemand(job)
   const groupOf = new Map<string, StackGroup>()
   for (const g of plan.groups) for (const f of g.flushIds) groupOf.set(f, g)
-  const mismatchOf = new Map<string, StackMismatch>()
-  for (const m of plan.mismatches) for (const f of m.flushIds) mismatchOf.set(f, m)
-  const mismatched = new Set<StackMismatch>()
+  /** 組の片の向き・配置に使う材料（a に組の行のサイズの設定をかぶせる） */
+  const stackBoard = (a: Board, boardIds: readonly [string, string]): Board => {
+    const c = stackChoice(job, boardIds)
+    const { stockOn: _on, stock: _stock, ...base } = a
+    const board: Board = { ...base, sizeKind: c.sizeKind, width: c.width, length: c.length, grain: c.grain }
+    if (c.stockOn) board.stockOn = true
+    if (c.stock) board.stock = c.stock
+    return board
+  }
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
@@ -176,17 +182,14 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     const partGrain = part?.grain ?? 'any'
     const shape: PieceShape = { s0, s1, grain: partGrain === a0 ? 0 : partGrain === a1 ? 1 : 'any' }
     // stock：手持ちで並べる（第2.2版）。向きは手持ちの行ごとに決め直すので、選んだサイズに入らなくても片にする
-    // twinFrom：重ね切りの組の片の、b の表面材の番号の始まり
-    const place = (g: BoardPieces, board: Board, from: number, count: number, stock: boolean, twinFrom?: number) => {
+    const place = (g: BoardPieces, board: Board, from: number, count: number, stock: boolean) => {
       const orientations = orientationsOn(board, shape, job)
       if (orientations.length === 0 && !stock) {
         if (!g.unplaced.some((u) => u.partId === d.partId)) g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
         return
       }
       for (let i = 1; i <= count; i++) {
-        const piece: Piece = { pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape }
-        if (twinFrom !== undefined) piece.twin = `${d.partId}#${twinFrom + i}`
-        g.pieces.push(piece)
+        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape })
       }
     }
     // 重ね切り：a・b の両方に残りがあるぶんだけ組に入れる
@@ -201,15 +204,13 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     if (group && pair && pair.n > 0) {
       let g = byStack.get(group.key)
       if (!g) {
-        g = { board: pair.ra.board, stack: { key: group.key, boardIds: group.boardIds }, pieces: [], unplaced: [] }
+        g = { board: stackBoard(pair.ra.board, group.boardIds), stack: { key: group.key, boardIds: group.boardIds }, pieces: [], unplaced: [] }
         byStack.set(group.key, g)
       }
-      place(g, pair.ra.board, pair.ra.start, pair.n, usesStock(pair.ra.board) || usesStock(pair.rb.board), pair.rb.start)
+      place(g, g.board, pair.ra.start, pair.n, usesStock(g.board))
       pair.ra.used = pair.n
       pair.rb.used = pair.n
     }
-    const mismatch = flushId === undefined ? undefined : mismatchOf.get(flushId)
-    if (mismatch && (stacked(mismatch.boardIds)?.n ?? 0) > 0) mismatched.add(mismatch)
 
     for (const { board, quantity, start, used } of rest) {
       if (quantity - used <= 0) continue
@@ -232,10 +233,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
       if (x) groups.push(x)
     }
   }
-  const stackMismatches = plan.mismatches
-    .filter((m) => mismatched.has(m))
-    .map((m) => (m.reason ? { boardIds: m.boardIds, flushIds: [...m.flushIds], reason: m.reason } : { boardIds: m.boardIds, flushIds: [...m.flushIds] }))
-  return { groups, skipped, done, stackMismatches }
+  return { groups, skipped, done }
 }
 
 /**

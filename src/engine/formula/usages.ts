@@ -58,3 +58,27 @@ export function remapBoardIds(expr: string, map: ReadonlyMap<string, string>): s
   }
   return out + expr.slice(last)
 }
+
+/**
+ * 部材1つの W・H・D の式の材料の厚み {t:from} を {t:to} に置き換える（第2.3版。仕様書 5.4「材料を変えたときの厚みの置き換え」、
+ * architecture.md 15.7）。from・to は材料の id かフラッシュの id。置き換えた軸を W→H→D の順で返す。
+ * 前か後の材料が無い（null）・同じ材料・式に {t:from} が無いときは、式をそのまま（同じ中身の写し）で axes は []。元の式は書き換えない
+ */
+export function swapThicknessRef(
+  expr: Readonly<Record<Axis, string>>,
+  from: string | null,
+  to: string | null,
+): { expr: Record<Axis, string>; axes: Axis[] } {
+  const out: Record<Axis, string> = { W: expr.W, H: expr.H, D: expr.D }
+  if (from === null || to === null || from === to) return { expr: out, axes: [] }
+  const map = new Map([[from, to]])
+  const axes: Axis[] = []
+  for (const a of AXES) {
+    const next = remapBoardIds(expr[a], map)
+    if (next !== expr[a]) {
+      out[a] = next
+      axes.push(a)
+    }
+  }
+  return { expr: out, axes }
+}

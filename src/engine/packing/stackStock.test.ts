@@ -1,13 +1,19 @@
-// E-58：重ね切りの組と手持ち（組の手持ち・置けなかった片を a・b に回す）
+// E-58 → E-61 → 第2.3版の追補で書き直し（E-64。architecture.md 15.9）：重ね切りの組は 3×6／4×8 だけ。
+// 組の行に手持ち・自由入力が残っていても木取りは見ない。組は選んだサイズで足りるだけ使い、組の noStock は出ない。
+// 材料の手持ちは、その材料をふつうに木取りする片だけに使う（組の分を引かない）
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../fixtures/flush'
-import { withStock, type StockRowDraft } from '../fixtures/stock'
+import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
+import { stockRows, withStock, type StockRowDraft } from '../fixtures/stock'
+import { stockShortage } from '../hints/shortage'
+import { stockUsage } from '../progress/frozen'
 import type { Job, MaterialResult } from '../types'
 import { packJob } from './index'
 import { stackKey, stackPlan } from './stack'
+import { availableStackStock, stackChoice } from './stock'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
+const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
 const run = (job: Job) => packJob(job, computeDimensions(job))
 const find = (ms: MaterialResult[], id: string) => ms.find((m) => m.boardId === id)
 
@@ -18,107 +24,109 @@ function sample(melamine: StockRowDraft[] | null, lauan: StockRowDraft[] | null)
   return job
 }
 
-/** 片の数（pieceId の重なりなし） */
+/** 組の行に（以前の版の画面で入れた）手持ちを残した仕事。組の行の大きさは 3×6 のまま */
+function withLeftoverStackStock(job: Job, rows: StockRowDraft[], on = true): Job {
+  const s = job.stackSheets[0]
+  s.stock = stockRows(rows)
+  if (on) s.stockOn = true
+  return job
+}
+
+/** 片の id（重なりを見る） */
 function pieceIds(m: MaterialResult | undefined): string[] {
   return m ? m.sheets.flatMap((s) => s.placements.map((p) => p.pieceId)) : []
 }
 
-describe('重ね切りの組と手持ち', () => {
-  it('メラミン 1・ラワン 4 ともに手持ち 3×6 ×6 → 組 5枚・ラワン 4 のふつうの1枚 1枚（背板）・入らない部材なし', () => {
+describe('stackChoice は 3×6／4×8 だけ（E-64）', () => {
+  it('組の行が 3×6 なら 3×6（手持ち・stockOn は返さない）', () => {
+    const job = withLeftoverStackStock(sampleFlushJob(true), [['3×6', 3]])
+    expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
+  })
+
+  it('組の行が無ければ 4×8', () => {
+    const job = sampleFlushJob(true)
+    job.stackSheets = []
+    expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
+  })
+
+  it('組の行が自由入力（1000×2000・木目 妻手）なら 4×8', () => {
+    const job = sampleFlushJob(true)
+    job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }]
+    expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
+  })
+
+  it('組の行の木目が妻手になっていても 3×6 は長手方向', () => {
+    const job = sampleFlushJob(true)
+    job.stackSheets[0].grain = 'short'
+    expect(stackChoice(job, PAIR).grain).toBe('long')
+  })
+
+  it('組の手持ちは選んだサイズ1行（枚数 無限）', () => {
+    const job = withLeftoverStackStock(sampleFlushJob(true), [['3×6', 1]])
+    expect(availableStackStock(job, PAIR)).toEqual([
+      { stockId: null, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: Infinity },
+    ])
+  })
+})
+
+describe('重ね切りの組の木取りは手持ちを使わない（E-64）', () => {
+  it('組の行に手持ち 3×6 ×3（stockOn）が残っていても、組は 3×6 で5枚・入らない部材なし', () => {
+    const r = run(withLeftoverStackStock(sampleFlushJob(true), [['3×6', 3]]))
+    const g = find(r.materials, KEY)!
+    expect(g.sheetCount).toBe(5)
+    expect(Math.round(g.yieldRate * 1000) / 10).toBe(85.2)
+    expect(g.unplaced).toEqual([])
+    expect(g.sheets.every((s) => s.sheet === undefined)).toBe(true)
+  })
+
+  it('組の行が自由入力 1000×2000 なら、組は 4×8 の大きさで並ぶ', () => {
+    const job = sampleFlushJob(true)
+    job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'custom', width: 1000, length: 2000, grain: 'long' }]
+    const g = find(run(job).materials, KEY)!
+    expect(g.sheets.every((s) => s.boardWidth === 1220 && s.boardLength === 2440)).toBe(true)
+  })
+
+  it('メラミン 1・ラワン 4 ともに材料の手持ち 3×6 ×6 でも、組は組の設定 3×6 で5枚（材料の手持ちを使わない）。背板はラワン 4 の手持ち', () => {
     const r = run(sample([['3×6', 6]], [['3×6', 6]]))
     expect(r.materials.map((m) => [m.boardId, m.sheetCount, m.unplaced.length])).toEqual([
       [KEY, 5, 0],
       [LAUAN_4_ID, 1, 0],
     ])
-    expect(find(r.materials, KEY)!.sheets.every((s) => s.sheet?.stockId === 's1')).toBe(true)
-    expect(r.stackMismatches).toEqual([])
+    expect(find(r.materials, KEY)!.sheets.every((s) => s.sheet === undefined)).toBe(true)
+    expect(find(r.materials, LAUAN_4_ID)!.sheets[0].sheet?.stockId).toBe('s1')
   })
 
-  it('メラミン 1 だけ手持ち 3×6 ×10（ラワン 4 は 3×6 を選択）→ 組 5枚', () => {
-    const r = run(sample([['3×6', 10]], null))
+  it('メラミン 1 が手持ち 4×8 だけでも、組は組の設定 3×6 で5枚', () => {
+    const job = sample([['4×8', 10]], null)
+    expect(stackPlan(job).groups.map((g) => g.key)).toEqual([KEY])
+    const r = run(job)
     expect(find(r.materials, KEY)!.sheetCount).toBe(5)
     expect(find(r.materials, MELAMINE_1_ID)).toBeUndefined()
-    expect(find(r.materials, LAUAN_4_ID)!.sheetCount).toBe(1)
   })
 
-  it('メラミン 1 が手持ち 3×6 ×3・ラワン 4 が手持ち 3×6 ×6 → 組 3枚。置けなかった片はメラミン 1 で noStock、ラワン 4 ではふつうに並ぶ', () => {
-    const job = sample([['3×6', 3]], [['3×6', 6]])
-    const r = run(job)
-    const stack = find(r.materials, KEY)!
-    const mel = find(r.materials, MELAMINE_1_ID)!
-    const lau = find(r.materials, LAUAN_4_ID)!
-    expect(stack.sheetCount).toBe(3)
-    expect(stack.unplaced).toEqual([])
-    // メラミン 1 は手持ちを組で使い切ったので、残りの片は入らない
-    expect(mel.sheetCount).toBe(0)
-    expect(mel.unplaced.length).toBeGreaterThan(0)
-    expect(mel.unplaced.every((u) => u.reason === 'noStock')).toBe(true)
-    // ラワン 4 は組の3枚を引いた残り3枚に、組に置けなかった片（棚板×8）と背板を並べる
-    expect(stack.sheets.map((s) => s.placements.map((p) => p.name).join(','))).toEqual(['側板,側板', '側板,側板', '天地板,天地板,天地板,天地板'])
-    expect(lau.sheets.map((s) => s.placements.map((p) => p.name).join(','))).toEqual(['背板', '棚板,棚板,棚板,棚板', '棚板,棚板,棚板,棚板'])
-    expect(stack.sheetCount + lau.sheetCount).toBe(6)
-    expect(lau.unplaced).toEqual([])
-    expect(mel.unplaced).toEqual([{ partId: 'part-tana', name: '棚板', reason: 'noStock' }])
-    // 片は重ならず、ラワンは組の片＋ふつうの片で、フラッシュの片（16）＋背板（1）をすべて切る（入らない分を除く）
-    const lauIds = [...pieceIds(stack), ...pieceIds(lau)]
-    expect(new Set(lauIds).size).toBe(lauIds.length)
-    const lauMissing = lau.unplaced.length
-    if (lauMissing === 0) expect(lauIds).toHaveLength(17)
-    // b（ラワン）の片の id は b の表面材の番号（組の片の id と重ならない）
-    const stackIds = new Set(pieceIds(stack))
-    expect(pieceIds(lau).some((id) => stackIds.has(id))).toBe(false)
-    // メラミンの入らない部材は、組に置けなかったフラッシュの部材
-    expect(mel.unplaced.map((u) => u.name).every((n) => ['側板', '天地板', '棚板'].includes(n))).toBe(true)
-  })
-
-  it('組が手持ちを使うときの並び：材料の行 → 組の行（材料の保存の並び）', () => {
-    const r = run(sample([['3×6', 3]], [['3×6', 6]]))
-    expect(r.materials.map((m) => m.boardId)).toEqual([MELAMINE_1_ID, KEY, LAUAN_4_ID])
-  })
-
-  it('メラミン 1 が手持ち 4×8 だけ・ラワン 4 が 3×6 の選択 → 組は無く、stackMismatches の理由は stock', () => {
-    const job = sample([['4×8', 10]], null)
-    expect(stackPlan(job)).toEqual({
-      groups: [],
-      mismatches: [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID], reason: 'stock' }],
-    })
-    const r = run(job)
-    expect(find(r.materials, KEY)).toBeUndefined()
-    expect(r.stackMismatches).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID], reason: 'stock' }])
-    expect(find(r.materials, MELAMINE_1_ID)!.sheets.every((s) => s.sheet?.sizeKind === 'shihachi')).toBe(true)
-  })
-
-  it('手持ちを使わないで大きさがそろわない組は、今までどおり理由を持たない（size）', () => {
+  it('並び：材料 a のふつうの行 → 組の行 → 材料 b（材料の保存の並び）。片は重ならない', () => {
     const job = sampleFlushJob(true)
-    job.boards[0] = { ...job.boards[0], sizeKind: 'shihachi', width: 1220, length: 2440 }
-    expect(stackPlan(job).mismatches[0].reason).toBeUndefined()
+    job.parts.push({ ...job.parts[4], id: 'part-mel', name: 'メラミン板', boardId: MELAMINE_1_ID, expr: { W: '300', H: '300', D: `{t:${MELAMINE_1_ID}}` } })
+    const r = run(job)
+    expect(r.materials.map((m) => m.boardId)).toEqual([MELAMINE_1_ID, KEY, LAUAN_4_ID])
+    const ids = r.materials.flatMap((m) => pieceIds(m))
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('手持ちの残り・足りないときに組の行は出ない（E-64）', () => {
+  it('組の行に手持ちが残っていても stockUsage に組の行は出ない。ラワン 4 の手持ちは背板の1枚だけ数える', () => {
+    const job = withStock(withLeftoverStackStock(sampleFlushJob(true), [['3×6', 6]]), LAUAN_4_ID, [['3×6', 1]])
+    expect(stockUsage(job, run(job))).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
   })
 
-  it('組の手持ちを使い切っただけなら組のまま（固定した組の1枚で引いても組は残る）', () => {
-    const job = sample([['3×6', 1]], [['3×6', 6]])
-    const r = run(job)
-    const stack = find(r.materials, KEY)!
-    // 組の固定
-    job.frozenSheets.push({
-      id: 'f',
-      boardId: MELAMINE_1_ID,
-      material: 'メラミン',
-      thickness: 1,
-      grain: 'long',
-      mode: 'vertical',
-      kerf: 3,
-      trim: 5,
-      layout: stack.sheets[0],
-      checked: [stack.sheets[0].placements[0].pieceId],
-      frozenAt: '2026-09-27T00:00:00.000Z',
-      stackWith: { boardId: LAUAN_4_ID, material: 'ラワン', thickness: 4 },
-    })
-    expect(stackPlan(job).groups.map((g) => g.key)).toEqual([KEY])
-    const r2 = run(job)
-    // 組の手持ちは 0 枚なので組の結果は1枚も無く、片はそれぞれの材料に回る
-    expect(find(r2.materials, KEY)?.sheetCount ?? 0).toBe(0)
-    expect(find(r2.materials, MELAMINE_1_ID)!.unplaced.every((u) => u.reason === 'noStock')).toBe(true)
-    // ラワンは 6 − 1（固定した組の1枚）＝ 5 枚まで
-    expect(find(r2.materials, LAUAN_4_ID)!.sheetCount).toBeLessThanOrEqual(5)
+  it('組の行に手持ち 3×6 ×1 が残っていても stockShortage は []', () => {
+    const job = withLeftoverStackStock(sampleFlushJob(true), [['3×6', 1]])
+    expect(stockShortage(job, computeDimensions(job))).toEqual([])
+  })
+
+  it('ラワン 4 の手持ちが足りないときは、材料の行だけが出る', () => {
+    const job = withStock(withLeftoverStackStock(sampleFlushJob(true), [['3×6', 1]]), LAUAN_4_ID, [{ width: 600, length: 1200, grain: 'long', count: 1 }])
+    expect(stockShortage(job, computeDimensions(job)).map((s) => [s.boardId, s.missing])).toEqual([[LAUAN_4_ID, ['背板']]])
   })
 })

@@ -3,8 +3,9 @@ import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part } from '../types'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
-import { withStock } from '../fixtures/stock'
+import { withStackStock, withStock } from '../fixtures/stock'
 import { packJob } from './index'
+import { stackKey } from './stack'
 import { compareStandardSizes, pickBetterSize, type SizeSummary } from './sizes'
 
 const pct = (r: number) => Math.round(r * 1000) / 10
@@ -196,15 +197,29 @@ describe('枚数が少ない方・歩留まりが高い方（fewer・higher）',
 
 describe('compareStandardSizes と手持ちの材料（第2.2版）', () => {
   it('手持ちの材料はそのまま残し、ほかの材料だけサイズを替える（比べる材料・組が packJob と同じ）', () => {
-    // フラッシュ25 の重ね切りオン、ラワン4 だけ手持ち 3×6 ×1。メラミン1 とラワン4 は組にならない
+    // フラッシュ25 の重ね切りオン、ラワン4 だけ手持ち 3×6 ×1。第2.3版から組は材料の手持ちによらず組のまま
     const job = withStock(sampleFlushJob(true), LAUAN_4_ID, [['3×6', 1]])
     const dims = computeDimensions(job)
     const real = packJob(job, dims).materials.map((m) => m.boardId)
     const ids = compareStandardSizes(job, dims).map((c) => c.boardId)
-    expect(real).toContain(MELAMINE_1_ID)
-    expect(ids).toContain(MELAMINE_1_ID)
+    expect(real).toEqual([stackKey(MELAMINE_1_ID, LAUAN_4_ID), LAUAN_4_ID])
     expect(ids).toEqual(real)
     // 元の仕事は変えない
     expect(job.boards.find((b) => b.id === LAUAN_4_ID)?.stockOn).toBe(true)
+  })
+
+  it('手持ちで木取りする材料の行も、3×6・4×8 にしたときの本当の枚数・歩留まりを出す（手持ちの枚数・大きさによらない）', () => {
+    // シナランバー 18 を手持ち 900×900 ×1 だけにしても、比べる値は手持ちなしのときと同じ
+    const plain = summary(bookshelfJob())
+    const job = withStock(bookshelfJob(), LUMBER_18_ID, [{ width: 900, length: 900, grain: 'long', count: 1 }])
+    expect(summary(job)).toEqual(plain)
+    expect(job.boards.find((b) => b.id === LUMBER_18_ID)?.stockOn).toBe(true)
+  })
+
+  it('手持ちで木取りする組の行も、3×6・4×8 にしたときの本当の枚数・歩留まりを出す', () => {
+    const plain = summary(sampleFlushJob(true))
+    const job = withStackStock(sampleFlushJob(true), [MELAMINE_1_ID, LAUAN_4_ID], [['3×6', 1]])
+    expect(summary(job)).toEqual(plain)
+    expect(job.stackSheets.find((s) => s.boardIds.includes(LAUAN_4_ID))?.stockOn).toBe(true)
   })
 })

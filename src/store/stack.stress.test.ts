@@ -3,11 +3,16 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
-import { canStack, stackKey } from '../engine/packing/stack'
+import { canStack, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
-import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout } from '../engine/types'
+import { findStackSheet, stackChoice, usesStock } from '../engine/packing/stock'
+import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
 import { defaultSettings } from '../engine/defaults'
 import { setPieceCheck, type OpResult } from './jobs'
+import { sanitizeJobs } from './storage'
+import golden from './fixtures/v22StackGolden.json'
+import { round1 } from '../engine/round'
+import type { PackingResult } from '../engine/types'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 
@@ -32,7 +37,8 @@ const SIZES: Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'>[] = [
   { sizeKind: 'custom', width: 910, length: 1820, grain: 'short' },
 ]
 
-function randomJob(r: Rand, seed: number, bigger = false): Job {
+/** legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる） */
+function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   const boards: Board[] = [
     ['メラミン', 1],
     ['ラワン', 2.5],
@@ -74,6 +80,19 @@ function randomJob(r: Rand, seed: number, bigger = false): Job {
       allowance: null,
     })
   }
+  // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
+  const stackSheets: StackSheet[] = []
+  for (const f of legacy ? [] : flushes) {
+    if (!canStack(f) || r() < 0.3) continue
+    const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
+    if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
+    const row: StackSheet = { boardIds: ids, ...(r() < 0.6 ? SIZES[0] : pickOne(r, SIZES)) }
+    if (r() < 0.25) {
+      row.stockOn = true
+      row.stock = [{ id: 'st1', ...pickOne(r, SIZES.slice(0, 2)), count: int(r, 1, 4) }]
+    }
+    stackSheets.push(row)
+  }
   const settings = defaultSettings()
   settings.kerf = pickOne(r, [2, 3, 4])
   settings.trim = pickOne(r, [0, 5, 10])
@@ -86,6 +105,7 @@ function randomJob(r: Rand, seed: number, bigger = false): Job {
     flushes,
     parts,
     frozenSheets: [],
+    stackSheets,
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
   }
@@ -161,8 +181,10 @@ function checkJob(job: Job) {
     expect(new Set(ids).size, `${m.boardId} の片の id`).toBe(ids.length)
     for (const s of m.sheets) expectGuillotine(s, job.settings.kerf)
     if (m.stack) {
-      const [a, b] = m.stack.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
-      expect([a.width, a.length, a.grain]).toEqual([b.width, b.length, b.grain])
+      // 組の1枚は組の行の大きさ（第2.3版。材料のサイズによらない）。組は 3×6／4×8 だけで手持ちを使わない（E-64）
+      const c = stackChoice(job, m.stack.boardIds)
+      expect(c.sizeKind).not.toBe('custom')
+      for (const s of m.sheets) expect([s.boardWidth, s.boardLength, s.sheet]).toEqual([c.width, c.length, undefined])
     }
   }
   // まとめ（第2.1版）：材料の行の枚数 ＝ その材料のふつうの 固定（切り終わりを除く）＋計算 だけ（組の1枚は足さない）。
@@ -188,18 +210,27 @@ const ok = (x: OpResult): Job => {
 }
 
 describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
-  it('乱数の仕事 150 件：ギロチンで切れる・材料ごとの片の数が合う・組の2つはサイズがそろっている', () => {
+  it('乱数の仕事 150 件：ギロチンで切れる・材料ごとの片の数が合う・組の1枚は組の行の大きさ', () => {
     let stacked = 0
     let mismatched = 0
+    let stockStacks = 0
     for (let seed = 1; seed <= 150; seed++) {
       const job = randomJob(rng(seed), seed)
       const r = checkJob(job)
-      stacked += r.materials.filter((m) => m.stack).length
-      mismatched += r.stackMismatches.length
+      for (const m of r.materials) {
+        if (!m.stack) continue
+        stacked++
+        const [a, b] = m.stack.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
+        // 第2.2版では重ねなかった（2つの材料のサイズがそろっていない）組も、第2.3版では組の行の大きさで重ねる
+        if (a.width !== b.width || a.length !== b.length || a.grain !== b.grain) mismatched++
+        // 組の行に手持ちが残っていても（読み込みで外すが）木取りは見ない（E-64）
+        if (usesStock(findStackSheet(job, m.stack.boardIds) ?? { stockOn: undefined })) stockStacks++
+      }
     }
-    // 組のある仕事・そろわない組のある仕事の両方を試していること
+    // 組のある仕事・材料のサイズがそろわない組・手持ちの組のどれも試していること
     expect(stacked).toBeGreaterThan(30)
     expect(mismatched).toBeGreaterThan(3)
+    expect(stockStacks).toBeGreaterThan(3)
   })
 
   it('固定・チェック・外す・重ね切りのオンオフをくり返しても片の数が合い、全部外すと最初の結果に戻る', () => {
@@ -261,4 +292,74 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       expect(performance.now() - t).toBeLessThan(2000)
     }
   })
+
+  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は配置が変わらない。そろわない組は重ね切りを外し、第2.2版と同じ配置（S-23）', () => {
+    // v22StackGolden.json は第2.2版（コミット dc8e29d）の packJob の結果の要約（legacy の乱数の仕事 150 件）
+    const table = golden as Record<string, string[]>
+    let unchanged = 0
+    let unstackedJobs = 0
+    let customCommon = 0
+    for (let seed = 1; seed <= 150; seed++) {
+      const legacyJob = randomJob(rng(seed), seed, false, true)
+      const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
+      delete raw.stackSheets
+      const { jobs, fixes, unstacked } = sanitizeJobs([raw])
+      expect(fixes).toBe(0)
+      const job = jobs[0]
+      // 第2.2版の組を3つに分ける：3×6／4×8 でそろう・自由入力でそろう・そろわない
+      const kinds = stackPlan(legacyJob).groups.map((g) => {
+        const [a, b] = g.boardIds.map((id) => legacyJob.boards.find((x) => x.id === id)!)
+        const same = round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain
+        const kind = !same ? 'mismatch' : a.sizeKind !== 'custom' || b.sizeKind !== 'custom' ? 'standard' : 'custom'
+        return { g, a, kind }
+      })
+      // 3×6／4×8 でそろう組だけが組の行になり、大きさは 2つの材料の大きさ
+      expect(job.stackSheets.map((x) => x.boardIds)).toEqual(kinds.filter((k) => k.kind === 'standard').map((k) => k.g.boardIds))
+      for (const x of job.stackSheets) {
+        const a = job.boards.find((b) => b.id === x.boardIds[0])!
+        expect(x.sizeKind).not.toBe('custom')
+        expect([x.width, x.length, x.grain]).toEqual([a.width, a.length, a.grain])
+      }
+      // それ以外の組のフラッシュは重ね切りが外れ、名前を知らせる
+      const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
+      expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
+      expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
+      expect(job.flushes.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      if (unstacked.length > 0) unstackedJobs++
+      const r = checkJob(job)
+      if (kinds.some((k) => k.kind === 'custom')) {
+        // 第2.2版では自由入力の大きさで重ねていた組：重ねなくなるので配置が変わる
+        expect(r.materials.some((m) => m.stack && kinds.some((k) => k.kind === 'custom' && m.boardId === k.g.key))).toBe(false)
+        customCommon++
+      } else {
+        // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
+        expect(digest(r), `seed ${seed}`).toEqual(table[`s${seed}`])
+        unchanged++
+      }
+    }
+    expect(unchanged).toBeGreaterThan(50)
+    expect(unstackedJobs).toBeGreaterThan(3)
+    // 自由入力どうしでそろう組は乱数ではほぼ出ない（stackStorage.test.ts で確かめる）
+    expect(customCommon).toBeGreaterThanOrEqual(0)
+  })
 })
+
+/** 結果の要約（第2.2版の結果と比べる。v22StackGolden.json は第2.2版のコードでこの関数と同じ作り方で作った） */
+function digest(r: PackingResult): string[] {
+  const fnv = (s: string) => {
+    let h = 0x811c9dc5
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i)
+      h = Math.imul(h, 0x01000193) >>> 0
+    }
+    return h.toString(36)
+  }
+  return r.materials.map((m) => {
+    const body = JSON.stringify([
+      m.mode,
+      m.sheets.map((s) => [s.boardWidth, s.boardLength, s.sheet?.stockId ?? null, s.placements.map((p) => [p.pieceId, round1(p.x), round1(p.y), round1(p.w), round1(p.h)])]),
+      m.unplaced,
+    ])
+    return `${m.boardId}|${m.sheetCount}|${fnv(body)}`
+  })
+}

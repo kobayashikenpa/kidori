@@ -24,3 +24,16 @@ export function withStock(job: Job, boardId: string, rows: readonly StockRowDraf
   b.stock = stockRows(rows)
   return job
 }
+
+/** 重ね切りの組 boardIds の行に手持ちを入れる（行が無ければ 4×8 の行を作る。仕事を書き換えて返す）。組は手持ちを使わないので（E-64）、木取りが手持ちを見ないことの確かめに使う */
+export function withStackStock(job: Job, boardIds: readonly [string, string], rows: readonly StockRowDraft[]): Job {
+  let s = job.stackSheets.find((x) => x.boardIds.includes(boardIds[0]) && x.boardIds.includes(boardIds[1]))
+  if (!s) {
+    const [width, length] = BOARD_SIZES.shihachi
+    s = { boardIds: [boardIds[0], boardIds[1]], sizeKind: 'shihachi', width, length, grain: 'long' }
+    job.stackSheets.push(s)
+  }
+  s.stockOn = true
+  s.stock = stockRows(rows)
+  return job
+}

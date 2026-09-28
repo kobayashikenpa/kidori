@@ -1,10 +1,10 @@
 // 固定した1枚（第1.8版。architecture.md 11.3〜11.5）：画面に出ていた1枚をまるごと写して持つ。
 // 写しから描き、写しから進み具合を計算するので、部材や設定が変わっても固定した1枚は動かない
 import { stackKey, stackLabel } from '../packing/stack'
-import { sameStockSize, stockSizeLabel, usesStock } from '../packing/stock'
+import { sameStockSize, stackChoice, stockSizeLabel, usesStock } from '../packing/stock'
 import { combineYield } from '../packing/yield'
 import { round1 } from '../round'
-import { BOARD_SIZES, type BoardGrain, type DimensionResult, type FrozenSheet, type Job, type PackingResult, type Part, type PartDimensions, type SheetLayout } from '../types'
+import { BOARD_SIZES, type DimensionResult, type FrozenSheet, type Job, type PackingResult, type Part, type PartDimensions, type SheetChoice, type SheetLayout } from '../types'
 import { sheetProgress, type SheetProgress } from './sheetProgress'
 
 /** frozenDemand のキー */
@@ -40,8 +40,8 @@ export function freezeSheet(
     boardId,
     material: board.material,
     thickness: board.thickness,
-    // 手持ちの1枚は、その行の木目を写す（第2.2版。14.6）
-    grain: layout.sheet?.grain ?? board.grain,
+    // 手持ちの1枚は、その行の木目を写す（第2.2版。14.6）。組の1枚は組の行の木目（第2.3版。15.4）
+    grain: layout.sheet?.grain ?? (other ? stackChoice(job, [board.id, other.id]).grain : board.grain),
     mode,
     kerf: job.settings.kerf,
     trim: job.settings.trim,
@@ -239,42 +239,45 @@ export function materialSizeCounts(
 
 /** 手持ちの行ごとの使った枚数と残り（第2.2版。architecture.md 14.9） */
 export interface StockUsage {
+  /** 材料の id（重ね切りの組は手持ちを使わないので出ない。architecture.md 15.9） */
   boardId: string
   rows: { stockId: string; label: string; count: number; used: number; left: number }[]
 }
 
 /**
- * 手持ちで木取りする材料（保存の並び）ごとに、手持ちの行ごとの 使った枚数 と 残り（count − used。0 未満にしない）。
- * 使った枚数 ＝ 固定した1枚（切り終わりを含む。未決事項 40）＋ 組の1枚 ＋ 計算した1枚。
- * 固定した1枚・組の1枚は、木取りと同じく大きさ・木目のそろう最初の行（残り1以上）に数える。計算した1枚は layout.sheet の行
+ * 手持ちで木取りする材料の行ごとに、手持ちの行ごとの 使った枚数 と 残り（count − used。0 未満にしない）。並びは材料の保存の並び。
+ * 使った枚数 ＝ その材料だけの 固定した1枚（切り終わりを含む。未決事項 40）＋ ふつうの計算した1枚（組の1枚は数えない。第2.3版）。
+ * 重ね切りの組の行は手持ちを使わないので出さない（15.9）。
+ * 固定した1枚は、木取りと同じく大きさ・木目のそろう最初の行（残り1以上）に数える。計算した1枚は layout.sheet の行
  */
 export function stockUsage(job: Job, result: PackingResult): StockUsage[] {
   const out: StockUsage[] = []
-  for (const board of job.boards) {
-    if (!usesStock(board)) continue
-    const rows = board.stock!.map((s) => ({ stockId: s.id, label: stockSizeLabel(s), count: s.count, used: 0, left: s.count }))
-    const src = board.stock!
-    const takeMatching = (size: { width: number; length: number; grain: BoardGrain }) => {
+  const count = (choice: SheetChoice, frozen: FrozenSheet[], computed: SheetLayout[]): StockUsage['rows'] => {
+    const src = choice.stock!
+    const rows = src.map((s) => ({ stockId: s.id, label: stockSizeLabel(s), count: s.count, used: 0, left: s.count }))
+    for (const f of frozen) {
+      const size = { width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain }
       const i = src.findIndex((s, k) => rows[k].used < s.count && sameStockSize(s, size))
       if (i >= 0) rows[i].used++
     }
-    for (const f of job.frozenSheets) {
-      if (f.boardId !== board.id && f.stackWith?.boardId !== board.id) continue
-      takeMatching({ width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain })
-    }
-    for (const m of result.materials) {
-      if (!m.stack?.boardIds.includes(board.id)) continue
-      for (const s of m.sheets) takeMatching({ width: s.boardWidth, length: s.boardLength, grain: s.sheet?.grain ?? board.grain })
-    }
-    for (const m of result.materials) {
-      if (m.stack || m.boardId !== board.id) continue
-      for (const s of m.sheets) {
-        const r = rows.find((x) => x.stockId === s.sheet?.stockId)
-        if (r) r.used++
-      }
+    for (const s of computed) {
+      const r = rows.find((x) => x.stockId === s.sheet?.stockId)
+      if (r) r.used++
     }
     for (const r of rows) r.left = Math.max(0, r.count - r.used)
-    out.push({ boardId: board.id, rows })
+    return rows
+  }
+  for (const board of job.boards) {
+    if (usesStock(board)) {
+      out.push({
+        boardId: board.id,
+        rows: count(
+          board,
+          job.frozenSheets.filter((f) => f.boardId === board.id && !f.stackWith),
+          result.materials.filter((m) => !m.stack && m.boardId === board.id).flatMap((m) => m.sheets),
+        ),
+      })
+    }
   }
   return out
 }

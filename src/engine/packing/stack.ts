@@ -1,22 +1,12 @@
 // フラッシュの重ね切り（第2.0版。architecture.md 12.3）：表面材2種類を1枚ずつ重ねて1回で切る。
 // 重ねる2つの材料の組を、木取りの上では1つの“材料”（id は stackKey）として扱う
 import { boardTokenLabel } from '../defaults'
-import { round1 } from '../round'
-import type { Board, Flush, Job, StackMismatchReason } from '../types'
-import { commonStock, stockKinds, usesStock } from './stock'
+import type { Board, Flush, Job } from '../types'
 
 /** 重ねて切れるフラッシュか：表面材がちょうど2つ（違う材料）で、枚数が同じ。材料があるかは見ない */
 export function canStack(flush: Pick<Flush, 'faces'>): boolean {
   const f = flush.faces
   return f.length === 2 && f[0].boardId !== f[1].boardId && f[0].count === f[1].count
-}
-
-/** 2つの材料のサイズ・木目がそろっているか：短辺・長辺（小数第1位）と木目が同じ（選び方 3×6／自由入力 は見ない。未決事項 38） */
-export function sameSheet(
-  a: Pick<Board, 'width' | 'length' | 'grain'>,
-  b: Pick<Board, 'width' | 'length' | 'grain'>,
-): boolean {
-  return round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain
 }
 
 /** 組の id（組の結果・比較・まとめに使う）。文字列を分解して材料の id を取り出さないこと（boardIds を一緒に持つ） */
@@ -32,23 +22,14 @@ export interface StackGroup {
   flushIds: string[]
 }
 
-/** 重ね切りがオンだが、サイズ・木目がそろっていないので重ねない組 */
-export interface StackMismatch {
-  boardIds: [string, string]
-  flushIds: string[]
-  /** 'stock'：どちらかが手持ちで、同じサイズの手持ちが無い（第2.2版）。無ければ 'size'（今までの結果と同じ形にするため持たない） */
-  reason?: StackMismatchReason
-}
-
 export interface StackPlan {
   groups: StackGroup[]
-  mismatches: StackMismatch[]
 }
 
 /**
- * どの組を重ねるか。stack がオンで canStack で、表面材の材料が2つとも仕事にあるフラッシュについて組（a, b）を作り、
- * sameSheet なら groups、そうでなければ mismatches に入れる。同じ2つの材料のフラッシュは1つの組にまとめる（未決事項 37）。
- * 並びは a の保存の並び → b の保存の並び
+ * どの組を重ねるか。stack がオンで canStack で、表面材の材料が2つとも仕事にあるフラッシュについて組（a, b）を作る。
+ * 同じ2つの材料のフラッシュは1つの組にまとめる（未決事項 37）。並びは a の保存の並び → b の保存の並び。
+ * 第2.3版（architecture.md 15.4）：組は自分のサイズ（Job.stackSheets）を持つので、材料のサイズ・手持ちは見ない（どの組も重ねる）
  */
 export function stackPlan(job: Pick<Job, 'boards' | 'flushes'>): StackPlan {
   const index = new Map(job.boards.map((b, i) => [b.id, i]))
@@ -69,17 +50,7 @@ export function stackPlan(job: Pick<Job, 'boards' | 'flushes'>): StackPlan {
     ([, p], [, q]) =>
       index.get(p.boardIds[0])! - index.get(q.boardIds[0])! || index.get(p.boardIds[1])! - index.get(q.boardIds[1])!,
   )
-  const plan: StackPlan = { groups: [], mismatches: [] }
-  for (const [key, p] of sorted) {
-    const a = job.boards[index.get(p.boardIds[0])!]
-    const b = job.boards[index.get(p.boardIds[1])!]
-    // 第2.2版（14.7）：登録した手持ちどうし（固定した1枚は引かない）でそろう行があれば組。
-    // どちらも手持ちを使わなければ sameSheet と同じ判定
-    if (commonStock(stockKinds(a), stockKinds(b)).length > 0) plan.groups.push({ key, ...p })
-    else if (usesStock(a) || usesStock(b)) plan.mismatches.push({ ...p, reason: 'stock' })
-    else plan.mismatches.push(p)
-  }
-  return plan
+  return { groups: sorted.map(([key, p]) => ({ key, ...p })) }
 }
 
 type Named = Pick<Board, 'material' | 'thickness'>

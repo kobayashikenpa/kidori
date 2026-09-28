@@ -1,21 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { LAUAN_4_ID, MELAMINE_1_ID, LAUAN_25_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../fixtures/flush'
-import type { Board, Flush } from '../types'
-import { canStack, sameSheet, stackKey, stackLabel, stackPlan } from './stack'
+import type { Flush } from '../types'
+import { canStack, stackKey, stackLabel, stackPlan } from './stack'
 
 const face = (boardId: string, count: number) => ({ boardId, count })
 const flush = (faces: Flush['faces']): Flush => ({ id: 'f', name: 'f', core: 15, faces })
-const board = (p: Partial<Board>): Board => ({
-  id: 'b',
-  material: 'ラワン',
-  thickness: 4,
-  sizeKind: 'saburoku',
-  width: 910,
-  length: 1820,
-  grain: 'long',
-  ...p,
-})
-
 describe('canStack（重ねて切れるフラッシュか）', () => {
   it('メラミン1×2・ラワン4×2 は重ねられる', () => {
     expect(canStack(flush([face(MELAMINE_1_ID, 2), face(LAUAN_4_ID, 2)]))).toBe(true)
@@ -28,19 +17,6 @@ describe('canStack（重ねて切れるフラッシュか）', () => {
   })
 })
 
-describe('sameSheet（サイズ・木目がそろっているか）', () => {
-  it('3×6 と 自由入力 910×1820・長手方向 はそろう。短手方向ならそろわない。4×8 ともそろわない', () => {
-    const a = board({})
-    expect(sameSheet(a, board({ sizeKind: 'custom' }))).toBe(true)
-    expect(sameSheet(a, board({ sizeKind: 'custom', grain: 'short' }))).toBe(false)
-    expect(sameSheet(a, board({ sizeKind: 'shihachi', width: 1220, length: 2440 }))).toBe(false)
-  })
-  it('小数第1位で比べる（910.04 は 910 とそろう、910.1 はそろわない）', () => {
-    expect(sameSheet(board({}), board({ sizeKind: 'custom', width: 910.04 }))).toBe(true)
-    expect(sameSheet(board({}), board({ sizeKind: 'custom', width: 910.1 }))).toBe(false)
-  })
-})
-
 describe('stackPlan・stackLabel（どの組を重ねるか）', () => {
   it('見本でフラッシュ25 をオンにすると組が1つ（a＝メラミン 1、b＝ラワン 4）', () => {
     const job = sampleFlushJob(true)
@@ -48,7 +24,6 @@ describe('stackPlan・stackLabel（どの組を重ねるか）', () => {
     expect(plan.groups).toEqual([
       { key: stackKey(MELAMINE_1_ID, LAUAN_4_ID), boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID] },
     ])
-    expect(plan.mismatches).toEqual([])
     expect(stackKey(MELAMINE_1_ID, LAUAN_4_ID)).toBe(`stack:${MELAMINE_1_ID}+${LAUAN_4_ID}`)
     expect(stackLabel(job, [MELAMINE_1_ID, LAUAN_4_ID])).toBe('メラミン1＋ラワン4（重ね切り）')
   })
@@ -60,15 +35,19 @@ describe('stackPlan・stackLabel（どの組を重ねるか）', () => {
   })
 
   it('オフなら組は無い', () => {
-    expect(stackPlan(sampleFlushJob(false))).toEqual({ groups: [], mismatches: [] })
+    expect(stackPlan(sampleFlushJob(false))).toEqual({ groups: [] })
   })
 
-  it('ラワン 4 を 4×8 にすると組は無く、そろっていない組に1つ', () => {
+  it('サイズ・手持ちは見ない（第2.3版）：ラワン 4 を 4×8・短手・手持ちにしても組は1つのまま', () => {
     const job = sampleFlushJob(true)
-    job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
+    job.boards = job.boards.map((b) =>
+      b.id === LAUAN_4_ID
+        ? { ...b, sizeKind: 'custom', width: 1220, length: 2440, grain: 'short', stockOn: true, stock: [{ id: 's', sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long', count: 1 }] }
+        : b,
+    )
+    job.stackSheets = []
     expect(stackPlan(job)).toEqual({
-      groups: [],
-      mismatches: [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID] }],
+      groups: [{ key: stackKey(MELAMINE_1_ID, LAUAN_4_ID), boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID] }],
     })
   })
 

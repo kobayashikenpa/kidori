@@ -286,6 +286,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
         ...p,
       })),
       frozenSheets: [],
+      stackSheets: [],
       createdAt: '',
       updatedAt: '',
     }

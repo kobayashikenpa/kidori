@@ -1320,6 +1320,10 @@ select.input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
+/* 重ね切りの組の行（3×6・4×8 の2つだけ） */
+.sz-opts.sz-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .sz-opt {
   appearance: none;
   border: 2px solid var(--line);
@@ -1913,5 +1917,22 @@ button.dim-name {
   font-size: 15px;
 }
 .kd-short-btn {
+  flex: 0 0 auto;
+}
+
+/* 部材の編集：材料を変えたときの厚みの置き換えの知らせ（第2.3版） */
+.swap-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.swap-note .msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.swap-note .btn {
   flex: 0 0 auto;
 }

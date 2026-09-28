@@ -7,12 +7,12 @@ import { fmt } from '../format'
 
 export function SavingHints({ job }: { job: Job }) {
   // お知らせの計算に使うのは 部材・材料・フラッシュ・設定 だけ。どれかが変われば（切り代・端切りの変更を含む）必ず計算し直す
-  // 固定した1枚（第1.8版）の片は計算から除くので、それも計算し直しの理由にする
-  const { id, name, createdAt, parts, boards, flushes, settings, frozenSheets } = job
+  // 固定した1枚（第1.8版）の片は計算から除くので、それも計算し直しの理由にする。組の設定（第2.3版）も同じ
+  const { id, name, createdAt, parts, boards, flushes, settings, frozenSheets, stackSheets } = job
   // 更新日時は操作のたびに変わるが、計算には使わないので、ここでは計算し直しの理由にしない
   const input = useMemo<Job>(
-    () => ({ id, name, createdAt, updatedAt: createdAt, parts, boards, flushes, settings, frozenSheets }),
-    [id, name, createdAt, parts, boards, flushes, settings, frozenSheets],
+    () => ({ id, name, createdAt, updatedAt: createdAt, parts, boards, flushes, settings, frozenSheets, stackSheets }),
+    [id, name, createdAt, parts, boards, flushes, settings, frozenSheets, stackSheets],
   )
   // 何回も計算し直すので、木取りの結果を先に出してから後回しで計算する（最初は null）
   const deferred = useDeferredValue<Job | null>(input, null)

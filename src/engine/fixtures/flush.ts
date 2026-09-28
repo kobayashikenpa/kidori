@@ -53,6 +53,7 @@ export function flushJob(): Job {
       }),
     ],
     frozenSheets: [],
+    stackSheets: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
@@ -64,7 +65,7 @@ export const SAMPLE_FLUSH_ID = 'flush-sample-25'
 
 /**
  * 第1.7版の見本（S-14。store の sampleFromTemplate をひな形の初期値で作ったものと同じ中身、id は固定）。
- * 材料は メラミン1・ラワン2.5・ラワン4・ラワン5.5（3×6）。stack を true にすると第2.0版の見本（フラッシュ25 の重ね切りオン）
+ * 材料は メラミン1・ラワン2.5・ラワン4・ラワン5.5（3×6）。組（メラミン1＋ラワン4）の設定も 3×6（第2.3版）。stack を true にすると第2.0版の見本（フラッシュ25 の重ね切りオン）
  */
 export function sampleFlushJob(stack = false): Job {
   const sheet = { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
@@ -101,6 +102,8 @@ export function sampleFlushJob(stack = false): Job {
       flushPart({ id: 'part-ita', name: '背板', boardId: LAUAN_4_ID, expr: { W: '全体.W', H: '全体.H', D: `{t:${LAUAN_4_ID}}` }, quantity: 1, grain: 'H', allowance: 0 }),
     ],
     frozenSheets: [],
+    // 見本の組（メラミン 1＋ラワン 4）の設定は 3×6（第2.3版。store の見本と同じ）
+    stackSheets: [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...sheet }],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }

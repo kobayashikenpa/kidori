@@ -1,4 +1,4 @@
-# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版・第2.0版・第2.2版）
+# kidori 設計（第1版・第1.1版・第1.2版・第1.3版・第1.4版・第1.5版・第1.8版・第2.0版・第2.2版・第2.3版）
 
 仕様の正は `docs/spec.md`。この文書は「どこに何を作るか」「データの形」「計算の流れ」を決める。
 仕様書に書いていないことで、ここで仮に決めたものには **（暫定）** を付け、`docs/tasks.md` 末尾の未決事項に挙げている。
@@ -10,6 +10,7 @@
 > **第1.8版（切りながら進める木取り）の変更は 11章にまとめている。** 切り出しのチェック（8.5・10.3・`checklist.ts`）と食い違うところは 11章が正。
 > **第2.0版（フラッシュの重ね切り）の変更は 12章にまとめている。** 木取りの材料の分け方（3.3・10.3）・固定した1枚（11章）と食い違うところは 12章が正。
 > **第2.2版（手持ちの材料）の変更は 14章にまとめている。** 帯詰め（3.3）・重ね切りの組（12.3・12.4）・まとめ（11.5・13.3）と食い違うところは 14章が正。
+> **第2.3版（まとめの行ごとのサイズ・自由入力＝手持ち・厚みの置き換え）の変更は 15章にまとめている。** 重ね切りの組のサイズ（12.3・12.6・12.8）・手持ち（14章）と食い違うところは 15章が正。
 
 ## 1. 全体の構成
 
@@ -1324,7 +1325,7 @@ export function stockShortage(job: Job, dims: DimensionResult): StockShortage[]
 
 ### 14.9 比較・まとめ（`packing/sizes.ts`・`progress/frozen.ts`）
 
-- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない
+- `compareStandardSizes`：手持ちで木取りする材料（`stockOn`）は写しでもそのまま残し、ほかの材料だけ 3×6／4×8 にする（重ね切りの組・比べる材料の並びを今の packJob とそろえるため）。手持ちの材料の比較は画面に出さない（**第2.3版の修正で変更**：15.5 のとおり手持ちの行も 3×6／4×8 にして比べ、画面に出す）
 - `MaterialSummary.bySize: { label: string; count: number }[]`：その行の1枚（固定した1枚（切り終わりを除く）＋計算した1枚）を大きさごとに数えたもの。並びは大きい面積から（例：`4×8 ×2`・`3×6 ×1`）。サイズを選んだ材料でも1つ出す（画面は手持ちの材料のときだけ出す）
 - `stockUsage(job, result): { boardId; rows: { stockId; label; count; used; left }[] }[]`：`stockOn` の材料ごとに、手持ちの行ごとの 使った枚数（固定した1枚（切り終わりを含む）＋組の1枚＋計算した1枚）と残り（count − used。0 未満にしない）。手持ちの編集欄に出す
 
@@ -1345,3 +1346,169 @@ export function stockShortage(job: Job, dims: DimensionResult): StockShortage[]
 | 木取り：足りない知らせ | まとめの上に `stockShortage` ごとに「シナランバー 18mm が足りません（入らない部材：棚板）」と解決策（「3×6 を 1枚 足すと入ります」「4×8 を 1枚 足すと入ります」「端切りを 3mm にすると手持ちで入ります」。null のサイズは出さない）。設定・手持ちは自動では変えない |
 | 木取り：1枚ごとの段 | 手持ちの1枚は「1枚目 / 3枚（4×8）」のように大きさを添える（`stockSizeLabel`）。配置図の木目は `layout.sheet?.grain` |
 | 木取り：組の知らせ | `stackMismatches` の理由が `'stock'` なら「メラミン1＋ラワン4：同じサイズの手持ちが無いので、重ねずに木取りしています」 |
+
+## 15. 第2.3版の変更（まとめの行ごとのサイズ・自由入力＝手持ち・厚みの置き換え）— 決定（planner）
+
+仕様書の差分は コミット 035e841（4「フラッシュの重ね切り」の最後の項、5.4 の厚みの置き換え、9「材料のサイズの選択」「手持ちの材料」）。12章・14章と食い違うところは 15章が正。
+
+方針は「**まとめの1行 ＝ 1つの“サイズの設定”**」。材料の行の設定は今までどおり `Board` に持ち、重ね切りの組の行の設定は仕事の中の別の表（`Job.stackSheets`）に持つ。どちらも同じ形（`SheetChoice`）なので、手持ちの取り出し・帯詰め・比較・まとめ・足りないときの解決策は、同じ関数に「行の設定」を渡すだけにする。
+
+- 組は **2つの材料のサイズがそろっているかを見なくなる**。組は自分のサイズ（または手持ち）で並べ、材料の行のサイズは、その材料をふつうに木取りする片だけに効く
+- **「サイズがそろっていないので重ねない」はなくなる**（`stackPlan` の `mismatches`・`PackingResult.stackMismatches`・画面の知らせを消す）
+- **相手の材料のサイズをそろえる処理（12.6 の `setBoardSize` の相手・`setBoardsSize`）はなくす**（未決事項 36 の決定は、組が自分のサイズを持つことで不要になる）
+- 保存データ（`kidori.jobs.v2`）の版は上げない（`Job.stackSheets` を足すだけ。無い仕事は読み込むときに1回だけ作る。15.6）
+
+### 15.1 追加・変更するファイル
+
+```
+src/engine/
+  types.ts               SheetChoice・StackSheet・Job.stackSheets。stackMismatches を消す
+  packing/stock.ts       stockKinds(choice)・stackChoice（組の設定。無ければ 4×8）・availableStock を材料と組で分ける
+  packing/stack.ts       stackPlan は mismatches を返さない。sameSheet は使わなくなる（消してよい）
+  packing/index.ts       組は組の手持ちで並べる。材料の手持ちから引かない。置けなかった片は組の noStock（a・b に回さない）
+  packing/sizes.ts       比較の写しで、手持ちでない組の設定も 3×6／4×8 にする
+  progress/frozen.ts     freezeSheet の組の木目・大きさ、materialSizeCounts・stockUsage に組の行
+  hints/shortage.ts      組の行も対象にする
+  formula/usages.ts      swapThicknessRef（部材1つの式の {t:旧} を {t:新} に置き換える）
+src/store/
+  jobs.ts                行の操作（SizeTarget：材料の id か組の2つの id）・copyJob・removeBoards
+  storage.ts             stackSheets の検査・修復と、無い仕事の移し替え（15.6）
+  sample.ts              見本の組の設定を 3×6 にする
+src/ui/
+  screens/KidoriScreen.tsx       「手持ちの材料」の段を消す。まとめの行ごとに 3×6／4×8／自由入力、自由入力でその行の手持ちの編集
+  components/SheetSizePicker.tsx 組の行も材料の行も同じ部品（SizeTarget を渡す）。自由入力＝手持ち
+  components/StockEditor.tsx     行（SizeTarget）ごとの手持ちの編集
+  components/PartEditor.tsx      材料を変えたときの厚みの置き換えと知らせ・元に戻す
+```
+
+### 15.2 データの形（`types.ts`）
+
+```ts
+/** まとめの1行のサイズの設定（第2.3版）。材料の行は Board、組の行は StackSheet がこの形を持つ */
+export interface SheetChoice {
+  sizeKind: BoardSizeKind
+  width: number
+  length: number
+  grain: BoardGrain
+  /** 自由入力（＝手持ち）を選んでいる。オンのときだけ true */
+  stockOn?: true
+  /** 手持ちの材料（登録順）。3×6／4×8 に戻しても消さずに残す */
+  stock?: StockSheet[]
+}
+
+export interface Board extends SheetChoice { …今のまま（id・material・thickness・builtIn） }
+
+/** 重ね切りの組の行のサイズの設定（第2.3版） */
+export interface StackSheet extends SheetChoice {
+  /** 組の2つの材料（a・b。材料の保存の並び）。探すときは並びを問わない */
+  boardIds: [string, string]
+}
+
+export interface Job {
+  …今のまま
+  /** 重ね切りの組の行のサイズの設定（第2.3版）。組ごとに1つ。読み込んだあとはいつもある（15.6） */
+  stackSheets: StackSheet[]
+}
+// PackingResult.stackMismatches・StackMismatchReason・StackPlan.mismatches は消す
+```
+
+- 組の設定を材料（`Board`）やフラッシュに持たせないのは、組が「2つの材料の組」で決まり（違うフラッシュでも同じ2つの材料なら1つの組。未決事項 37）、どちらか一方の材料に持たせると、材料の行の設定と区別できないため
+- **組の設定が無い組**（新しくフラッシュを足した・重ね切りをオンにした）は **4×8**（仕様書 9「初期値は 4×8」）として計算する。設定の表に行を足すのは、組の行でサイズ・手持ちを選んだときだけ（`stackChoice(job, boardIds)` が、行が無ければ 4×8 の設定を返す）
+- 重ね切りをオフにした・フラッシュを消した組の設定は消さずに残す（オンに戻したときに同じ設定になる。手持ちの行を残すのと同じ考え）。材料を削除したら、その材料の入る組の設定は消す（15.5）
+
+### 15.3 行の設定から手持ちを取り出す（`packing/stock.ts`）
+
+```ts
+stockKinds(choice: SheetChoice): StockKind[]         // 今の stockKinds(board) と同じ中身。引数の型だけ広げる
+stackChoice(job, boardIds): SheetChoice               // 組の設定（並びを問わずに探す）。無ければ 4×8・木目 長手・手持ちなし
+availableStock(job, boardId): StockKind[]             // 材料の手持ち。固定した1枚のうち、組の1枚（stackWith あり）は引かない
+availableStackStock(job, boardIds): StockKind[]       // 組の手持ち。組の固定した1枚（boardId＝a・stackWith.boardId＝b）だけを引く
+```
+
+- **「自由入力を選んでいる」＝ `stockOn === true`**（仕様書 9「自由入力を選ぶと、その行の手持ちの材料を登録する」）。3×6・4×8 を選ぶと `stockOn` を外す（行は残す）
+- 以前の版の「自由入力」（`sizeKind: 'custom'` で `stockOn` が無い＝1つの大きさが何枚でも使える）は、そのまま今までどおり計算する（移し替えない。暫定。未決事項 44）
+- `commonStock` は使わなくなる（組は自分の手持ちを持つため）。消してよい
+
+### 15.4 木取り（`packing/stack.ts`・`packing/index.ts`）
+
+- `stackPlan(job)`：重ね切りがオンで `canStack` で、表面材の材料が2つとも仕事にあるフラッシュを、今までどおり2つの材料の組にまとめる（並び・`flushIds` は今のまま）。**サイズ・手持ちは見ない**（どの組も `groups` に入る）
+- 組の片：12.4 のまま（重ねる数＝min(a の残り, b の残り)、差はそれぞれの材料のふつうの片）。片の向きは組の手持ちの行（`stackChoice` の大きさ・木目）で決める（今の a の材料で決めていたところ）
+- 組の並べ方：`availableStackStock` で並べる（材料の手持ちから引かない）。組の手持ちが尽きて置けなかった片は、**組の結果の `unplaced`（`noStock`）** にする。a・b のふつうの片に回さない（14.7 の「組に置けなかった片を a・b に回す」と `Piece.twin` の使い道はなくなる。暫定。未決事項 42）。組が手持ちでなければ今までどおり（入らない片は `tooLarge`）
+- 材料のふつうの片：`availableStock` で並べる（組の1枚を引かない）
+- 組の結果の `SheetLayout.sheet`（手持ちの1枚の印）・歩留まり・おまかせは、ふつうの材料と同じ
+- 固定した組の1枚：`freezeSheet(…, stackWith)` の `grain` は `layout.sheet?.grain ?? stackChoice(job, [a, b]).grain`（今は a の材料の木目）。`frozenDemand`・チェック・切り終わりは 12.5 のまま
+- 手持ちを登録しない仕事でも、**組のサイズと材料のサイズが違ってよい**（例：組は 3×6、ラワン 4 の背板は 4×8）。この版で結果が変わるのは「材料のサイズがそろっていなくて重ねていなかった組」と「手持ちを使っていた組」だけ
+
+### 15.5 比較・まとめ・足りないとき（`packing/sizes.ts`・`progress/frozen.ts`・`hints/shortage.ts`）
+
+- `compareStandardSizes`：3×6／4×8 にした写しで、手持ちでない材料に加えて **手持ちでない組の設定も同じサイズにする**（写しの `stackSheets` に、今の組すべての行を 3×6／4×8 で入れる）。`packJob` 2回のまま。今の仕事の `stackPlan` を渡す処理（12.7）は、組がサイズで決まらなくなったので要らない（渡しても同じ）
+- （修正）手持ちで木取りする行（材料の行・組の行とも）も、写しでは手持ちを外して 3×6／4×8 にする。どの行でも 3×6／4×8 の本当の枚数・歩留まりを並べるため（仕様書 9）。画面は手持ちの行でも数字を出す
+- `materialSummaries`：変えない（組の行は今までどおり）
+- `materialSizeCounts`：組の行も、その組の1枚を大きさごとに数える（今もそうなっていれば変えない）
+- `stockUsage(job, result)`：組の行も出す（`boardId: stackKey`・`stack: { boardIds }`。組の手持ちの行ごとに 使う（組の固定した1枚＋組の計算した1枚）／残り）。材料の行は、その材料のふつうの1枚だけを数える（組の1枚は数えない）
+- `stockShortage`：組の結果に `noStock` の片があれば、組も対象にする（`boardId: stackKey`、`label` は `stackLabel`、`missing` は入らない部材）。足す枚数は今までどおり「足りない行すべてに同じ n 枚の行を足した写し」で試す（組には組の設定に行を足す）。切り代・端切りを小さくして入るかも同じ
+- お知らせ（`findSavingHints`）：`noStock` のある組は「減らせる」の対象から外す（材料と同じ）
+
+### 15.6 保存・操作（`src/store`）
+
+**行の操作**（`jobs.ts`）：材料の行と組の行を同じ関数で扱う。
+
+```ts
+export type SizeTarget = string /* 材料の id */ | readonly [string, string] /* 組の2つの材料の id */
+setRowSize(job, target, size)                 // 3×6／4×8 を選ぶ：大きさと木目を入れ、stockOn を外す（手持ちの行は残す）
+setRowStockMode(job, target, on)              // 自由入力を選ぶ：on で stockOn。行が無ければ、今の大きさ ×1 の行を1つ入れる（14.10 の setStockMode と同じ）
+addRowStock / updateRowStock / removeRowStock // 14.10 の手持ちの操作と同じ検査。最後の1行を消すと stockOn も外す
+```
+
+- 組の行の操作で `stackSheets` にその組の行が無ければ、4×8 の行を作ってから変える（a・b は材料の保存の並び）
+- 今の `setBoardSize`・`setStockMode`・`addStockSheet`・`updateStockSheet`・`removeStockSheet` は、材料の id を渡した行の操作と同じもの（名前を残すか置き換えるかは engine-dev に任せる）。**相手の材料をそろえる処理と `setBoardsSize` は消す**
+- `removeBoards`：消した材料の入る組の設定を `stackSheets` から消す
+- `copyJob`：`stackSheets` の `boardIds` を新しい材料の id につけ替え、手持ちの行も写す（材料の手持ちと同じ）
+- ひな形（8.3）には入れない（新しい仕事は `stackSheets: []`。組は 4×8 から始まる）
+- 見本（`sampleFromTemplate`）：材料を 3×6 にするのに合わせ、フラッシュ25 の組（メラミン 1＋ラワン 4）の設定も 3×6 で入れる（見本の期待値＝組 3×6 で5枚、を変えないため。未決事項 24 と同じ考え）
+
+**読み込み**（`storage.ts`）
+- `stackSheets` があれば検査・修復：配列でなければ `[]`。行ごとに、`boardIds` が仕事にある違う2つの材料で、同じ組（並びを問わず）の行が前に無いこと、サイズ・手持ちは `sanitizeBoard` と同じ検査。だめな行は外して直した数に数える
+- **`stackSheets` が無い仕事（第2.2版までのデータ）だけ、1回移し替える**：`stackPlan` の組ごとに1行作る
+  - サイズ＝ a の材料の今のサイズ（`sizeKind`・`width`・`length`・`grain`）。今まで重ねていた組は a と b が同じサイズなので「2つの材料の共通のサイズ」になる。そろっていなかった組も a のサイズで重ねるようになる
+  - a か b が手持ちを使っていた（`usesStock`）なら、今の `commonStock(stockKinds(a), stockKinds(b))` の行（枚数が有限のもの）を組の手持ちにして `stockOn`。そろう行が無ければ手持ちなし
+  - 材料の手持ちの行・枚数はそのまま（組の分を引かない。暫定。未決事項 43）
+  - 固定した1枚は変えない（写しなので結果に影響しない）。移し替えたことは直した数に数えない（壊れていたわけではないため）
+- 以前の「自由入力」（`stockOn` の無い `custom`）は移し替えない（15.3）
+
+### 15.7 材料を変えたときの厚みの置き換え（`formula/usages.ts`）
+
+仕様書 5.4「部材の材料（またはフラッシュ）を変えたとき、その部材の式に前の材料の厚みが入っていれば、新しい材料の厚みに自動で置き換える」。
+
+```ts
+/** 部材1つの W・H・D の式の {t:from} を {t:to} に置き換える。置き換えた軸（W→H→D の順）を返す */
+export function swapThicknessRef(expr: Record<Axis, string>, from: string, to: string):
+  { expr: Record<Axis, string>; axes: Axis[] }
+```
+
+- `from`・`to` は材料の id かフラッシュの id（式の `{t:…}` はどちらも同じ書き方。10.2）。中身は `remapBoardIds(expr, new Map([[from, to]]))`
+- 置き換えないとき：前か後の材料が無い（`null`。枚数0の行など）、同じ材料、式に `{t:from}` が無い → `axes: []`
+- ほかの部材の式は変えない（渡すのは編集中の部材の式だけ）
+- 画面（部材の編集）：材料の欄を変えたら、下書きの式に `swapThicknessRef` をかける。`axes` があれば「W の式のフラッシュ25 をフラッシュ22 に置き換えました」（軸が2つ以上なら「W・H の式の…」。名前は `boardTokenLabel` やフラッシュの名前）と「元に戻す」を出す。元に戻すは、置き換える前の下書きの式に戻す（材料はそのまま）。知らせは、次に材料を変える・式を打つ・保存するまで出しておく。**保存する前の下書きの中の話なので、store の操作は増やさない**
+
+### 15.8 画面（`src/ui`）
+
+| 画面 | 変更 |
+|---|---|
+| 木取り：まとめ | 材料の行・組の行のそれぞれに、3×6・4×8（比較の枚数・歩留まり）・自由入力 の3つ。選んでいるのは `stockOn` なら自由入力、そうでなければ `sizeKind`（以前の「自由入力」は自由入力。15.3）。3×6・4×8 は `setRowSize`、自由入力は `setRowStockMode(on)` |
+| 木取り：手持ち | 自由入力を選んだ行の下に、その行の手持ちの編集（`StockEditor`：行ごとに サイズ 3×6／4×8／自由入力（短辺・長辺・木目）・枚数（数字キー）・「使う ◯／残り ◯」（`stockUsage`）・削除、「手持ちを足す」）。**まとめの下の「手持ちの材料」の段は消す**。手持ちの行があるときのまとめは、今までどおり `bySize`（「4×8 ×2・3×6 ×1」）も出す。以前の「自由入力」（`stockOn` の無い `custom`）の行は、編集の欄に「910×1820（枚数の指定なし）」のように出し、「手持ちを足す」で `setRowStockMode(on)`（その大きさ ×1 の行が入る。未決事項 44） |
+| 木取り：組の行 | 材料の行と同じ部品・同じ操作（`SizeTarget` に組の2つの id を渡す）。a・b のどちらが手持ちでも、組のサイズの選択は出す |
+| 木取り：知らせ | サイズがそろっていない組の知らせ（12.8・14.11）を消す。足りない知らせ（14.11）は組の行も「メラミン1＋ラワン4（重ね切り）が足りません（入らない部材：棚板）」 |
+| 部材の編集 | 材料の欄を変えたときの置き換えの知らせと「元に戻す」（15.7。押す所は 44px 以上） |
+
+### 15.9 追補：組の行は 3×6／4×8 だけ（仕様書 コミット 4178c82）
+
+重ね切りの組は、2つの材料が同じサイズの材料である前提で **3×6 か 4×8** を選ぶ。**自由入力・手持ちは使わない**。15.2〜15.8 の「組の手持ち」はこの節で置き換える。
+
+- **engine**：`stackChoice(job, boardIds)` は組の行の 3×6／4×8（木目 長手）だけを返す。行が無い・行が自由入力なら 4×8。`stock`・`stockOn` は返さない（保存データに残っていても木取りは見ない）。したがって組はいつも選んだサイズで足りるだけ使い、組の `noStock` は出ない。`stockUsage`・`stockShortage` は組の行を出さない（未決事項 42 は不要）
+- **store の操作**：`SizeTarget` が組（2つの id）のとき、`setRowStockMode`・`addRowStock`・`updateRowStock`・`removeRowStock`・自由入力の `setRowSize` は「重ね切りの組は 3×6 か 4×8 を選んでください」で断る
+- **読み込み**（`storage.ts`）：重ね切りを外したフラッシュの名前を集め、「サイズがそろっていないので、重ね切りを外しました：フラッシュ25」を知らせる（`LoadResult.message`。壊れていたわけではないので直した数には数えない。固定した組の1枚は切った記録として残す。未決事項 39 と同じ）
+  - `stackSheets` の無い仕事（第2.2版まで）：`stackPlan` の組ごとに、a・b がどちらも手持ちを使わず、大きさ・木目がそろい（`sameStockSize`。第2.2版の決まり）、a か b が 3×6／4×8 なら、その大きさで組の行を作る。それ以外（そろわない・手持ちを使っていた・共通の大きさが自由入力）は、その組で重ねていたフラッシュの `stack` を外し、組の行は作らない
+  - `stackSheets` のある仕事：組の行が自由入力か手持ち（`stockOn`）なら、その組で重ねているフラッシュの `stack` を外し、行は 3×6／4×8 なら手持ちだけを外して残し、自由入力なら消す。手持ちの行があっても `stockOn` でなければ、黙って手持ちを外す（重ね切りは残す）
+- `commonStock`（第2.2版の手持ちのそろう行）は、移し替えで組の手持ちを作らなくなったので消した
+- **画面**：組の行の `SheetSizePicker` は 3×6・4×8 の2つだけ。組の行の手持ちの編集と、足りない知らせの組の「足す」は出さない

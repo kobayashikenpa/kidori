@@ -43,7 +43,7 @@ export function SettingsScreen() {
 
         <div className="field">
           <Help className="label" title="端切り">
-            刃厚を含む幅です。縦切り優先は右側の長手を、横切り優先は上側の長手と右側の妻手を落とします
+            刃厚を含む幅です。縦切り優先は右側の長手を、横切り優先は下側の長手と右側の妻手を落とします
           </Help>
           <NumberField ariaLabel="端切り" value={s.trim} onChange={(v) => v !== null && set({ trim: v })} />
         </div>
@@ -88,7 +88,7 @@ export function SettingsScreen() {
 
       <h3>
         <Help title="フラッシュ">
-          芯材の両面に表面材を貼って厚みを作る部材のための登録です。部材の「材料」の欄で選べます。表面材は材料ごとに木取りし、芯材は木取りに入れません。「表面材を重ねて切る」にすると、2種類の表面材を1枚ずつ重ねて1回で切ります（表面材が2種類で枚数が同じとき。2つの材料のサイズと木目がそろっていないと重ねずに木取りします）。
+          芯材の両面に表面材を貼って厚みを作る部材のための登録です。部材の「材料」の欄で選べます。表面材は材料ごとに木取りし、芯材は木取りに入れません。「表面材を重ねて切る」にすると、2種類の表面材を1枚ずつ重ねて1回で切ります（表面材が2種類で枚数が同じとき。重ねて切る分のサイズは、木取りの画面のまとめの組の行で選びます）。
         </Help>
       </h3>
       <FlushEditor />
@@ -107,6 +107,16 @@ export function SettingsScreen() {
           saveTheme(v)
         }}
       />
+
+      <h3>使い方</h3>
+      <a
+        className="btn"
+        href="https://github.com/kobayashikenpa/kidori/blob/main/docs/manual.md"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        取扱説明書を開く
+      </a>
     </section>
   )
 }
