@@ -1915,3 +1915,20 @@ button.dim-name {
 .kd-short-btn {
   flex: 0 0 auto;
 }
+
+/* 部材の編集：材料を変えたときの厚みの置き換えの知らせ（第2.3版） */
+.swap-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.swap-note .msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.swap-note .btn {
+  flex: 0 0 auto;
+}
