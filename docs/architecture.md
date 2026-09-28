@@ -11,7 +11,7 @@
 > **第2.0版（フラッシュの重ね切り）の変更は 12章にまとめている。** 木取りの材料の分け方（3.3・10.3）・固定した1枚（11章）と食い違うところは 12章が正。
 > **第2.2版（手持ちの材料）の変更は 14章にまとめている。** 帯詰め（3.3）・重ね切りの組（12.3・12.4）・まとめ（11.5・13.3）と食い違うところは 14章が正。
 > **第2.3版（まとめの行ごとのサイズ・自由入力＝手持ち・厚みの置き換え）の変更は 15章にまとめている。** 重ね切りの組のサイズ（12.3・12.6・12.8）・手持ち（14章）と食い違うところは 15章が正。
-> **第2.4版（バックアップと共有）の設計は 16章にまとめている。** 計算は変えない。仕事のコピー（`copyJob`）の中身は 16.3 の `rekeyJob` に移る。
+> **第2.4版（バックアップと共有。共有はファイルで送る）の設計は 16章にまとめている。** 計算は変えない。仕事のコピー（`copyJob`）の中身は 16.3 の `rekeyJob` に移る。
 
 ## 1. 全体の構成
 
@@ -1516,8 +1516,9 @@ export function swapThicknessRef(expr: Record<Axis, string>, from: string, to: s
 
 ## 16. 第2.4版の変更（バックアップと共有）— 決定（planner・オーナー了承済み）
 
-仕様書 10.5（コミット 06cc72b）。**オーナーの了承の前の案**。計算（木取り・寸法）は変えない。保存データ（`kidori.jobs.v2`）の版も上げない。
-方針は「**取り込みは、いつも“今の読み込み（検査・修復・移し替え）”を通してから、新しい id の写しとして足すだけ**」。今あるデータを書き換える道は作らない。サーバー・新しいパッケージは使わない（圧縮はブラウザの `CompressionStream`）。
+仕様書 10.5（コミット 820ce00：共有は**リンクではなくファイルで送る**形に変更）。**オーナー了承済み（2026-09-28）**。計算（木取り・寸法）は変えない。保存データ（`kidori.jobs.v2`）の版も上げない。
+方針は「**取り込みは、いつも“今の読み込み（検査・修復・移し替え）”を通してから、新しい id の写しとして足すだけ**」。今あるデータを書き換える道は作らない。サーバー・新しいパッケージは使わない。
+共有もバックアップも **同じ外側の形の JSON ファイル** にし、読むのは1つの入口（「ファイルから取り込む」→ `readTransferFile`）。リンク（URL にデータを入れる）・圧縮・貼り付けて取り込む は作らない（仕様書 10.5「作らないもの」。サーバーを使った短いリンクは 10.9 の将来検討）。
 
 ### 16.1 追加・変更するファイル
 
@@ -1529,18 +1530,18 @@ src/store/
   reducer.ts             addJobs（いくつかの仕事を1回で足す）・setTemplate
   transfer/
     envelope.ts          共有・バックアップの外側の形（app・kind・version・dataVersion）と検査
-    share.ts             buildSharePayload（1つの仕事から送る中身）・readShare（検査→sanitizeJobs→取り込む写し）・shareSummary
-    backup.ts            buildBackup（全部）・readBackup（検査→sanitizeJobs→取り込む写し）・backupFileName
-    codec.ts             base64url・deflate-raw（CompressionStream）・リンクの組み立てと読み取り（#share=）
+    read.ts              readTransferFile（JSON → 外側の検査 → kind で分ける → sanitizeJobs → 確認に出す中身）。例外を投げない
+    share.ts             buildShareFile（1つの仕事から送るファイルの中身）・shareFileName・shareSummary・importShared（取り込む写し）
+    backup.ts            buildBackup（全部）・backupFileName・importBackup（取り込む写しとひな形）
+    fixtures/            version: 1 の共有・バックアップのファイルを固定の文字列で置く（あとの版でも読めることを確かめ続ける）
 src/ui/
-  screens/JobsScreen.tsx         各仕事に「リンクで送る」、下に「バックアップを書き出す」「ファイルから読み込む」
+  screens/JobsScreen.tsx         各仕事に「この仕事を送る」、下に「バックアップを書き出す」「ファイルから取り込む」
   components/ImportDialog.tsx    取り込みの確認（共有：1つの仕事／バックアップ：仕事の数と名前）と「読み込めませんでした」
-  platform/shareSheet.ts         navigator.share・canShare・ダウンロード・クリップボードの包み（無い環境の代わりの道）
-  App.tsx                        起動時と hashchange で #share= を見て ImportDialog を出す
-docs/manual.md                   「送る・バックアップ」の節と、リンクは誰でも見られる注意
+  platform/shareSheet.ts         shareFile（File を navigator.share で送る。できなければダウンロード）
+docs/manual.md                   「この仕事を送る・ファイルから取り込む・バックアップ」の節と、ファイルは誰でも見られる注意
 ```
 
-- `transfer/` は React・ブラウザの画面に依存しない（`codec.ts` の圧縮は `CompressionStream` があれば使う。テストでは差し替えられるよう引数で受ける）
+- `transfer/` は React・ブラウザの画面に依存しない（文字列を受けて文字列・データを返す）。`File`・`navigator.share`・`<input type="file">` は `src/ui/platform`・画面の側だけで使う
 
 ### 16.2 外側の形（`transfer/envelope.ts`）
 
@@ -1550,19 +1551,28 @@ interface Envelope {
   kind: 'share' | 'backup'
   version: 1          // 外側の形の版（このファイルの形）。形を変えたら上げる
   dataVersion: 1 | 2  // 中の仕事の形の版（= 保存データの版。今は 2）。sanitizeJobs(list, dataVersion) にそのまま渡す
+  exportedAt: string  // ISO。書き出した時刻（表示には使わない。調べるとき用）
 }
-interface SharePayload extends Envelope { kind: 'share'; job: unknown }
+interface ShareFile extends Envelope { kind: 'share'; job: unknown }       // 1つの仕事（16.4 で絞ったもの）
 interface BackupFile extends Envelope {
   kind: 'backup'
-  exportedAt: string                 // ISO
   jobs: unknown[]                    // 保存データと同じ Job の形（固定した1枚・チェック・以前の木取り済みも含む）
   template: unknown                  // SettingsTemplate（最後に使った設定）
 }
+
+// transfer/read.ts
+type TransferRead =
+  | { ok: true; kind: 'share'; job: Job; summary: { rows: number; count: number }; notice?: string }
+  | { ok: true; kind: 'backup'; jobs: Job[]; template: SettingsTemplate | null; notice?: string }
+  | { ok: false; message: string }
+readTransferFile(text: string): TransferRead
 ```
 
-- 読むとき：JSON として読めない・`app` が `'kidori'` でない・`kind` が違う → **「読み込めませんでした」**。`version` が知らない（新しい）数 → 「新しい版のアプリで作られたので読み込めません。アプリを開き直して新しくしてください」
-- **古い版を読めるようにする決まり**：`version`・`dataVersion` を上げるときは、古い数の読み方を消さない。仕事の中身の違い（足りない項目・以前の形）は、今の読み込みと同じ `sanitizeJobs`（検査・修復・`migrateClearance`・`stackSheets` の移し替え）がそろえる。したがって「以前の版で作ったリンク・ファイル」は「以前の版の保存データ」と同じ道で読める
-- 中の仕事が1つも読めなければ「読み込めませんでした」。一部だけ直した（`fixes > 0`）ときは、確認の画面に「一部読めないところがあったので、読めるところだけ追加します」を添える（暫定。未決事項 49）
+- 1つの入口：「ファイルから取り込む」で選んだファイルの中身を `readTransferFile` に渡し、`kind` で確認の出し方を分ける（共有 16.4・バックアップ 16.5）。利用者はどちらのファイルかを選ばなくてよい
+- 読むとき：空・JSON として読めない・`app` が `'kidori'` でない・`kind` が `'share'`／`'backup'` でない・`job`／`jobs` の形が違う → **「読み込めませんでした」**。`version` が知らない（新しい）数 → 「新しい版のアプリで作られたので読み込めません。アプリを開き直して新しくしてください」
+- 大きさの上限：文字列が 20MB を超えたら読まずに「読み込めませんでした」（画面の側でも `file.size` で先に断る）
+- **古い版を読めるようにする決まり**：`version`・`dataVersion` を上げるときは、古い数の読み方を消さない。仕事の中身の違い（足りない項目・以前の形）は、今の読み込みと同じ `sanitizeJobs`（検査・修復・`migrateClearance`・`stackSheets` の移し替え）がそろえる。したがって「以前の版で書き出したファイル」は「以前の版の保存データ」と同じ道で読める（仕様書 10.5）
+- 中の仕事が1つも読めなければ「読み込めませんでした」。一部だけ直した（`fixes > 0`）ときは `notice` に「一部読めないところがあったので、読めるところだけ追加します」を入れ、確認の画面に添える（未決事項 49。決定）
 
 ### 16.3 id のつけ替え（`jobs.ts` の `rekeyJob`・`formula/usages.ts`）
 
@@ -1582,81 +1592,65 @@ rekeyJob(job, ids: { job: string; next: (prefix: 'board'|'flush'|'part'|'nige') 
   - `opts.frozen = true`（バックアップの取り込み）：固定した1枚ごとに `boardId`・`stackWith.boardId` を新しい材料の id に、`layout.placements` の `partId` と `pieceId`（`${partId}#n` の前半）・`checked` を新しい部材の id に。削除された材料・部材を指すもの（表に無い id）はそのまま残す（今も写しで表示しているため）
 - `copyJob` は `rekeyJob(job, { job: id, next: newId }, { frozen: false })` に名前・日時を付けるだけにする。**結果は今と同じ**（逃げの id が新しくなる点だけ違う。逃げの id は仕事の中だけで使うので見た目は変わらない）
 
-### 16.4 共有（リンクで送る）
+### 16.4 共有（この仕事を送る・ファイルで）
 
-**リンクの形**（`transfer/codec.ts`）
-
-```
-https://kobayashikenpa.github.io/kidori/?openExternalBrowser=1#share=z.<base64url(deflate-raw(JSON))>
-                                                              #share=j.<base64url(JSON)>   ← 圧縮できない端末で作ったとき
-```
-
-- 前半は `location.origin + import.meta.env.BASE_URL`（開発サーバーでも動く）。`?openExternalBrowser=1` は、LINE で押したときに LINE の中のブラウザではなく Safari・Chrome で開かせる LINE の決まり（GitHub Pages は無視する）
-- データは `#` の後ろ（ハッシュ）に入れる。ハッシュは GitHub Pages のサーバーに送られないので、サーバーの記録にも残らない
-- `z.`：`new CompressionStream('deflate-raw')` で縮めて base64url（`+/` を `-_` に、`=` を付けない）。`j.`：縮めずに base64url（UTF-8）。作るときは `CompressionStream` があれば `z.`、無ければ `j.`。読むときは `z.` で `DecompressionStream` が無ければ「この端末のブラウザでは読み込めません（ブラウザを新しくしてください）」（iPhone は iOS 16.4 から使える）
-- 読むときの上限：ハッシュが 200,000 文字を超える・伸ばした中身が 5MB を超えたら読むのをやめて「読み込めませんでした」（壊れたリンク・いたずらで固まらないように）
-
-**リンクの中身**（`transfer/share.ts` の `buildSharePayload(job)`）
-- `{ app, kind: 'share', version: 1, dataVersion: 2, job }`。`job` は保存データと同じ形で、次のように絞る
+**ファイルの中身**（`transfer/share.ts` の `buildShareFile(job, now)`）
+- `{ app, kind: 'share', version: 1, dataVersion: 2, exportedAt, job }` を `JSON.stringify`（空白なし）。`job` は保存データと同じ形で、次のように絞る
   - 材料・フラッシュ・逃げは `jobRefIds` で **使っているものだけ**（仕様書 10.5）。`stackSheets` は2つの材料とも残した行だけ。設定の数値（刃厚・端切り・切り代・切り方）はそのまま
-  - `frozenSheets: []`（切り出しチェックは共有しない）。部材の `checks` は全部 false にし、`cutByBoard` を消す（以前の木取り済みも「切り始める前」に戻す。暫定。未決事項 45）
-  - 部材のメモ・材料の手持ちの行はそのまま入れる（暫定。未決事項 46）
-  - **id を短くする**：`rekeyJob(job, { job: 'j', next: 連番 })` で `b1`・`f1`・`p1`・`n1` にしてから入れる（UUID は縮まないので、リンクが半分くらいになる）。取り込むときに新しい id にするので、短い id が端末に残ることはない
-- `JSON.stringify`（空白なし）→ `z.`／`j.`
+  - `frozenSheets: []`（切り出しチェックは共有しない）。部材の `checks` は全部 false にし、`cutByBoard` を消す（寸法表の「完了」・以前の木取り済みも外す。仕様書 10.5、未決事項 45。決定）
+  - 部材のメモ・材料の手持ちの行はそのまま入れる（未決事項 46。決定）
+  - id はそのまま（取り込むときに `rekeyJob` で全部新しくするので、送った人の id が受け取った人の端末に残ることはない）。リンクの長さを気にしなくてよくなったので、短い id へのつけ替えはしない
+- 大きさの目安：見本で約 2KB、部材 50 の仕事で約 11KB（S-26 のテストで実際の値を出す）。LINE・メールでファイルとして送れる大きさ
 
-**長さの見積もり**（planner の手計算。E-65・S-26 のテストで実際の値を出して、この表を直す）
+**ファイル名**（`shareFileName(job)`）
+- `<仕事の名前>.kidori.json`。仕様書の例（「本棚 W900」→ `本棚W900.kidori.json`）に合わせて、名前から空白（半角・全角）を除く。ファイル名に使えない文字 `\ / : * ? " < > |` と制御文字も除く。除いた結果が空なら `kidori-仕事.kidori.json`。長さは 50 文字まで（暫定。未決事項 52）
 
-| 中身 | JSON | リンクの長さ（`z.`） | 圧縮なし（`j.`） |
-|---|---|---|---|
-| 見本（本棚 W900：部材5・材料2・フラッシュ1・逃げ1） | 約 1.9KB | **約 1,000〜1,200 文字** | 約 2,600 文字 |
-| 部材 50 の仕事 | 約 11KB | **約 4,000〜5,000 文字** | 約 15,000 文字 |
+**送る**（`platform/shareSheet.ts` の `shareFile(file)`・`JobsScreen`）
+- 仕事の一覧の各仕事に「**この仕事を送る**」。押したら、その場で（同期で）`new File([json], shareFileName(job), { type: 'application/json' })` を作り `shareFile` に渡す。ファイルを作るのは同期なので、押した操作の中で共有シートを開ける（iPhone の Safari は、押した操作から続いていない共有を断るため）
+- `shareFile`：`navigator.canShare?.({ files: [file] })` なら `navigator.share({ files: [file], title: 仕事の名前 })`（iPhone：LINE・メール・AirDrop・「ファイル」に保存）。利用者が閉じた（`AbortError`）ときは何も出さない。ほかの失敗・`canShare` が無い／false のときは `<a download>`（Blob の URL）で端末に保存し、「ファイルを保存しました。LINE などからこのファイルを送ってください」を出す（暫定。未決事項 53）
+- **Android の注意**：Android の Chrome は共有シートで送れるファイルの種類が決まっていて、JSON のファイルは入っていない見込み（`canShare` が false になる）。そのときは上の「保存」になり、利用者が LINE などから保存したファイルを送る。実機（U-70）で確かめて、ここを直す
+- バックアップの書き出し（16.5）も同じ `shareFile` を使う
 
-- LINE の1つのメッセージは約1万文字まで（とされる。実機で確かめる。U-70）。iPhone の Safari・メールは数万文字のリンクでも開ける
-- リンクが **8,000 文字を超えるとき**は、送る前に「リンクが長いので、LINE では送れないことがあります。そのときはバックアップのファイルで送ってください」を出す（止めはしない。暫定。未決事項 48）
-
-**送る**（`platform/shareSheet.ts`・`JobsScreen`）
-- 「リンクで送る」を押す前に（仕事の一覧を出したとき・仕事が変わったとき）リンクを作っておく。圧縮は非同期なので、押してから作ると iPhone の Safari で「押した操作から続いていない」とみなされて共有シートが開かないことがあるため
-- `navigator.share({ title: 'kidori', text: '共有された仕事：本棚 W900', url })`。利用者が閉じた（`AbortError`）ときは何も出さない。`navigator.share` が無い（PC の一部）ときはクリップボードにコピーして「リンクをコピーしました」
-
-**取り込む**（`App.tsx`・`ImportDialog`）
-1. 起動時と `hashchange` で `location.hash` が `#share=` で始まれば読む。**読んだらすぐハッシュを消す**（`history.replaceState(null, '', location.pathname + location.search)`）。開き直したとき・「やめる」のあとにまた出ないように
-2. `readShare(text)`：伸ばす → JSON → 外側の検査（16.2）→ `sanitizeJobs([job], dataVersion)` → 1つ読めれば `{ ok: true, job, summary, notice }`、だめなら `{ ok: false, message }`。**例外は投げない**（全部 try/catch）
-3. 確認：「共有された仕事：本棚 W900（部材 5種類・9枚）」と「取り込む」「やめる」。`summary` は 部材の行の数（枚数0の行も数える）と 枚数の合計（見本：5種類・9枚。仕様書の例と同じ）
-4. 「取り込む」：`rekeyJob(job, { job: newId('job'), next: newId }, { frozen: false })`。名前は同じ名前の仕事が無ければそのまま、あれば `copyName`（「本棚 W900 のコピー」）。作成日・更新日は取り込んだ時刻。`addJobs` で一覧の最後に足し、その仕事を開く（暫定。未決事項 47）。ひな形（最後に使った設定）は変えない（8.3「仕事の追加ではひな形を変えない」）
-5. 「やめる」・読めなかった：何もしない（データに触らない）
-- `canSave` が false（保存データが壊れて保存を止めている）ときは、確認の画面に「保存できない状態なので取り込めません」を出し、「取り込む」を押せない
-- **iPhone の注意**：ホーム画面に追加したアプリ（`display: standalone`）は、Safari とは **保存場所が別**。リンクを押すと Safari で開くので、取り込んだ仕事は Safari のほうに入り、ホーム画面のアプリには出ない。仕様書にはこの場合の道が無い（未決事項 51）。案：仕事の画面に「リンクを貼り付けて取り込む」を足す（コピーしたリンクを貼る。`readShare` はそのまま使える）
+**取り込む**（`JobsScreen`・`ImportDialog`）
+1. 仕事の画面の「**ファイルから取り込む**」（`<input type="file">`。`accept` は付けない。iPhone で `.json` が選べないことがあるため。中身で判断する）→ `file.size` が 20MB を超えれば「読み込めませんでした」→ `file.text()` → `readTransferFile(text)`（16.2）
+2. `kind: 'share'` のとき：`sanitizeJobs([job], dataVersion)` で1つ読めれば `summary`（部材の行の数（枚数0の行も数える）と 枚数の合計）。確認：「共有された仕事：本棚 W900（部材 5種類・9枚）」と「**取り込む**」「やめる」（仕様書 10.5 の文言。見本：5種類・9枚）。`notice` があれば添える
+3. 「取り込む」：`importShared(job, existingNames, now)` = `rekeyJob(job, { job: newId('job'), next: newId }, { frozen: false })`。名前は同じ名前の仕事が無ければそのまま、あれば `copyName`（「本棚 W900 のコピー」）。作成日・更新日は取り込んだ時刻。`addJobs` で一覧の最後に足し、その仕事を開く（未決事項 47。決定）。ひな形（最後に使った設定）は変えない（8.3「仕事の追加ではひな形を変えない」）
+4. 「やめる」・読めなかった：何もしない（データに触らない）。同じファイルをもう一度選べるよう、`<input>` の値は毎回空に戻す
+- `canSave` が false（保存データが壊れて保存を止めている）ときは、確認の画面に「保存できない状態なので取り込めません」を出し、「取り込む」「追加する」を押せない
+- ホーム画面に追加したアプリでも、ファイルはアプリの中の「ファイルから取り込む」で選ぶので、そのアプリの保存場所に入る（リンクのときの Safari と保存場所が分かれる問題は起きない。未決事項 51 は不要）
 
 ### 16.5 バックアップ（ファイル）
 
 **書き出す**（`transfer/backup.ts`・`platform/shareSheet.ts`）
 - `buildBackup(state, now)`：`{ app, kind: 'backup', version: 1, dataVersion: 2, exportedAt, jobs: state.jobs, template: state.template }`。仕事はそのまま（固定した1枚・チェック・以前の木取り済み・手持ちも含む）。`JSON.stringify`（空白なし。大きさの目安：見本 10件＋固定した1枚 20枚でも 1MB 以下）
-- ファイル名 `backupFileName(now)`：`kidori-バックアップ-2026-09-28.json`（端末の日付）
-- `new File([json], name, { type: 'application/json' })` を、`navigator.canShare?.({ files: [file] })` なら `navigator.share({ files: [file] })`（iPhone：「ファイル」に保存・LINE など）。できなければ `<a download>`（Blob の URL）で保存する。閉じた（`AbortError`）ときは何も出さない。作るのは同期なので、押した操作の中で共有シートを開ける
+- ファイル名 `backupFileName(now)`：`kidori-バックアップ-2026-09-28.json`（端末の日付。仕様書 10.5 の例）
+- 仕事の画面の下に「**バックアップを書き出す**」。押したら同期で `new File([json], name, { type: 'application/json' })` を作り、16.4 と同じ `shareFile` に渡す（共有シート → できなければ端末に保存）
 
-**読み込む**
-- `<input type="file" accept=".json,application/json,text/plain">`（iPhone で JSON が選べないことがあるので広めにする。中身で判断する）。`file.text()` → `readBackup(text)`
-- `readBackup`：外側の検査（16.2）→ `sanitizeJobs(jobs, dataVersion)`（今の読み込みと同じ）→ 仕事の数と名前・`notice`。ファイルが 20MB を超えれば読まない
-- 確認：「バックアップの仕事：3件（本棚 W900・食器棚・…）」と「追加する」「やめる」
-- 「追加する」：仕事ごとに `rekeyJob(job, { job: newId('job'), next: newId }, { frozen: true })`（**切り出しの記録も戻す**。仕様書 10.5）。名前は 16.4 と同じ（同じ名前があれば「のコピー」）。作成日・更新日はファイルのまま。`addJobs` で1回で足す（1回の保存。途中で止まって半分だけ入ることがない）。開いている仕事は変えない
-- ひな形：**今の仕事が1つも無いときだけ**、ファイルの `template` を `loadTemplate` と同じ検査をして使う（新しいスマホに移す場合）。仕事があるときは変えない（追加だけ。暫定。未決事項 50）
+**読み込む**（16.4 と同じ「ファイルから取り込む」）
+- `readTransferFile` の `kind: 'backup'` のとき：`sanitizeJobs(jobs, dataVersion)`（今の読み込みと同じ）→ 仕事の一覧・`template`（`loadTemplate` と同じ検査。だめなら `null`）・`notice`。仕事が0件のファイルは「読み込めませんでした」（足すものが無いため）
+- 確認：「バックアップの仕事：3件（本棚 W900・食器棚・…）」と「**追加する**」「やめる」（仕様書 10.5：仕事の数と名前）。名前は5件まで出し、残りは「ほか ◯件」
+- 「追加する」：`importBackup(state, read, now)`。仕事ごとに `rekeyJob(job, { job: newId('job'), next: newId }, { frozen: true })`（**切り出しの記録も戻す**。仕様書 10.5）。名前は 16.4 と同じ（同じ名前があれば「のコピー」、足す仕事どうしでも重ならないように順に数える）。作成日・更新日はファイルのまま。`addJobs` で1回で足す（1回の保存。途中で止まって半分だけ入ることがない）。開いている仕事は変えない。足したあと「◯件の仕事を追加しました」
+- ひな形：**今の仕事が1つも無いときだけ**、ファイルの `template` を使う（新しいスマホに移す場合。仕様書 10.5）。仕事があるとき・`template` が `null` のときは変えない
+- 共有のファイル（`kind: 'share'`）をこの確認に出すことはない（16.4 の確認になる）。逆も同じ
 - 読めなかったとき：「読み込めませんでした」。今のデータ・ひな形・開いている仕事は変えない
 
 ### 16.6 失敗したときの決まり
 
-- 読む処理（`readShare`・`readBackup`・`decode`）は **例外を投げず**、`{ ok: false, message }` を返す。取り込みの state の変更は「確認で押したあと」の `addJobs` 1回だけ。読み込み・確認の途中で失敗しても state・localStorage は変わらない
+- 読む処理（`readTransferFile`）は **例外を投げず**、`{ ok: false, message }` を返す。取り込みの state の変更は「確認で押したあと」の `addJobs` 1回（とバックアップで仕事が0件のときの `setTemplate`）だけ。読み込み・確認の途中で失敗しても state・localStorage は変わらない
 - 取り込んだ結果の保存は、今までどおりの自動保存（`saveSaved`）。保存に失敗したときの知らせも今のまま
+- 送る・書き出す側（`shareFile`）の失敗は、データに触らない。閉じた（`AbortError`）ときは何も出さない
 
 ### 16.7 個人情報・見える範囲（説明書）
 
-- リンクには仕事の名前・部材名・メモが入り、**リンクを持っている人は誰でも中身を見られる**。サーバーには残らないが、LINE・メールの履歴には残る。説明書に「送り先に注意する」「メモにお客さまの名前などを書いているときは気をつける」を書く（仕様書 10.5）
+- 共有のファイルには仕事の名前・部材名・メモが入り、**ファイルを持っている人は誰でも中身を見られる**。サーバーには残らないが、LINE・メールの履歴には残る。説明書に「送り先に注意する」「メモにお客さまの名前などを書いているときは気をつける」を書く（仕様書 10.5）
 - バックアップのファイルも同じ（全部の仕事が入る）
 
 ### 16.8 確かめ方（verifier）
 
-- **行って戻る（round-trip）**：見本と 部材 50 の仕事で、`buildSharePayload` → リンク → `readShare` → 取り込み で、木取りの結果（`computeDimensions`・`packJob` の枚数・歩留まり）が元の仕事と同じ。id は全部新しい。固定した1枚・チェックは無い。使っていない材料・フラッシュ・逃げは入っていない
-- バックアップ：固定した1枚（重ね切りの組の1枚を含む）のある仕事を書き出して読み込むと、チェックした片・切り終わり・「部材が変わっています」が元と同じに出る。元の仕事は変わらない。同じファイルを2回読むと「のコピー」「のコピー 2」で足される
-- **壊れた入力**：途中で切れたリンク、base64 でない文字、伸ばせない中身、JSON でない、`app` が違う、`kind` が違う（共有のリンクにバックアップ）、知らない `version`、仕事が1つも読めない、kidori 以外の JSON ファイル、空のファイル、画像のファイル → どれも「読み込めませんでした」（または版の知らせ）で、localStorage の中身が1文字も変わらない
-- **以前の版**：`dataVersion: 1`（部材ごとの逃げがある）の仕事・`stackSheets` の無い仕事・サイズがそろわない重ね切りの仕事を入れたリンク／ファイルが、今の読み込みと同じ結果（移し替え・「重ね切りを外しました」の知らせ）で取り込める。テスト用に `version: 1` のリンクとファイルを `transfer/fixtures/` に固定の文字列で置き、あとの版でも読めることを確かめ続ける
-- **大きい仕事**：部材 50（と 200）の仕事のリンクの長さを出す（16.4 の表を直す）。8,000 文字を超えるときに知らせが出る
-- **実機**：iPhone（ホーム画面のアプリと Safari）・Android で、LINE に送る → 押す → 確認 → 取り込む。「ファイル」に保存 → 読み込む。LINE で送れる長さの上限
+- **行って戻る（round-trip）**：見本と 部材 50 の仕事で、`buildShareFile` → `readTransferFile` → `importShared` で、木取りの結果（`computeDimensions`・`packJob` の枚数・歩留まり）が元の仕事と同じ。id は全部新しい。固定した1枚・チェックは無い。使っていない材料・フラッシュ・逃げは入っていない
+- バックアップ：固定した1枚（重ね切りの組の1枚を含む）のある仕事を書き出して読み込むと、チェックした片・切り終わり・「部材が変わっています」が元と同じに出る。元の仕事は変わらない。同じファイルを2回読むと「のコピー」「のコピー 2」で足される。仕事が0件の state に読み込んだときだけひな形がファイルのものになる
+- **1つの入口**：「ファイルから取り込む」で共有のファイルを選ぶと共有の確認（取り込む）、バックアップのファイルを選ぶとバックアップの確認（追加する）が出る
+- **壊れた入力**：空のファイル、JSON でない、途中で切れた JSON、`app` が違う、`kind` が違う（知らない値）、`job`／`jobs` の形が違う、知らない `version`、仕事が1つも読めない、kidori 以外の JSON ファイル、画像のファイル、20MB を超えるファイル → どれも「読み込めませんでした」（または版の知らせ）で、localStorage の中身が1文字も変わらない
+- **以前の版**：`dataVersion: 1`（部材ごとの逃げがある）の仕事・`stackSheets` の無い仕事・サイズがそろわない重ね切りの仕事を入れたファイル（共有・バックアップとも）が、今の読み込みと同じ結果（移し替え・「重ね切りを外しました」の知らせ）で取り込める。`transfer/fixtures/` の `version: 1` のファイルが、あとの版でも読めることを確かめ続ける
+- **ファイル名**：「本棚 W900」→ `本棚W900.kidori.json`。`/` や `:` の入った名前・空白だけの名前でも保存できる名前になる
+- **実機**：iPhone（ホーム画面のアプリと Safari）・Android で、「この仕事を送る」→ LINE で送る → 受け取った側で「ファイル」に保存 → 「ファイルから取り込む」→ 確認 → 取り込む。「バックアップを書き出す」→「ファイル」に保存 → 取り込む。Android で共有シートが開くか・保存になるか（16.4 の注意）
