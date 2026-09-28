@@ -436,7 +436,11 @@ export function updateRowStock(job: Job, target: SizeTarget, stockId: string, pa
   })
 }
 
-/** 手持ちの行を消す。最後の1行を消すと stockOn も外す */
+/**
+ * 手持ちの行を消す。最後の1行を消すと stockOn も外れる（withChoice が、行が0の手持ちを持たないため）。
+ * その行は自由入力をやめ、選んでいた 3×6／4×8（setRowStockMode でオンにする前のサイズ）で木取りする。
+ * 行が0のまま自由入力に残すと、手持ちでも選んだサイズでもない中途半端な状態（usesStock が false）になるので、そうしない
+ */
 export function removeRowStock(job: Job, target: SizeTarget, stockId: string): OpResult {
   return updateRow(job, target, (cur) => {
     if (!cur.stock?.some((s) => s.id === stockId)) return '手持ちの行が見つかりません'

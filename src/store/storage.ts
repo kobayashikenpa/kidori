@@ -2,9 +2,8 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
-import { stackPlan } from '../engine/packing/stack'
+import { canStack, stackPlan } from '../engine/packing/stack'
 import { commonStock, samePair, stockKinds, usesStock } from '../engine/packing/stock'
-import { canStack } from '../engine/packing/stack'
 import { eq1 } from '../engine/round'
 import {
   AXES,
