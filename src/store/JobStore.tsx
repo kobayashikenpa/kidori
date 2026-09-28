@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type Rea
 import type { Job } from '../engine/types'
 import type { JobOp, OpResult } from './jobs'
 import { applyOp, currentJob, initialState, storeReducer, type StoreAction, type StoreState } from './reducer'
+import type { SettingsTemplate } from './template'
 import { browserStorage, loadSaved, loadTemplate, saveSaved, saveTemplate } from './storage'
 import { JobStoreContext, type JobStoreValue } from './useJobStore'
 
@@ -45,6 +46,8 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
   )
   const addJob = useCallback((job: Job, open: boolean) => send({ type: 'addJob', job, open }), [send])
   const openJob = useCallback((id: string | null) => send({ type: 'openJob', id }), [send])
+  const addJobs = useCallback((list: Job[], open: boolean) => send({ type: 'addJobs', jobs: list, open }), [send])
+  const setTemplate = useCallback((t: SettingsTemplate) => send({ type: 'setTemplate', template: t }), [send])
   const removeJob = useCallback((id: string) => send({ type: 'removeJob', id }), [send])
 
   // 自動保存：状態が変わったら少し待ってから書く。画面を閉じるときはすぐ書く
@@ -70,8 +73,8 @@ export function JobStoreProvider({ children }: { children: ReactNode }) {
   }, [jobs, currentJobId, canSave, template])
 
   const value = useMemo<JobStoreValue>(
-    () => ({ state, job: currentJob(state), run, runOn, addJob, removeJob, openJob, saveError }),
-    [state, run, runOn, addJob, removeJob, openJob, saveError],
+    () => ({ state, job: currentJob(state), run, runOn, addJob, addJobs, setTemplate, removeJob, openJob, saveError }),
+    [state, run, runOn, addJob, addJobs, setTemplate, removeJob, openJob, saveError],
   )
   return <JobStoreContext.Provider value={value}>{children}</JobStoreContext.Provider>
 }
