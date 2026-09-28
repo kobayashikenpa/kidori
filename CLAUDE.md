@@ -38,6 +38,8 @@ docs/
   spec.md          仕様書
   architecture.md  設計
   tasks.md         作業の一覧（進捗もここで管理）
+  manual.md        取扱説明書（利用者向け。画面が変わるたびに更新）
+  glossary.md      画面の用語
 ```
 
 - `src/engine` は `src/ui` や React を import しない（計算と画面を分けて、計算だけでテストできるようにする）
@@ -61,5 +63,6 @@ docs/
 3. **ui-dev**：`src/ui`・`src/store` のスマホ画面を作る
 4. **verifier**：`npm run check` と、仕様書の各項目どおりに動くかを確かめる
 5. **reviewer**：差分を仕様書・このファイルのルールと照らしてレビューする
+6. **manual-writer**：取扱説明書 `docs/manual.md` を今の画面に合わせて更新する（画面や使い方が変わるPRでは必ず更新する）
 
 進行役は結果をまとめてオーナーに報告し、PR を作る。
