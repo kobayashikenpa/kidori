@@ -1,10 +1,10 @@
 // 木取りの画面の「手持ちの材料」の段（第2.2版。仕様書 9「手持ちの材料」・architecture.md 14.11）。
 // 材料ごとに「サイズを選ぶ／手持ちで木取り」を切り替え、手持ちの行（サイズ・枚数）を足す・変える・消す。
-// 使う・残りの枚数は engine の stockUsage の結果をそのまま出す。保存は store の操作（setStockMode など）
+// 使う・残りの枚数は engine の stockUsage の結果をそのまま出す。保存は store の操作（setRowStockMode など）
 import { useState } from 'react'
 import type { StockUsage } from '../../engine/progress/frozen'
 import type { Board, BoardGrain, BoardSizeKind, StockSheet } from '../../engine/types'
-import { addStockSheet, boardLabel, removeStockSheet, setStockMode, updateStockSheet } from '../../store/jobs'
+import { addRowStock, boardLabel, removeRowStock, setRowStockMode, updateRowStock } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { exactText } from '../../engine/round'
 import { fmt, parseNum } from '../format'
@@ -55,7 +55,7 @@ function StockMaterial({ board, usage }: { board: Board; usage: StockUsage | nul
           { value: 'size', label: 'サイズを選ぶ' },
           { value: 'stock', label: '手持ちで木取り' },
         ]}
-        onChange={(v) => report(run((j) => setStockMode(j, board.id, v === 'stock')))}
+        onChange={(v) => report(run((j) => setRowStockMode(j, board.id, v === 'stock')))}
       />
       {on && (
         <>
@@ -76,7 +76,7 @@ function StockMaterial({ board, usage }: { board: Board; usage: StockUsage | nul
             onClick={() =>
               report(
                 run((j) =>
-                  addStockSheet(j, board.id, {
+                  addRowStock(j, board.id, {
                     sizeKind: board.sizeKind,
                     width: board.width,
                     length: board.length,
@@ -105,7 +105,7 @@ interface RowProps {
 
 function StockRow({ board, sheet, use, onResult }: RowProps) {
   const { run } = useCurrentJob()
-  const update = (patch: Partial<Omit<StockSheet, 'id'>>) => onResult(run((j) => updateStockSheet(j, board.id, sheet.id, patch)))
+  const update = (patch: Partial<Omit<StockSheet, 'id'>>) => onResult(run((j) => updateRowStock(j, board.id, sheet.id, patch)))
   const name = `${boardLabel(board)} の手持ち`
   return (
     <li className="stk-row">
@@ -137,7 +137,7 @@ function StockRow({ board, sheet, use, onResult }: RowProps) {
           type="button"
           className="btn danger stk-del"
           aria-label={`${sheet.sizeKind === 'custom' ? `${fmt(sheet.width)}×${fmt(sheet.length)}` : SIZE_OPTIONS.find((o) => o.value === sheet.sizeKind)?.label} の手持ちを消す`}
-          onClick={() => onResult(run((j) => removeStockSheet(j, board.id, sheet.id)))}
+          onClick={() => onResult(run((j) => removeRowStock(j, board.id, sheet.id)))}
         >
           削除
         </button>

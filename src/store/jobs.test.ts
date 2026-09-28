@@ -23,7 +23,7 @@ import {
   removeNiges,
   removePart,
   renameJob,
-  setBoardSize,
+  setRowSize,
   setPartChecks,
   updateBoard,
   updateNige,
@@ -438,14 +438,14 @@ describe('逃げ・材料の一括削除と、材料のサイズの選択（第1
     expect(removeBoards(job, ['nothing']).ok).toBe(false)
   })
 
-  it('setBoardSize：4×8 は 1220×2440 長手方向、自由入力 1000×2000 短手方向も選べ、0 以下の寸法は断る', () => {
+  it('setRowSize：4×8 は 1220×2440 長手方向、自由入力 1000×2000 短手方向も選べ、0 以下の寸法は断る', () => {
     const job = bookshelfJob()
-    const a = unwrap(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'shihachi', width: 1, length: 1, grain: 'short' }))
+    const a = unwrap(setRowSize(job, LUMBER_18_ID, { sizeKind: 'shihachi', width: 1, length: 1, grain: 'short' }))
     expect(a.boards[0]).toMatchObject({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
-    const b = unwrap(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }))
+    const b = unwrap(setRowSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }))
     expect(b.boards[0]).toMatchObject({ sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' })
-    expect(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 2000, grain: 'long' }).ok).toBe(false)
-    expect(setBoardSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: -1, grain: 'long' }).ok).toBe(false)
-    expect(setBoardSize(job, 'nothing', { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }).ok).toBe(false)
+    expect(setRowSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 2000, grain: 'long' }).ok).toBe(false)
+    expect(setRowSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: -1, grain: 'long' }).ok).toBe(false)
+    expect(setRowSize(job, 'nothing', { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }).ok).toBe(false)
   })
 })

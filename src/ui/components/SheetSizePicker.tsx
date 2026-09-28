@@ -1,10 +1,10 @@
 // 木取りの画面の材料のサイズの選択（仕様書 9「材料のサイズの選択」・architecture.md 8.6・8.7）。
 // 3×6・4×8 の必要な枚数・歩留まり（engine の compareStandardSizes の結果）を並べ、押して選ぶ。
-// 自由入力は短辺・長辺・木目の方向を入れて「このサイズにする」で決める。選ぶと setBoardSize で仕事に保存する
+// 自由入力は短辺・長辺・木目の方向を入れて「このサイズにする」で決める。選ぶと setRowSize で仕事に保存する（第2.3版：その行だけ）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { Board, BoardGrain, MaterialResult } from '../../engine/types'
-import { setBoardSize, setBoardsSize } from '../../store/jobs'
+import { setRowSize } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { closeKeyboard } from '../keyboard'
 import { fmt, pct } from '../format'
@@ -16,7 +16,7 @@ const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4
 interface Props {
   /** 材料（重ね切りの組なら1つ目の材料。今のサイズの表示に使う） */
   board: Board
-  /** 重ね切りの組の2つの材料（第2.0版）。選ぶと setBoardsSize で2つとも同じサイズにする */
+  /** 重ね切りの組の2つの材料（第2.0版）。選ぶと setRowSize で組の行の設定を変える（第2.3版） */
   boardIds?: readonly [string, string] | null
   /** 選択の読み上げ名（組の表示名など） */
   label?: string
@@ -28,9 +28,8 @@ interface Props {
 
 export function SheetSizePicker({ board, boardIds = null, label, compare, current }: Props) {
   const { run } = useCurrentJob()
-  // 材料の行で選んでも、重ね切りの相手の材料は store 側で同じサイズにそろう（未決事項 36）
-  const apply = (size: Parameters<typeof setBoardSize>[2]) =>
-    run((j) => (boardIds ? setBoardsSize(j, boardIds, size) : setBoardSize(j, board.id, size)))
+  // 第2.3版：選んだ行だけを変える（材料の行と組の行は別々の設定）
+  const apply = (size: Parameters<typeof setRowSize>[2]) => run((j) => setRowSize(j, boardIds ?? board.id, size))
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isCustom = board.sizeKind === 'custom'

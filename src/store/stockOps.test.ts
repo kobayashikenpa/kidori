@@ -5,7 +5,7 @@ import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import { freezeSheet } from '../engine/progress/frozen'
 import type { Job } from '../engine/types'
-import { addStockSheet, copyJob, removeStockSheet, setBoardSize, setStockMode, updateStockSheet, type OpResult } from './jobs'
+import { addRowStock, copyJob, removeRowStock, setRowSize, setRowStockMode, updateRowStock, type OpResult } from './jobs'
 import { JOBS_KEY, loadSaved, saveSaved, sanitizeJobs, type KeyValueStorage } from './storage'
 import { sameTemplate, templateOf } from './template'
 
@@ -18,7 +18,7 @@ function must(r: OpResult): Job {
 
 /** ランバーを 4×8 にした見本 */
 function job48(): Job {
-  return must(setBoardSize(bookshelfJob(), LUMBER_18_ID, { sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' }))
+  return must(setRowSize(bookshelfJob(), LUMBER_18_ID, { sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' }))
 }
 
 const lumber = (job: Job) => job.boards.find((b) => b.id === LUMBER_18_ID)!
@@ -39,55 +39,55 @@ function memoryStorage(): KeyValueStorage & { map: Map<string, string> } {
 
 describe('手持ちの操作', () => {
   it('4×8 を選んだ材料で手持ちをオンにすると、行 4×8 ×1 が1つ入る', () => {
-    const j = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const j = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
     expect(lumber(j).stockOn).toBe(true)
     expect(lumber(j).stock).toEqual([{ id: 'st-1', sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long', count: 1 }])
   })
 
   it('オフにしても行は残り、もう一度オンで同じ行', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
-    const withTwo = must(addStockSheet(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 0, length: 0, grain: 'short', count: 3 }, 'st-2'))
-    const off = must(setStockMode(withTwo, LUMBER_18_ID, false))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const withTwo = must(addRowStock(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 0, length: 0, grain: 'short', count: 3 }, 'st-2'))
+    const off = must(setRowStockMode(withTwo, LUMBER_18_ID, false))
     expect(lumber(off).stockOn).toBeUndefined()
     expect(lumber(off).stock).toEqual(lumber(withTwo).stock)
-    const again = must(setStockMode(off, LUMBER_18_ID, true, 'st-9'))
+    const again = must(setRowStockMode(off, LUMBER_18_ID, true, 'st-9'))
     expect(lumber(again).stock).toEqual(lumber(withTwo).stock)
     // 3×6 は寸法と木目を決まった値にする
     expect(lumber(again).stock![1]).toEqual({ id: 'st-2', sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 3 })
   })
 
   it('枚数 0・1.5 は断られる', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
     const draft = { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
     for (const count of [0, 1.5, -1, Number.NaN]) {
-      expect(addStockSheet(on, LUMBER_18_ID, { ...draft, count })).toEqual({ ok: false, message: '枚数は1以上の整数にしてください' })
-      expect(updateStockSheet(on, LUMBER_18_ID, 'st-1', { count })).toEqual({ ok: false, message: '枚数は1以上の整数にしてください' })
+      expect(addRowStock(on, LUMBER_18_ID, { ...draft, count })).toEqual({ ok: false, message: '枚数は1以上の整数にしてください' })
+      expect(updateRowStock(on, LUMBER_18_ID, 'st-1', { count })).toEqual({ ok: false, message: '枚数は1以上の整数にしてください' })
     }
   })
 
   it('自由入力 1820×910 は 910×1820 で入る。0 以下の寸法は断られる', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
-    const j = must(addStockSheet(on, LUMBER_18_ID, { sizeKind: 'custom', width: 1820, length: 910, grain: 'short', count: 2 }, 'c'))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const j = must(addRowStock(on, LUMBER_18_ID, { sizeKind: 'custom', width: 1820, length: 910, grain: 'short', count: 2 }, 'c'))
     expect(lumber(j).stock![1]).toEqual({ id: 'c', sizeKind: 'custom', width: 910, length: 1820, grain: 'short', count: 2 })
-    expect(addStockSheet(on, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 910, grain: 'long', count: 1 }).ok).toBe(false)
+    expect(addRowStock(on, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 910, grain: 'long', count: 1 }).ok).toBe(false)
   })
 
   it('行を変える：枚数だけ・サイズだけ変えられる', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
-    const j = must(updateStockSheet(on, LUMBER_18_ID, 'st-1', { count: 5 }))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const j = must(updateRowStock(on, LUMBER_18_ID, 'st-1', { count: 5 }))
     expect(lumber(j).stock![0].count).toBe(5)
-    const k = must(updateStockSheet(j, LUMBER_18_ID, 'st-1', { sizeKind: 'saburoku' }))
+    const k = must(updateRowStock(j, LUMBER_18_ID, 'st-1', { sizeKind: 'saburoku' }))
     expect(lumber(k).stock![0]).toEqual({ id: 'st-1', sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 5 })
-    expect(updateStockSheet(k, LUMBER_18_ID, 'nai', { count: 1 }).ok).toBe(false)
+    expect(updateRowStock(k, LUMBER_18_ID, 'nai', { count: 1 }).ok).toBe(false)
   })
 
   it('最後の1行を消すと stockOn が外れる', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
-    const two = must(addStockSheet(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 1 }, 'st-2'))
-    const one = must(removeStockSheet(two, LUMBER_18_ID, 'st-1'))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const two = must(addRowStock(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 1 }, 'st-2'))
+    const one = must(removeRowStock(two, LUMBER_18_ID, 'st-1'))
     expect(lumber(one).stockOn).toBe(true)
     expect(lumber(one).stock!.map((s) => s.id)).toEqual(['st-2'])
-    const none = must(removeStockSheet(one, LUMBER_18_ID, 'st-2'))
+    const none = must(removeRowStock(one, LUMBER_18_ID, 'st-2'))
     expect(lumber(none).stockOn).toBeUndefined()
     expect(lumber(none).stock ?? []).toEqual([])
   })
@@ -95,20 +95,20 @@ describe('手持ちの操作', () => {
   it('無い材料は断られる。元の仕事は書き換えない', () => {
     const base = job48()
     const snapshot = JSON.stringify(base)
-    expect(setStockMode(base, 'nai', true).ok).toBe(false)
-    must(setStockMode(base, LUMBER_18_ID, true))
+    expect(setRowStockMode(base, 'nai', true).ok).toBe(false)
+    must(setRowStockMode(base, LUMBER_18_ID, true))
     expect(JSON.stringify(base)).toBe(snapshot)
   })
 
   it('手持ちの操作ではひな形が変わらない', () => {
     const base = job48()
-    const on = must(setStockMode(base, LUMBER_18_ID, true))
-    const more = must(addStockSheet(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 4 }))
+    const on = must(setRowStockMode(base, LUMBER_18_ID, true))
+    const more = must(addRowStock(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 4 }))
     expect(sameTemplate(templateOf(base), templateOf(more))).toBe(true)
   })
 
   it('仕事をコピーすると手持ちが残る（別のオブジェクト）', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
     const c = copyJob(on, [on.name], T1)
     const b = c.boards[on.boards.findIndex((x) => x.id === LUMBER_18_ID)]
     expect(b.stockOn).toBe(true)
@@ -119,7 +119,7 @@ describe('手持ちの操作', () => {
 
 describe('手持ちの保存と読み込み', () => {
   it('保存して読み込むと手持ちが残る', () => {
-    const on = must(addStockSheet(must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1')), LUMBER_18_ID, { sizeKind: 'custom', width: 450, length: 900, grain: 'short', count: 2 }, 'c'))
+    const on = must(addRowStock(must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1')), LUMBER_18_ID, { sizeKind: 'custom', width: 450, length: 900, grain: 'short', count: 2 }, 'c'))
     const s = memoryStorage()
     saveSaved(s, { jobs: [on], currentJobId: on.id })
     const r = loadSaved(s, T1)
@@ -196,7 +196,7 @@ describe('手持ちの保存と読み込み', () => {
   })
 
   it('手持ちの1枚を固定して保存・読み込みしても、1枚の sheet（行と木目）が残る', () => {
-    const on = must(setStockMode(bookshelfJob(), LUMBER_18_ID, true, 'st-1'))
+    const on = must(setRowStockMode(bookshelfJob(), LUMBER_18_ID, true, 'st-1'))
     const r0 = packJob(on, computeDimensions(on))
     const m = r0.materials.find((x) => x.boardId === LUMBER_18_ID)!
     on.frozenSheets.push({ ...freezeSheet(on, LUMBER_18_ID, m.mode, m.sheets[0], 'f', T1), checked: [m.sheets[0].placements[0].pieceId] })
@@ -208,7 +208,7 @@ describe('手持ちの保存と読み込み', () => {
   })
 
   it('JOBS_KEY の保存データに手持ちが入る', () => {
-    const on = must(setStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
+    const on = must(setRowStockMode(job48(), LUMBER_18_ID, true, 'st-1'))
     const s = memoryStorage()
     saveSaved(s, { jobs: [on], currentJobId: on.id })
     expect(s.map.get(JOBS_KEY)).toContain('"stockOn":true')
