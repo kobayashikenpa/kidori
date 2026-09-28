@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react'
 import type { Job } from '../engine/types'
 import type { JobOp, OpResult } from './jobs'
 import type { StoreState } from './reducer'
+import type { SettingsTemplate } from './template'
 
 export interface JobStoreValue {
   state: StoreState
@@ -13,6 +14,10 @@ export interface JobStoreValue {
   /** 指定した仕事に操作を当てる（一覧から名前を変えるときなど）。失敗したら理由を返す */
   runOn: (jobId: string, op: JobOp) => OpResult
   addJob: (job: Job, open: boolean) => void
+  /** いくつかの仕事を1回で足す（取り込み。第2.4版） */
+  addJobs: (jobs: Job[], open: boolean) => void
+  /** ひな形（最後に使った設定）を置き換える（バックアップの取り込みで、仕事が0件のとき） */
+  setTemplate: (template: SettingsTemplate) => void
   /** 仕事を消す。開いていた仕事なら、何も開いていない状態にする */
   removeJob: (id: string) => void
   openJob: (id: string | null) => void

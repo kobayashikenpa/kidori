@@ -45,18 +45,64 @@ export function partsUsingBoardThicknesses(job: Pick<Job, 'parts'>, boardIds: re
 
 /** 式の中の材料の厚み {t:古いid} を {t:新しいid} につけ替える（仕事のコピー用）。ほかの部分はそのまま */
 export function remapBoardIds(expr: string, map: ReadonlyMap<string, string>): string {
+  return remapRefIds(expr, { thickness: map })
+}
+
+/**
+ * 式の中の材料の厚み {t:…} と逃げ {n:…} の id を、それぞれの表でつけ替える（第2.4版。architecture.md 16.3）。
+ * 表に無い id・部材の参照・ほかの部分はそのまま。読めない式の中でもつけ替える
+ */
+export function remapRefIds(
+  expr: string,
+  maps: { thickness?: ReadonlyMap<string, string>; nige?: ReadonlyMap<string, string> },
+): string {
   let out = ''
   let last = 0
   for (const item of splitChunks(expr)) {
     if ('type' in item || !isBraceText(item.text)) continue
     const b = parseBraceText(item.text)
-    if (!b || b.kind !== 'thickness') continue
-    const to = map.get(b.id)
+    if (!b) continue
+    const to = (b.kind === 'thickness' ? maps.thickness : maps.nige)?.get(b.id)
     if (to === undefined) continue
-    out += expr.slice(last, item.start) + `{t:${to}}`
+    out += expr.slice(last, item.start) + (b.kind === 'thickness' ? `{t:${to}}` : `{n:${to}}`)
     last = item.end
   }
   return out + expr.slice(last)
+}
+
+/**
+ * 仕事で使っている材料・フラッシュ・逃げの id（第2.4版。共有のファイルに入れるもの。architecture.md 16.3・16.4）。
+ * 部材の材料・フラッシュ、式の {t:…}（材料かフラッシュ）・{n:…}、使っているフラッシュの表面材の材料。
+ * 仕事に無い id は入れない。読めない式の中も探す
+ */
+export function jobRefIds(job: Pick<Job, 'parts' | 'boards' | 'flushes' | 'settings'>): {
+  boardIds: Set<string>
+  flushIds: Set<string>
+  nigeIds: Set<string>
+} {
+  const boardSet = new Set(job.boards.map((b) => b.id))
+  const flushSet = new Set(job.flushes.map((f) => f.id))
+  const nigeSet = new Set(job.settings.nige.map((n) => n.id))
+  const boardIds = new Set<string>()
+  const flushIds = new Set<string>()
+  const nigeIds = new Set<string>()
+  const addThickness = (id: string) => {
+    if (boardSet.has(id)) boardIds.add(id)
+    else if (flushSet.has(id)) flushIds.add(id)
+  }
+  for (const p of job.parts) {
+    if (p.boardId !== null && boardSet.has(p.boardId)) boardIds.add(p.boardId)
+    if (p.flushId !== undefined && flushSet.has(p.flushId)) flushIds.add(p.flushId)
+    for (const a of AXES) {
+      for (const id of braceIds(p.expr[a], 'thickness')) addThickness(id)
+      for (const id of braceIds(p.expr[a], 'nige')) if (nigeSet.has(id)) nigeIds.add(id)
+    }
+  }
+  for (const f of job.flushes) {
+    if (!flushIds.has(f.id)) continue
+    for (const face of f.faces) if (boardSet.has(face.boardId)) boardIds.add(face.boardId)
+  }
+  return { boardIds, flushIds, nigeIds }
 }
 
 /**

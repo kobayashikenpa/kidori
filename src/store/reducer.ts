@@ -19,6 +19,10 @@ export interface StoreState {
 export type StoreAction =
   /** 仕事を一覧に足す。open なら開く */
   | { type: 'addJob'; job: Job; open: boolean }
+  /** いくつかの仕事を1回で一覧の最後に足す（取り込み。第2.4版）。open なら最後の1つを開く。ひな形は変えない */
+  | { type: 'addJobs'; jobs: Job[]; open: boolean }
+  /** ひな形（最後に使った設定）を置き換える（バックアップの取り込みで、仕事が0件のとき。第2.4版） */
+  | { type: 'setTemplate'; template: SettingsTemplate }
   /** 仕事を開く（null で閉じる） */
   | { type: 'openJob'; id: string | null }
   /** 仕事を消す。開いていた仕事なら、何も開いていない状態にする */
@@ -50,6 +54,17 @@ export function storeReducer(state: StoreState, action: StoreAction): StoreState
         jobs: [...state.jobs.filter((j) => j.id !== action.job.id), action.job],
         currentJobId: action.open ? action.job.id : state.currentJobId,
       }
+    case 'addJobs': {
+      if (action.jobs.length === 0) return state
+      const ids = new Set(action.jobs.map((j) => j.id))
+      return {
+        ...state,
+        jobs: [...state.jobs.filter((j) => !ids.has(j.id)), ...action.jobs],
+        currentJobId: action.open ? action.jobs[action.jobs.length - 1].id : state.currentJobId,
+      }
+    }
+    case 'setTemplate':
+      return { ...state, template: action.template }
     case 'openJob':
       if (action.id !== null && !state.jobs.some((j) => j.id === action.id)) return state
       return { ...state, currentJobId: action.id }
