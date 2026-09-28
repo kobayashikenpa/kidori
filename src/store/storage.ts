@@ -696,7 +696,7 @@ export function sanitizeJobs(
 }
 
 /** 移し替えで寸法が変わった部材・重ね切りを外したフラッシュの知らせ（「。」でつなぐ）。無ければ null */
-function changedMessage(changed: readonly string[], unstacked: readonly string[] = []): string | null {
+export function changedMessage(changed: readonly string[], unstacked: readonly string[] = []): string | null {
   const out: string[] = []
   if (changed.length > 0) out.push(`以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`)
   if (unstacked.length > 0) out.push(`サイズがそろっていないので、重ね切りを外しました：${unstacked.join('、')}`)
@@ -890,16 +890,29 @@ export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job
   }
   try {
     const data: unknown = JSON.parse(raw)
-    if (!isRecord(data) || data.version !== 1 || !isRecord(data.template)) return defaultTemplate()
-    const fx: Fixes = { count: 0, version: 2, unstacked: [] }
-    const settings = sanitizeSettings(data.template.settings, fx)
-    return {
-      settings: { ...settings, nige: settings.nige ?? defaultNige() },
-      materials: sanitizeMaterials(data.template.materials),
-      flushes: sanitizeFlushSpecs(data.template.flushes),
-    }
+    if (!isRecord(data) || data.version !== 1) return defaultTemplate()
+    return sanitizeTemplate(data.template) ?? defaultTemplate()
   } catch {
     return defaultTemplate()
+  }
+}
+
+/**
+ * ひな形（最後に使った設定）の中身を検査して直す（loadTemplate と同じ検査。バックアップのファイルでも使う。第2.4版）。
+ * オブジェクトでなければ null。例外は投げない
+ */
+export function sanitizeTemplate(v: unknown): SettingsTemplate | null {
+  try {
+    if (!isRecord(v)) return null
+    const fx: Fixes = { count: 0, version: 2, unstacked: [] }
+    const settings = sanitizeSettings(v.settings, fx)
+    return {
+      settings: { ...settings, nige: settings.nige ?? defaultNige() },
+      materials: sanitizeMaterials(v.materials),
+      flushes: sanitizeFlushSpecs(v.flushes),
+    }
+  } catch {
+    return null
   }
 }
 

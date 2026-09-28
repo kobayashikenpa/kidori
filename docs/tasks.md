@@ -1006,7 +1006,7 @@
 - やること：`jobs.ts` に `rekeyJob(job, ids, { frozen })`（材料・フラッシュ・部材・逃げの id を新しくし、参照をすべてつけ替える。`frozen: true` なら固定した1枚の `boardId`・`stackWith.boardId`・`placements` の `partId`／`pieceId`・`checked` もつけ替える）。`copyJob` は `rekeyJob(…, { frozen: false })` を使う（16.3）。`reducer.ts` に `addJobs`（いくつかを1回で足す。`open` で最後の1つを開く）
 - 完了の条件：今の `copyJob` のテストがそのまま通る。見本のコピーで逃げの id も新しくなり、寸法表・木取りの結果が同じ。重ね切りの組の1枚と ラワン 4 の1枚をチェックした見本を `frozen: true` でつけ替えると、`frozenSheetViews` のチェック数・「部材が変わっています」が無いこと・`frozenDemand` の数が元と同じで、元の仕事は書き換わらない。`addJobs` で2つ足すと state の変更は1回
 
-### [~] S-25 ファイルの外側の形と読み取り（envelope・readTransferFile）
+### [x] S-25 ファイルの外側の形と読み取り（envelope・readTransferFile）
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：10.5（共有・バックアップ）
 - やること：`transfer/envelope.ts`（`{ app: 'kidori', kind: 'share'|'backup', version: 1, dataVersion, exportedAt }` と検査）と `transfer/read.ts` の `readTransferFile(text)`：JSON → 外側の検査 → `kind` で分ける → `sanitizeJobs`。共有は `{ ok, kind: 'share', job, summary, notice }`（`shareSummary`：部材の行の数・枚数の合計）、バックアップは `{ ok, kind: 'backup', jobs, template, notice }`（`template` は `loadTemplate` と同じ検査、だめなら `null`）。20MB 超は読まない。例外を投げない。`transfer/fixtures/` に `version: 1` の共有・バックアップのファイルを手で書いて置く（16.2・16.4・16.5）
 - 完了の条件：見本を入れた共有のファイルの summary が「部材 5種類・9枚」。空の文字列・JSON でない・途中で切れた JSON・`app` が違う・`kind` が知らない値・`job`／`jobs` の形が違う・仕事が1つも読めない・仕事が0件のバックアップ は `ok: false`「読み込めませんでした」、`version: 99` は「新しい版」の文言。`dataVersion: 1` の部材ごとの逃げがある仕事・`stackSheets` の無い仕事は今の読み込みと同じに移し替わる（一部直したときは `notice` あり）。fixtures の2つが読める

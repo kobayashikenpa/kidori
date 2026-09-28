@@ -1,0 +1,204 @@
+{
+ "app": "kidori",
+ "kind": "share",
+ "version": 1,
+ "dataVersion": 2,
+ "exportedAt": "2026-09-28T10:00:00.000Z",
+ "job": {
+  "id": "job-1",
+  "name": "本棚 W900",
+  "settings": {
+   "kerf": 3,
+   "trim": 5,
+   "allowance": 10,
+   "cutMode": "vertical",
+   "nige": [
+    {
+     "id": "nige-0.5",
+     "name": "逃げ",
+     "value": 0.5
+    },
+    {
+     "id": "nige-1",
+     "name": "逃げ",
+     "value": 1
+    }
+   ]
+  },
+  "boards": [
+   {
+    "id": "board-1",
+    "material": "メラミン",
+    "thickness": 1,
+    "sizeKind": "saburoku",
+    "width": 910,
+    "length": 1820,
+    "grain": "long",
+    "builtIn": true
+   },
+   {
+    "id": "board-2",
+    "material": "ラワン",
+    "thickness": 2.5,
+    "sizeKind": "shihachi",
+    "width": 1220,
+    "length": 2440,
+    "grain": "long",
+    "builtIn": true
+   },
+   {
+    "id": "board-3",
+    "material": "ラワン",
+    "thickness": 4,
+    "sizeKind": "saburoku",
+    "width": 910,
+    "length": 1820,
+    "grain": "long",
+    "builtIn": true
+   },
+   {
+    "id": "board-4",
+    "material": "ラワン",
+    "thickness": 5.5,
+    "sizeKind": "shihachi",
+    "width": 1220,
+    "length": 2440,
+    "grain": "long",
+    "builtIn": true
+   }
+  ],
+  "flushes": [
+   {
+    "id": "flush-1",
+    "name": "フラッシュ25",
+    "core": 15,
+    "faces": [
+     {
+      "boardId": "board-1",
+      "count": 2
+     },
+     {
+      "boardId": "board-3",
+      "count": 2
+     }
+    ],
+    "stack": true
+   }
+  ],
+  "parts": [
+   {
+    "id": "part-1",
+    "boardId": null,
+    "thicknessAxis": null,
+    "quantity": 0,
+    "grain": "any",
+    "memo": "",
+    "checks": {
+     "finished": false,
+     "cut": false
+    },
+    "allowance": null,
+    "name": "全体",
+    "expr": {
+     "W": "900",
+     "H": "1800",
+     "D": "400"
+    }
+   },
+   {
+    "id": "part-2",
+    "boardId": null,
+    "thicknessAxis": null,
+    "quantity": 2,
+    "grain": "H",
+    "memo": "",
+    "checks": {
+     "finished": false,
+     "cut": false
+    },
+    "allowance": null,
+    "name": "側板",
+    "flushId": "flush-1",
+    "expr": {
+     "W": "{t:flush-1}",
+     "H": "全体.H",
+     "D": "全体.D"
+    }
+   },
+   {
+    "id": "part-3",
+    "boardId": null,
+    "thicknessAxis": null,
+    "quantity": 2,
+    "grain": "W",
+    "memo": "",
+    "checks": {
+     "finished": false,
+     "cut": false
+    },
+    "allowance": null,
+    "name": "天地板",
+    "flushId": "flush-1",
+    "expr": {
+     "W": "全体.W - 側板.W * 2",
+     "H": "{t:flush-1}",
+     "D": "全体.D"
+    }
+   },
+   {
+    "id": "part-4",
+    "boardId": null,
+    "thicknessAxis": null,
+    "quantity": 4,
+    "grain": "W",
+    "memo": "",
+    "checks": {
+     "finished": false,
+     "cut": false
+    },
+    "allowance": null,
+    "name": "棚板",
+    "flushId": "flush-1",
+    "expr": {
+     "W": "天地板.W - {n:nige-1}",
+     "H": "{t:flush-1}",
+     "D": "全体.D - 20"
+    }
+   },
+   {
+    "id": "part-5",
+    "boardId": "board-3",
+    "thicknessAxis": null,
+    "quantity": 1,
+    "grain": "H",
+    "memo": "",
+    "checks": {
+     "finished": false,
+     "cut": false
+    },
+    "allowance": 0,
+    "name": "背板",
+    "expr": {
+     "W": "全体.W",
+     "H": "全体.H",
+     "D": "{t:board-3}"
+    }
+   }
+  ],
+  "frozenSheets": [],
+  "stackSheets": [
+   {
+    "boardIds": [
+     "board-1",
+     "board-3"
+    ],
+    "sizeKind": "saburoku",
+    "width": 910,
+    "length": 1820,
+    "grain": "long"
+   }
+  ],
+  "createdAt": "2026-09-28T10:00:00.000Z",
+  "updatedAt": "2026-09-28T10:00:00.000Z"
+ }
+}
