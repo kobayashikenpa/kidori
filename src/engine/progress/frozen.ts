@@ -1,7 +1,7 @@
 // 固定した1枚（第1.8版。architecture.md 11.3〜11.5）：画面に出ていた1枚をまるごと写して持つ。
 // 写しから描き、写しから進み具合を計算するので、部材や設定が変わっても固定した1枚は動かない
 import { stackKey, stackLabel } from '../packing/stack'
-import { sameStockSize, stockSizeLabel, usesStock } from '../packing/stock'
+import { sameStockSize, stackChoice, stockSizeLabel, usesStock } from '../packing/stock'
 import { combineYield } from '../packing/yield'
 import { round1 } from '../round'
 import { BOARD_SIZES, type BoardGrain, type DimensionResult, type FrozenSheet, type Job, type PackingResult, type Part, type PartDimensions, type SheetLayout } from '../types'
@@ -40,8 +40,8 @@ export function freezeSheet(
     boardId,
     material: board.material,
     thickness: board.thickness,
-    // 手持ちの1枚は、その行の木目を写す（第2.2版。14.6）
-    grain: layout.sheet?.grain ?? board.grain,
+    // 手持ちの1枚は、その行の木目を写す（第2.2版。14.6）。組の1枚は組の行の木目（第2.3版。15.4）
+    grain: layout.sheet?.grain ?? (other ? stackChoice(job, [board.id, other.id]).grain : board.grain),
     mode,
     kerf: job.settings.kerf,
     trim: job.settings.trim,

@@ -4,7 +4,6 @@
 // 重ね切り（第2.0版。architecture.md 12.8）：組の段は1つ目の材料の段の直後。組の1枚のチェックは stackWith を付けて両方の材料に数える
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
-import { boardTokenLabel } from '../../engine/defaults'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
@@ -255,18 +254,6 @@ export function KidoriScreen() {
       )}
 
       <StockShortageNotice shortages={shortages} />
-
-      {result.stackMismatches.map((x) => {
-        const [a, b] = x.boardIds.map((id) => boardOf(id))
-        return (
-          <p key={x.boardIds.join('+')} className="msg warn" role="note">
-            {a ? boardTokenLabel(a) : ''}＋{b ? boardTokenLabel(b) : ''}：
-            {x.reason === 'stock'
-              ? '同じサイズの手持ちが無いので、重ねずに木取りしています'
-              : 'サイズがそろっていないので、重ねずに木取りしています'}
-          </p>
-        )
-      })}
 
       {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>

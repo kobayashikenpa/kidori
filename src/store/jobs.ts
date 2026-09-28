@@ -26,6 +26,7 @@ import {
   type PartChecks,
   type Settings,
   type SheetLayout,
+  type StackSheet,
   type StockSheet,
 } from '../engine/types'
 import { defaultTemplate, type SettingsTemplate } from './template'
@@ -88,6 +89,8 @@ export function createJob(
     flushes,
     parts: [],
     frozenSheets: [],
+    // 重ね切りの組の設定はひな形に入れない（組は 4×8 から始まる。第2.3版）
+    stackSheets: [],
     createdAt: t,
     updatedAt: t,
   }
@@ -167,6 +170,12 @@ export function copyJob(
     parts,
     // 固定した1枚（切った記録）は写さない（第1.8版。未決事項 32）
     frozenSheets: [],
+    // 組の設定（第2.3版）は新しい材料の id につけ替え、手持ちの行も写す
+    stackSheets: job.stackSheets.map((s) => {
+      const copy: StackSheet = { ...s, boardIds: [boardIds.get(s.boardIds[0]) ?? s.boardIds[0], boardIds.get(s.boardIds[1]) ?? s.boardIds[1]] }
+      if (s.stock) copy.stock = s.stock.map((x) => ({ ...x }))
+      return copy
+    }),
     createdAt: t,
     updatedAt: t,
   }

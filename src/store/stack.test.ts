@@ -189,7 +189,7 @@ describe('組のチェック・サイズ', () => {
     const job = unwrap(setBoardsSize(sampleFlushJob(true), [MELAMINE_1_ID, LAUAN_4_ID], SHIHACHI))
     for (const id of [MELAMINE_1_ID, LAUAN_4_ID]) expect(job.boards.find((b) => b.id === id)).toMatchObject(SHIHACHI)
     expect(job.boards.find((b) => b.id === LAUAN_25_ID)?.sizeKind).toBe('saburoku')
-    expect(stackPlan(job)).toMatchObject({ groups: [{ key: KEY }], mismatches: [] })
+    expect(stackPlan(job)).toMatchObject({ groups: [{ key: KEY }] })
     expect(setBoardsSize(job, [], SHIHACHI).ok).toBe(false)
     expect(setBoardsSize(job, ['board-none'], SHIHACHI).ok).toBe(false)
   })
@@ -197,7 +197,6 @@ describe('組のチェック・サイズ', () => {
   it('重ね切りの組の材料で setBoardSize を選ぶと、相手の材料も同じサイズになる（未決事項 36）', () => {
     const job = unwrap(setBoardSize(sampleFlushJob(true), LAUAN_4_ID, SHIHACHI))
     for (const id of [MELAMINE_1_ID, LAUAN_4_ID]) expect(job.boards.find((b) => b.id === id)).toMatchObject(SHIHACHI)
-    expect(stackPlan(job).mismatches).toEqual([])
     // 重ね切りがオフなら、その材料だけ
     const off = unwrap(setBoardSize(sampleFlushJob(false), LAUAN_4_ID, SHIHACHI))
     expect(off.boards.find((b) => b.id === MELAMINE_1_ID)?.sizeKind).toBe('saburoku')
@@ -206,7 +205,6 @@ describe('組のチェック・サイズ', () => {
   it('そろっていない組（ラワン 4 だけ 4×8）でも、材料の行で 3×6 に戻すと相手もそろう', () => {
     const job = sampleFlushJob(true)
     job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, ...SHIHACHI } : b))
-    expect(stackPlan(job).mismatches).toHaveLength(1)
     const back = unwrap(setBoardSize(job, MELAMINE_1_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }))
     expect(stackPlan(back).groups).toHaveLength(1)
     expect(back.flushes[0].id).toBe(SAMPLE_FLUSH_ID)

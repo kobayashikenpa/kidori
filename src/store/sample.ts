@@ -1,7 +1,8 @@
 // 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { eq1 } from '../engine/round'
-import { BOARD_SIZES, type Board, type Flush, type Job, type Part } from '../engine/types'
+import { canStack } from '../engine/packing/stack'
+import { BOARD_SIZES, type Board, type Flush, type Job, type Part, type StackSheet } from '../engine/types'
 import { createJob, newId } from './jobs'
 import type { SettingsTemplate } from './template'
 
@@ -32,7 +33,7 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
  * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
  * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは メラミン1 も）、
  *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
- * - 見本で使う材料は 3×6（未決事項 24）
+ * - 見本で使う材料は 3×6（未決事項 24）。フラッシュ25 の重ね切りの組の設定も 3×6（第2.3版）
  * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。シナランバー・シナベニヤは使わない）。厚みは式の厚み（{t:…}）で書く
  */
 export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
@@ -106,5 +107,14 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
       allowance: 0,
     }),
   ]
-  return { ...job, settings: { ...job.settings, nige }, boards, flushes, parts }
+  // 重ね切りの組（第2.3版）の設定も 3×6（見本の期待値＝組 3×6 で5枚を変えないため。未決事項 24 と同じ考え）。
+  // 組の a・b は材料の保存の並び
+  const stackSheets: StackSheet[] = []
+  if (canStack(flush)) {
+    const ids = flush.faces.map((f) => f.boardId)
+    const order = (id: string) => boards.findIndex((b) => b.id === id)
+    const pair: [string, string] = order(ids[0]) < order(ids[1]) ? [ids[0], ids[1]] : [ids[1], ids[0]]
+    stackSheets.push({ boardIds: pair, ...sheet })
+  }
+  return { ...job, settings: { ...job.settings, nige }, boards, flushes, parts, stackSheets }
 }

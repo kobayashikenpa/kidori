@@ -5,7 +5,8 @@ import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
 import { canStack, stackKey } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
-import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout } from '../engine/types'
+import { stackChoice, usesStock } from '../engine/packing/stock'
+import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
 import { defaultSettings } from '../engine/defaults'
 import { setPieceCheck, type OpResult } from './jobs'
 
@@ -74,6 +75,19 @@ function randomJob(r: Rand, seed: number, bigger = false): Job {
       allowance: null,
     })
   }
+  // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
+  const stackSheets: StackSheet[] = []
+  for (const f of flushes) {
+    if (!canStack(f) || r() < 0.3) continue
+    const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
+    if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
+    const row: StackSheet = { boardIds: ids, ...(r() < 0.6 ? SIZES[0] : pickOne(r, SIZES)) }
+    if (r() < 0.25) {
+      row.stockOn = true
+      row.stock = [{ id: 'st1', ...pickOne(r, SIZES.slice(0, 2)), count: int(r, 1, 4) }]
+    }
+    stackSheets.push(row)
+  }
   const settings = defaultSettings()
   settings.kerf = pickOne(r, [2, 3, 4])
   settings.trim = pickOne(r, [0, 5, 10])
@@ -86,6 +100,7 @@ function randomJob(r: Rand, seed: number, bigger = false): Job {
     flushes,
     parts,
     frozenSheets: [],
+    stackSheets,
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
   }
@@ -161,8 +176,12 @@ function checkJob(job: Job) {
     expect(new Set(ids).size, `${m.boardId} の片の id`).toBe(ids.length)
     for (const s of m.sheets) expectGuillotine(s, job.settings.kerf)
     if (m.stack) {
-      const [a, b] = m.stack.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
-      expect([a.width, a.length, a.grain]).toEqual([b.width, b.length, b.grain])
+      // 組の1枚は組の行の大きさ（第2.3版。材料のサイズによらない）。手持ちの組は手持ちの行の大きさ
+      const c = stackChoice(job, m.stack.boardIds)
+      for (const s of m.sheets) {
+        const want = usesStock(c) ? c.stock!.find((x) => x.id === s.sheet?.stockId) : c
+        expect([s.boardWidth, s.boardLength]).toEqual([want?.width, want?.length])
+      }
     }
   }
   // まとめ（第2.1版）：材料の行の枚数 ＝ その材料のふつうの 固定（切り終わりを除く）＋計算 だけ（組の1枚は足さない）。
@@ -188,18 +207,26 @@ const ok = (x: OpResult): Job => {
 }
 
 describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
-  it('乱数の仕事 150 件：ギロチンで切れる・材料ごとの片の数が合う・組の2つはサイズがそろっている', () => {
+  it('乱数の仕事 150 件：ギロチンで切れる・材料ごとの片の数が合う・組の1枚は組の行の大きさ', () => {
     let stacked = 0
     let mismatched = 0
+    let stockStacks = 0
     for (let seed = 1; seed <= 150; seed++) {
       const job = randomJob(rng(seed), seed)
       const r = checkJob(job)
-      stacked += r.materials.filter((m) => m.stack).length
-      mismatched += r.stackMismatches.length
+      for (const m of r.materials) {
+        if (!m.stack) continue
+        stacked++
+        const [a, b] = m.stack.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
+        // 第2.2版では重ねなかった（2つの材料のサイズがそろっていない）組も、第2.3版では組の行の大きさで重ねる
+        if (a.width !== b.width || a.length !== b.length || a.grain !== b.grain) mismatched++
+        if (usesStock(stackChoice(job, m.stack.boardIds))) stockStacks++
+      }
     }
-    // 組のある仕事・そろわない組のある仕事の両方を試していること
+    // 組のある仕事・材料のサイズがそろわない組・手持ちの組のどれも試していること
     expect(stacked).toBeGreaterThan(30)
     expect(mismatched).toBeGreaterThan(3)
+    expect(stockStacks).toBeGreaterThan(3)
   })
 
   it('固定・チェック・外す・重ね切りのオンオフをくり返しても片の数が合い、全部外すと最初の結果に戻る', () => {

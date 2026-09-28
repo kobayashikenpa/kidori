@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../fixtures/flush'
+import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
 import { frozenDemand } from '../progress/frozen'
 import type { FrozenSheet, Job, SheetLayout } from '../types'
 import { packJob } from './index'
@@ -51,7 +51,6 @@ describe('重ね切りの木取り（E-51）', () => {
     expect(r.materials[1].stack).toBeUndefined()
     // 全体の歩留まりは組の1枚を2回数える（重ねないときと同じ）
     expect(pct(r.totalYieldRate)).toBe(86.4)
-    expect(r.stackMismatches).toEqual([])
   })
 
   it('組の片の id は重ならない（a の表面材の番号）', () => {
@@ -85,25 +84,25 @@ describe('重ね切りの木取り（E-51）', () => {
     }
   })
 
-  it('ラワン 4 を 4×8 にすると重ねずに メラミン 1 に5枚、そろっていない組が1つ', () => {
+  it('ラワン 4 を 4×8 にしても重ねたまま（第2.3版）：組は組の設定 3×6 で5枚、背板は 4×8', () => {
     const job = sampleFlushJob(true)
     job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     const r = run(job)
-    expect(r.materials.map((m) => [m.boardId, m.sheetCount, pct(m.yieldRate)])[0]).toEqual([MELAMINE_1_ID, 5, 85.2])
-    expect(r.materials.map((m) => m.boardId)).toEqual([MELAMINE_1_ID, LAUAN_4_ID])
-    expect(r.stackMismatches).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID] }])
+    expect(r.materials.map((m) => [m.boardId, m.sheetCount, pct(m.yieldRate)])).toEqual([
+      [KEY, 5, 85.2],
+      [LAUAN_4_ID, 1, 54.4],
+    ])
   })
 
-  it('そろっていなくても、重ねる片が無ければ（フラッシュの部材が無い）知らせない', () => {
+  it('メラミン 1 を短手の自由入力にしても、組は組の設定（3×6・長手）で並ぶ', () => {
     const job = sampleFlushJob(true)
-    job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, grain: 'short', sizeKind: 'custom' } : b))
-    job.parts = job.parts.filter((p) => p.flushId === undefined)
-    expect(run(job).stackMismatches).toEqual([])
+    job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, grain: 'short', sizeKind: 'custom' } : b))
+    expect(run(job).materials.map((m) => [m.boardId, m.sheetCount])).toEqual([[KEY, 5], [LAUAN_4_ID, 1]])
   })
 
   it('plan を渡すと、その組だけ重ねる（空の plan なら重ねない）', () => {
     const job = sampleFlushJob(true)
-    const r = packJob(job, computeDimensions(job), { groups: [], mismatches: [] })
+    const r = packJob(job, computeDimensions(job), { groups: [] })
     expect(r.materials.map((m) => [m.boardId, m.sheetCount])).toEqual([[MELAMINE_1_ID, 5], [LAUAN_4_ID, 6]])
     expect(packJob(job, computeDimensions(job), stackPlan(job)).materials[0].boardId).toBe(KEY)
   })

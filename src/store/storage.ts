@@ -21,6 +21,7 @@ import {
   type Job,
   type Nige,
   type PartGrain,
+  type StackSheet,
   type StockSheet,
 } from '../engine/types'
 import { newId } from './jobs'
@@ -562,6 +563,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     flushes,
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
+    stackSheets: Array.isArray(v.stackSheets) ? (v.stackSheets as StackSheet[]) : [],
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }

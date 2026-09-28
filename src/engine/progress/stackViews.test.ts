@@ -140,18 +140,19 @@ describe('サイズの比較・お知らせ（E-52）', () => {
     expect(c[1].options[0].sheetCount).toBe(1)
   })
 
-  it('ラワン 4 を 4×8 にしていても、比較は組の無い結果（メラミン 1・ラワン 4 それぞれ）', () => {
+  it('ラワン 4 を 4×8 にしていても、比較に組の行が出る（第2.3版。組は組の設定で重ねたまま）', () => {
     const job = sampleFlushJob(true)
     job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     const c = compareStandardSizes(job, computeDimensions(job))
-    expect(c.map((x) => x.boardId)).toEqual([MELAMINE_1_ID, LAUAN_4_ID])
-    expect(c.map((x) => x.options[0].sheetCount)).toEqual([5, 6])
-    expect(c.every((x) => x.stack === undefined)).toBe(true)
+    expect(c.map((x) => x.boardId)).toEqual([KEY, LAUAN_4_ID])
+    expect(c[0].stack).toEqual({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID] })
   })
 
   it('お知らせの組の表示名は「メラミン1＋ラワン4（重ね切り）」（天板 910×610 が 1820 に2枚入る切り代 8mm で 4枚 → 2枚）', () => {
     const job = flushJob()
     job.flushes[0].stack = true
+    // 組の設定は 3×6（第2.3版。無ければ 4×8 で並ぶ）
+    job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }]
     expect(findSavingHints(job).map((h) => h.message)).toEqual([
       '切り代を 8mm にすると、メラミン1＋ラワン4（重ね切り） が 2 枚減ります（4枚 → 2枚）',
     ])
