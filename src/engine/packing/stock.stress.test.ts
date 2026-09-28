@@ -275,7 +275,7 @@ function checkShortage(job: Job) {
   // 足りない材料の行はすべて知らせる（組の行は手持ちを使わないので出ない。E-64）
   expect(list.map((s) => s.boardId)).toEqual(r0.materials.filter((m) => short(r0, m.boardId)).map((m) => m.boardId))
   for (const s of list) {
-    expect(s.stack).toBeUndefined()
+    expect(job.boards.some((b) => b.id === s.boardId)).toBe(true)
     for (const a of s.add) {
       if (a.count === null) continue
       const [width, length] = BOARD_SIZES[a.kind]

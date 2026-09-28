@@ -3,7 +3,6 @@
 // 「足す」ボタンを押したときだけ手持ちに足す（同じサイズの行があればその枚数を増やす）
 import type { AddKind, StockShortage } from '../../engine/hints/shortage'
 import { BOARD_SIZES } from '../../engine/types'
-import { findStackSheet } from '../../engine/packing/stock'
 import { addRowStock, updateRowStock } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
@@ -15,15 +14,14 @@ export function StockShortageNotice({ shortages }: { shortages: StockShortage[] 
   const { run } = useCurrentJob()
   if (shortages.length === 0) return null
 
-  // 組の行（第2.3版）は組の行の手持ちに足す
+  // 足すのは材料の行の手持ちだけ（重ね切りの組は手持ちを使わないので、知らせに出ない。architecture.md 15.9）
   const add = (sh: StockShortage, kind: AddKind, count: number) =>
     run((j) => {
-      const target = sh.stack ? sh.stack.boardIds : sh.boardId
-      const row = sh.stack ? findStackSheet(j, sh.stack.boardIds) : j.boards.find((b) => b.id === sh.boardId)
+      const row = j.boards.find((b) => b.id === sh.boardId)
       const same = row?.stock?.find((s) => s.sizeKind === kind)
-      if (same) return updateRowStock(j, target, same.id, { count: same.count + count })
+      if (same) return updateRowStock(j, sh.boardId, same.id, { count: same.count + count })
       const [width, length] = BOARD_SIZES[kind]
-      return addRowStock(j, target, { sizeKind: kind, width, length, grain: 'long', count })
+      return addRowStock(j, sh.boardId, { sizeKind: kind, width, length, grain: 'long', count })
     })
 
   return (

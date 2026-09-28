@@ -239,10 +239,8 @@ export function materialSizeCounts(
 
 /** 手持ちの行ごとの使った枚数と残り（第2.2版。architecture.md 14.9） */
 export interface StockUsage {
-  /** 材料の id。重ね切りの組の行（第2.3版）は stackKey(a, b)（a・b は材料の保存の並び） */
+  /** 材料の id（重ね切りの組は手持ちを使わないので出ない。architecture.md 15.9） */
   boardId: string
-  /** 重ね切りの組の行（第2.3版）なら、組の2つの材料（材料の保存の並び） */
-  stack?: { boardIds: [string, string] }
   rows: { stockId: string; label: string; count: number; used: number; left: number }[]
 }
 

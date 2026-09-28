@@ -12,11 +12,9 @@ import { smallerSteps } from './saving'
 export type AddKind = 'saburoku' | 'shihachi'
 
 export interface StockShortage {
-  /** 材料の id。重ね切りの組の行（第2.3版）は stackKey(a, b) */
+  /** 材料の id（重ね切りの組は手持ちを使わないので出ない。architecture.md 15.9） */
   boardId: string
-  /** 重ね切りの組の行（第2.3版）なら、組の2つの材料（足すときは組の行に足す） */
-  stack?: { boardIds: [string, string] }
-  /** 「シナランバー 18mm」。組の行は「メラミン1＋ラワン4（重ね切り）」 */
+  /** 「シナランバー 18mm」 */
   label: string
   /** 入らない部材の名前（部材の並び） */
   missing: string[]
@@ -24,7 +22,7 @@ export interface StockShortage {
   add: { kind: AddKind; count: number | null }[]
   /** 今の手持ちのままで入る設定（一番大きい値）。無ければ null */
   change: { kind: 'allowance' | 'trim'; value: number } | null
-  /** 「シナランバー 18mm が足りません（入らない部材：棚板）」「メラミン1＋ラワン4（重ね切り）が足りません（入らない部材：棚板）」 */
+  /** 「シナランバー 18mm が足りません（入らない部材：棚板）」 */
   message: string
 }
 
