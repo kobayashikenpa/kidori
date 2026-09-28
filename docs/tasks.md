@@ -994,29 +994,29 @@
 
 ### 計算ロジック（engine）
 
-### [ ] E-65 式の逃げの id のつけ替えと、仕事で使っている材料・フラッシュ・逃げ
+### [x] E-65 式の逃げの id のつけ替えと、仕事で使っている材料・フラッシュ・逃げ
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：10.5
 - やること：`formula/usages.ts` に `remapRefIds(expr, { thickness, nige })`（`{t:}`・`{n:}` の両方）と `jobRefIds(job)`（部材の材料・フラッシュ、式の `{t:}`・`{n:}`、使っているフラッシュの表面材）。`remapBoardIds` は `remapRefIds` を呼ぶだけにする（16.3）
 - 完了の条件：見本の棚板の W `天地板.W - {n:A}` が nige の表で `{n:B}` になり、部材の参照・`{t:}` は変わらない（thickness の表だけ渡せば今の `remapBoardIds` と同じ結果）。見本の `jobRefIds` が 材料 メラミン1・ラワン4、フラッシュ25、逃げ1 だけ（初期の ラワン2.5・5.5・逃げ0.5 は入らない）。読めない式の中の `{n:}` もつけ替える
 
 ### 保存と操作（store）
 
-### [ ] S-24 id のつけ替え（rekeyJob）と、copyJob の置き換え
+### [~] S-24 id のつけ替え（rekeyJob）と、copyJob の置き換え
 - 担当：engine-dev ／ 依存：E-65 ／ 仕様書：10・10.5
 - やること：`jobs.ts` に `rekeyJob(job, ids, { frozen })`（材料・フラッシュ・部材・逃げの id を新しくし、参照をすべてつけ替える。`frozen: true` なら固定した1枚の `boardId`・`stackWith.boardId`・`placements` の `partId`／`pieceId`・`checked` もつけ替える）。`copyJob` は `rekeyJob(…, { frozen: false })` を使う（16.3）。`reducer.ts` に `addJobs`（いくつかを1回で足す。`open` で最後の1つを開く）
 - 完了の条件：今の `copyJob` のテストがそのまま通る。見本のコピーで逃げの id も新しくなり、寸法表・木取りの結果が同じ。重ね切りの組の1枚と ラワン 4 の1枚をチェックした見本を `frozen: true` でつけ替えると、`frozenSheetViews` のチェック数・「部材が変わっています」が無いこと・`frozenDemand` の数が元と同じで、元の仕事は書き換わらない。`addJobs` で2つ足すと state の変更は1回
 
-### [ ] S-25 ファイルの外側の形と読み取り（envelope・readTransferFile）
+### [~] S-25 ファイルの外側の形と読み取り（envelope・readTransferFile）
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：10.5（共有・バックアップ）
 - やること：`transfer/envelope.ts`（`{ app: 'kidori', kind: 'share'|'backup', version: 1, dataVersion, exportedAt }` と検査）と `transfer/read.ts` の `readTransferFile(text)`：JSON → 外側の検査 → `kind` で分ける → `sanitizeJobs`。共有は `{ ok, kind: 'share', job, summary, notice }`（`shareSummary`：部材の行の数・枚数の合計）、バックアップは `{ ok, kind: 'backup', jobs, template, notice }`（`template` は `loadTemplate` と同じ検査、だめなら `null`）。20MB 超は読まない。例外を投げない。`transfer/fixtures/` に `version: 1` の共有・バックアップのファイルを手で書いて置く（16.2・16.4・16.5）
 - 完了の条件：見本を入れた共有のファイルの summary が「部材 5種類・9枚」。空の文字列・JSON でない・途中で切れた JSON・`app` が違う・`kind` が知らない値・`job`／`jobs` の形が違う・仕事が1つも読めない・仕事が0件のバックアップ は `ok: false`「読み込めませんでした」、`version: 99` は「新しい版」の文言。`dataVersion: 1` の部材ごとの逃げがある仕事・`stackSheets` の無い仕事は今の読み込みと同じに移し替わる（一部直したときは `notice` あり）。fixtures の2つが読める
 
-### [ ] S-26 共有のファイル（buildShareFile・shareFileName・importShared）
+### [~] S-26 共有のファイル（buildShareFile・shareFileName・importShared）
 - 担当：engine-dev ／ 依存：E-65・S-24・S-25 ／ 仕様書：10.5（共有）
 - やること：`transfer/share.ts`：`buildShareFile(job, now)`（使っている材料・フラッシュ・逃げ・組の行だけ、固定した1枚なし、チェックは全部 false・`cutByBoard` なし、メモ・手持ちはそのまま）、`shareFileName(job)`（空白とファイル名に使えない文字を除いて `.kidori.json`、空なら `kidori-仕事.kidori.json`、50 文字まで）、`importShared(job, existingNames, now)`（`rekeyJob(…, { frozen: false })`・同じ名前なら `copyName`・日付は取り込んだ時刻）（16.4）
 - 完了の条件：見本の `readTransferFile(buildShareFile(見本))` → `importShared` の仕事の寸法表と木取り（組 5枚 85.2% など、見本で期待する値）が元と同じで、id は全部元と違う。固定した1枚・チェック・`cutByBoard` は無い。初期の ラワン2.5・5.5・逃げ0.5 は入らない。「本棚 W900」→ `本棚W900.kidori.json`、`a/b:c` → `abc.kidori.json`、空白だけ → `kidori-仕事.kidori.json`。同じ名前があると「本棚 W900 のコピー」。見本・部材 50 のファイルの大きさをテストで出して architecture.md 16.4 の目安を直す
 
-### [ ] S-27 バックアップのファイル（buildBackup・backupFileName・importBackup）
+### [~] S-27 バックアップのファイル（buildBackup・backupFileName・importBackup）
 - 担当：engine-dev ／ 依存：S-24・S-25 ／ 仕様書：10.5（バックアップ）
 - やること：`transfer/backup.ts`：`buildBackup(state, now)`（全部の仕事そのまま＋ひな形）、`backupFileName(now)`、`importBackup(state, read, now)`（仕事ごとに `rekeyJob(…, { frozen: true })`・名前は `copyName`（足す仕事どうしも重ならない）・日付はファイルのまま、今の仕事が0件のときだけひな形を入れる）（16.5）
 - 完了の条件：見本（重ね切りの組の1枚にチェック・切り終わりの1枚あり）と部材 50 の仕事の2件を書き出して、空の state に読み込むと、2件の寸法表・木取り・固定した1枚が元と同じ、ひな形もファイルのもの。仕事のある state に同じファイルを2回読むと「のコピー」「のコピー 2」で4件増え、ひな形は変わらない。ファイル名は `kidori-バックアップ-2026-09-28.json`（その日の日付）。`readTransferFile` で共有のファイルは `kind: 'share'` になり、バックアップとしては足されない
