@@ -2,6 +2,16 @@
 import type { TransferRead } from '../../store/transfer/read'
 import { Sheet } from './Sheet'
 
+/** 名前を出す数（残りは「ほか ◯件」） */
+const MAX_NAMES = 5
+
+/** 「バックアップの仕事：2件（本棚 W900・食器棚）」の（）の中 */
+function namesOf(names: readonly string[]): string {
+  const shown = names.slice(0, MAX_NAMES).join('・')
+  const rest = names.length - MAX_NAMES
+  return rest > 0 ? `${shown}・ほか ${rest}件` : shown
+}
+
 type Readable = Extract<TransferRead, { ok: true }>
 
 interface Props {
@@ -19,6 +29,11 @@ export function ImportDialog({ read, canSave, onImport, onCancel }: Props) {
         {read.kind === 'share' && (
           <p style={{ margin: 0 }}>
             共有された仕事：<strong>{read.job.name}</strong>（部材 {read.summary.rows}種類・{read.summary.count}枚）
+          </p>
+        )}
+        {read.kind === 'backup' && (
+          <p style={{ margin: 0, overflowWrap: 'anywhere' }}>
+            バックアップの仕事：<strong>{read.jobs.length}件</strong>（{namesOf(read.jobs.map((j) => j.name))}）
           </p>
         )}
         <p className="lead" style={{ margin: 0 }}>

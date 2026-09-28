@@ -3,7 +3,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
 import { sampleFromTemplate } from '../../store/sample'
-import { backupFileName, buildBackup } from '../../store/transfer/backup'
+import { backupFileName, buildBackup, importBackup } from '../../store/transfer/backup'
 import { MAX_TRANSFER_SIZE, READ_FAILED } from '../../store/transfer/envelope'
 import { readTransferFile, type TransferRead } from '../../store/transfer/read'
 import { buildShareFile, importShared, shareFileName } from '../../store/transfer/share'
@@ -30,7 +30,7 @@ function byUpdatedDesc(a: Job, b: Job): number {
 type Mode = { kind: 'rename'; jobId: string } | { kind: 'delete'; jobId: string } | null
 
 export function JobsScreen({ onOpened }: { onOpened: () => void }) {
-  const { state, addJob, addJobs, openJob, removeJob, runOn } = useJobStore()
+  const { state, addJob, addJobs, setTemplate, openJob, removeJob, runOn } = useJobStore()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [mode, setMode] = useState<Mode>(null)
@@ -172,7 +172,13 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       )
       addJobs([job], true)
       onOpened()
+      return
     }
+    // バックアップ：1回で足す。開いている仕事は変えない。今の仕事が0件のときだけひな形もファイルのものにする
+    const out = importBackup(state, r, new Date())
+    addJobs(out.jobs, false)
+    if (out.template !== null) setTemplate(out.template)
+    setImportMsg({ ok: true, text: out.message })
   }
 
   const remove = (job: Job) => {
