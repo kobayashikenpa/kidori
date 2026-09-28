@@ -1016,7 +1016,7 @@
 - やること：`transfer/share.ts`：`buildShareFile(job, now)`（使っている材料・フラッシュ・逃げ・組の行だけ、固定した1枚なし、チェックは全部 false・`cutByBoard` なし、メモ・手持ちはそのまま）、`shareFileName(job)`（空白とファイル名に使えない文字を除いて `.kidori.json`、空なら `kidori-仕事.kidori.json`、50 文字まで）、`importShared(job, existingNames, now)`（`rekeyJob(…, { frozen: false })`・同じ名前なら `copyName`・日付は取り込んだ時刻）（16.4）
 - 完了の条件：見本の `readTransferFile(buildShareFile(見本))` → `importShared` の仕事の寸法表と木取り（組 5枚 85.2% など、見本で期待する値）が元と同じで、id は全部元と違う。固定した1枚・チェック・`cutByBoard` は無い。初期の ラワン2.5・5.5・逃げ0.5 は入らない。「本棚 W900」→ `本棚W900.kidori.json`、`a/b:c` → `abc.kidori.json`、空白だけ → `kidori-仕事.kidori.json`。同じ名前があると「本棚 W900 のコピー」。見本・部材 50 のファイルの大きさをテストで出して architecture.md 16.4 の目安を直す
 
-### [~] S-27 バックアップのファイル（buildBackup・backupFileName・importBackup）
+### [x] S-27 バックアップのファイル（buildBackup・backupFileName・importBackup）
 - 担当：engine-dev ／ 依存：S-24・S-25 ／ 仕様書：10.5（バックアップ）
 - やること：`transfer/backup.ts`：`buildBackup(state, now)`（全部の仕事そのまま＋ひな形）、`backupFileName(now)`、`importBackup(state, read, now)`（仕事ごとに `rekeyJob(…, { frozen: true })`・名前は `copyName`（足す仕事どうしも重ならない）・日付はファイルのまま、今の仕事が0件のときだけひな形を入れる）（16.5）
 - 完了の条件：見本（重ね切りの組の1枚にチェック・切り終わりの1枚あり）と部材 50 の仕事の2件を書き出して、空の state に読み込むと、2件の寸法表・木取り・固定した1枚が元と同じ、ひな形もファイルのもの。仕事のある state に同じファイルを2回読むと「のコピー」「のコピー 2」で4件増え、ひな形は変わらない。ファイル名は `kidori-バックアップ-2026-09-28.json`（その日の日付）。`readTransferFile` で共有のファイルは `kind: 'share'` になり、バックアップとしては足されない
