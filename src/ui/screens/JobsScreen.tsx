@@ -3,6 +3,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
 import { sampleFromTemplate } from '../../store/sample'
+import { backupFileName, buildBackup } from '../../store/transfer/backup'
 import { MAX_TRANSFER_SIZE, READ_FAILED } from '../../store/transfer/envelope'
 import { readTransferFile, type TransferRead } from '../../store/transfer/read'
 import { buildShareFile, importShared, shareFileName } from '../../store/transfer/share'
@@ -114,6 +115,23 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       const m = shareResultMessage(r)
       if (r === 'saved') setNotice(m)
       else if (m) setFailure(m)
+    })
+  }
+
+  /** バックアップを書き出す。送るときと同じく、ファイルは押した操作の中で同期に作る */
+  const exportBackup = () => {
+    reset()
+    const now = new Date()
+    let file: File
+    try {
+      file = new File([buildBackup(state, now)], backupFileName(now), { type: 'application/json' })
+    } catch {
+      setImportMsg({ ok: false, text: 'ファイルを作れませんでした' })
+      return
+    }
+    void shareFile(file, 'kidori のバックアップ').then((r) => {
+      const m = shareResultMessage(r)
+      if (m) setImportMsg({ ok: r === 'saved', text: m })
     })
   }
 
@@ -317,6 +335,9 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       </div>
 
       <div className="stack" style={{ marginTop: 24 }}>
+        <button type="button" className="btn wide" onClick={exportBackup}>
+          バックアップを書き出す
+        </button>
         <button type="button" className="btn wide" onClick={() => fileInput.current?.click()}>
           ファイルから取り込む
         </button>
@@ -333,8 +354,8 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
             {importMsg.text}
           </p>
         )}
-        <Help className="lead" title="ファイルから取り込む">
-          送られてきた仕事のファイルや、バックアップのファイルを選びます。今の仕事は変わらず、新しい仕事として足されます
+        <Help className="lead" title="バックアップと取り込み">
+          バックアップは、全部の仕事を1つのファイルにします（新しいスマホに移すときなど）。「ファイルから取り込む」では、送られてきた仕事のファイルやバックアップのファイルを選びます。今の仕事は変わらず、新しい仕事として足されます
         </Help>
       </div>
 
