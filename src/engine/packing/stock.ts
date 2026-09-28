@@ -89,13 +89,15 @@ export function findStackSheet(job: Pick<Job, 'stackSheets'>, boardIds: readonly
 }
 
 /**
- * 組の行のサイズの設定（第2.3版。architecture.md 15.3）。行が無ければ 4×8・木目 長手・手持ちなし（仕様書 9「初期値は 4×8」）
+ * 組の行のサイズの設定（第2.3版。architecture.md 15.3・15.9）。重ね切りの組は 3×6 か 4×8 だけ（仕様書 4。自由入力・手持ちは使わない）。
+ * 行の 3×6／4×8 を寸法の決まった値（木目 長手）で返す。行が無い・行が自由入力なら 4×8（仕様書 9「初期値は 4×8」）。
+ * 保存データに手持ち（stock・stockOn）が残っていても返さない（木取りは見ない）
  */
 export function stackChoice(job: Pick<Job, 'stackSheets'>, boardIds: readonly [string, string]): SheetChoice {
   const s = findStackSheet(job, boardIds)
-  if (s) return s
-  const [width, length] = BOARD_SIZES.shihachi
-  return { sizeKind: 'shihachi', width, length, grain: 'long' }
+  const sizeKind = s && s.sizeKind !== 'custom' ? s.sizeKind : 'shihachi'
+  const [width, length] = BOARD_SIZES[sizeKind]
+  return { sizeKind, width, length, grain: 'long' }
 }
 
 /** 固定した1枚ごとに、大きさ・木目がそろう最初の行（残り1以上）から1枚引く（そろう行が無ければ引かない） */
@@ -124,7 +126,7 @@ export function availableStock(job: Pick<Job, 'boards' | 'frozenSheets'>, boardI
 
 /**
  * 固定した組の1枚（boardId と stackWith.boardId が組の2つの材料）の分を引いた、組の手持ち（第2.3版。architecture.md 15.3）。
- * 組の行が手持ちでなければ、組のサイズ1行（枚数 Infinity）
+ * 組は手持ちを使わないので（15.9）、いつも組のサイズ1行（枚数 Infinity）
  */
 export function availableStackStock(job: Pick<Job, 'stackSheets' | 'frozenSheets'>, boardIds: readonly [string, string]): StockKind[] {
   return subtractFrozen(

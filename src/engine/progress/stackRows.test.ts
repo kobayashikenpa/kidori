@@ -1,4 +1,5 @@
-// E-62：比較・手持ちの残り・足りないときの知らせに重ね切りの組の行を入れる（第2.3版。architecture.md 15.5）
+// E-62：比較・手持ちの残り・足りないときの知らせと重ね切りの組の行（第2.3版。architecture.md 15.5）。
+// 組は手持ちを使わないので、手持ちの残り・足りないときの知らせには出ない（E-64。15.9）
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
@@ -55,31 +56,19 @@ describe('compareStandardSizes と組の行', () => {
 })
 
 describe('stockUsage と組の行', () => {
-  it('組の手持ち 3×6 ×6 → 組 使う5・残り1、ラワン 4 の手持ち 3×6 ×1 → 使う1・残り0（組の1枚を数えない）', () => {
+  it('組の行は出ない（組は手持ちを使わない。E-64）。ラワン 4 の手持ち 3×6 ×1 → 使う1・残り0（組の1枚を数えない）', () => {
     const job = withStock(withStackStock(sampleFlushJob(true), PAIR, [['3×6', 6]]), LAUAN_4_ID, [['3×6', 1]])
-    expect(usage(job)).toEqual([
-      { boardId: KEY, stack: { boardIds: [MELAMINE_1_ID, LAUAN_4_ID] }, rows: [{ stockId: 's1', label: '3×6', count: 6, used: 5, left: 1 }] },
-      { boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] },
-    ])
+    expect(usage(job)).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
   })
 
-  it('組の行の a・b を逆に保存していても、組の id は材料の保存の並び', () => {
-    const job = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 6]])
-    job.stackSheets[0].boardIds = [LAUAN_4_ID, MELAMINE_1_ID]
-    expect(usage(job).map((u) => [u.boardId, u.stack])).toEqual([[KEY, { boardIds: [MELAMINE_1_ID, LAUAN_4_ID] }]])
-  })
-
-  it('組の固定した1枚（切り終わりを含む）は組の行で数え、材料の行では数えない', () => {
-    const job = withStock(withStackStock(sampleFlushJob(true), PAIR, [['3×6', 6]]), MELAMINE_1_ID, [['3×6', 2]])
+  it('組の固定した1枚（切り終わりを含む）は材料の行で数えない', () => {
+    const job = withStock(sampleFlushJob(true), MELAMINE_1_ID, [['3×6', 2]])
     const g = packJob(job, computeDimensions(job)).materials.find((m) => m.boardId === KEY)!
     const f = freezeSheet(job, MELAMINE_1_ID, g.mode, g.sheets[0], 'f', new Date('2026-09-28T00:00:00Z'), LAUAN_4_ID)
     f.checked = g.sheets[0].placements.map((p) => p.pieceId)
     f.completedAt = '2026-09-28T00:00:00.000Z'
     job.frozenSheets = [f]
-    expect(usage(job)).toEqual([
-      { boardId: MELAMINE_1_ID, rows: [{ stockId: 's1', label: '3×6', count: 2, used: 0, left: 2 }] },
-      { boardId: KEY, stack: { boardIds: [MELAMINE_1_ID, LAUAN_4_ID] }, rows: [{ stockId: 's1', label: '3×6', count: 6, used: 5, left: 1 }] },
-    ])
+    expect(usage(job)).toEqual([{ boardId: MELAMINE_1_ID, rows: [{ stockId: 's1', label: '3×6', count: 2, used: 0, left: 2 }] }])
   })
 })
 
@@ -96,29 +85,11 @@ describe('materialSizeCounts と組の行', () => {
 })
 
 describe('stockShortage・findSavingHints と組の行', () => {
-  it('組の手持ち 3×6 ×3 → 「メラミン1＋ラワン4（重ね切り）が足りません（入らない部材：棚板）」で 3×6 は 2枚', () => {
-    const job = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]])
-    const list = shortage(job)
-    expect(list).toHaveLength(1)
-    const [s] = list
-    expect(s.boardId).toBe(KEY)
-    expect(s.stack).toEqual({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID] })
-    expect(s.label).toBe('メラミン1＋ラワン4（重ね切り）')
-    expect(s.missing).toEqual(['棚板'])
-    expect(s.message).toBe('メラミン1＋ラワン4（重ね切り）が足りません（入らない部材：棚板）')
-    expect(s.add[0]).toEqual({ kind: 'saburoku', count: 2 })
-    expect(s.add[1].count).toBeGreaterThanOrEqual(1)
-    // 足すと入る（組の行に足した写し）
-    const added = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 5]])
-    expect(shortage(added)).toEqual([])
+  it('組の行に手持ち 3×6 ×3 が残っていても、組は足りない知らせに出ない（組は手持ちを使わない。E-64）', () => {
+    expect(shortage(withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]]))).toEqual([])
   })
 
-  it('お知らせ（減らせる）に手持ちが足りない組は出ない', () => {
-    const job = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]])
-    expect(findSavingHints(job).flatMap((h) => h.materials.map((m) => m.boardId))).not.toContain(KEY)
-  })
-
-  it('材料（ラワン 4）の手持ちが足りなくても、組は減らせるお知らせの対象のまま（組の手持ちは別）', () => {
+  it('材料（ラワン 4）の手持ちが足りなくても、組は減らせるお知らせの対象のまま', () => {
     // 端切りを小さくして組が減るかは仕事によるので、対象から外していないこと（除外の集合）だけを見る：
     // ラワン 4 の手持ちが足りない仕事と足りない仕事でない仕事で、組についてのお知らせが同じ
     const base = sampleFlushJob(true)
@@ -127,16 +98,14 @@ describe('stockShortage・findSavingHints と組の行', () => {
     expect(keyHints(shortLauan)).toEqual(keyHints(base))
   })
 
-  it('足りない行が無ければ []（組の手持ちが足りているとき）', () => {
-    expect(shortage(withStackStock(sampleFlushJob(true), PAIR, [['3×6', 6]]))).toEqual([])
+  it('足りない行が無ければ []', () => {
     expect(shortage(sampleFlushJob(true))).toEqual([])
   })
 
-  it('組とラワン 4 の両方が足りないと、並びは 組 → ラワン 4（まとめの並び）', () => {
+  it('ラワン 4 が足りないときは材料の行だけ（組の行に手持ちが残っていても）', () => {
     const job = withStock(withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]]), LAUAN_4_ID, [{ width: 600, length: 1200, grain: 'long', count: 1 }])
-    expect(shortage(job).map((s) => [s.boardId, s.missing])).toEqual([
-      [KEY, ['棚板']],
-      [LAUAN_4_ID, ['背板']],
+    expect(shortage(job).map((s) => [s.boardId, s.missing, s.message])).toEqual([
+      [LAUAN_4_ID, ['背板'], 'ラワン 4mm が足りません（入らない部材：背板）'],
     ])
   })
 })

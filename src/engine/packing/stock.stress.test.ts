@@ -1,5 +1,5 @@
 // 手持ちの材料（第2.2版）のでたらめな仕事での確かめ：
-// 大きさの混ざった手持ち・枚数・重ね切り（第2.3版：組の行ごとのサイズ・手持ち）・固定した1枚をでたらめに作り、
+// 大きさの混ざった手持ち・枚数・重ね切り（第2.3版：組の行ごとのサイズ。組は手持ちを使わない）・固定した1枚をでたらめに作り、
 // 1枚ごとにギロチンで切れること・手持ちの枚数を超えないこと・入らない片は本当に手持ちが無いときだけであること・
 // 足りないときの解決策をそのまま当てると入ること、を確かめる
 import { describe, expect, it } from 'vitest'
@@ -10,7 +10,7 @@ import { round1 } from '../round'
 import { BOARD_SIZES, type Board, type BoardGrain, type Job, type PackingResult, type Part, type Rect, type SheetChoice, type SheetLayout, type StackSheet, type StockSheet } from '../types'
 import { packJob } from './index'
 import { expandPieces, orientationsFor, type PieceShape } from './pieces'
-import { samePair, sameStockSize, stackChoice, stockKinds, usesStock } from './stock'
+import { findStackSheet, samePair, sameStockSize, stackChoice, stockKinds, usesStock } from './stock'
 import { stackPlan } from './stack'
 
 /** 決まった順に出るでたらめな数（mulberry32） */
@@ -66,7 +66,10 @@ function randomBoard(r: Rng, id: string, material: string, thickness: number): B
   return b
 }
 
-/** 組の行（第2.3版）：3×6／4×8／以前の自由入力（大きさだけ）のどれか。手持ちのことも多い。boardIds の並びもでたらめ */
+/**
+ * 組の行（第2.3版）：3×6／4×8／以前の自由入力（大きさだけ）のどれか。手持ちが残っていることも多い（読み込みで外すが、
+ * 木取りが見ないことを確かめるため。E-64）。boardIds の並びもでたらめ
+ */
 function randomStackSheet(r: Rng, boardIds: [string, string]): StackSheet {
   const kind = r.pick(['saburoku', 'shihachi', 'custom'] as const)
   const size =
@@ -127,7 +130,7 @@ function randomJob(r: Rng, pieces: [number, number] = [4, 30]): Job {
 // ---------- 確かめ ----------
 
 /** 確かめた数（でたらめな仕事で本当に確かめられているか） */
-const seen = { sheets: 0, noStock: 0, adds: 0, changes: 0, mixedSizes: 0, stackStock: 0, stackNoStock: 0, stackShortages: 0 }
+const seen = { sheets: 0, noStock: 0, adds: 0, changes: 0, mixedSizes: 0, stackStock: 0, stackCustom: 0 }
 
 /** 片の集まりが、端から端までの一直線の切断をくり返して切り分けられるか（ギロチン） */
 function guillotine(rects: readonly Rect[]): boolean {
@@ -232,19 +235,18 @@ function checkJob(job: Job) {
     const left = remaining(job, r, board, { board })
     checkNoStock(job, r.materials.find((x) => !x.stack && x.boardId === board.id), left, shapes)
   }
-  // 組の行（第2.3版）：組の手持ちで数える。手持ちでない組は tooLarge だけ
+  // 組の行（E-64）：組は 3×6／4×8 だけで手持ちを使わない。行に手持ち・自由入力が残っていても、tooLarge だけで、1枚は組の大きさ
   for (const g of stackPlan(job).groups) {
     const choice = stackChoice(job, g.boardIds)
+    expect(usesStock(choice)).toBe(false)
+    expect(choice.sizeKind).not.toBe('custom')
+    const row = findStackSheet(job, g.boardIds)
+    if (row && usesStock(row)) seen.stackStock++
+    if (row?.sizeKind === 'custom') seen.stackCustom++
     const m = r.materials.find((x) => x.boardId === g.key)
     if (m) expect(m.stack?.boardIds).toEqual(g.boardIds)
-    if (!usesStock(choice)) {
-      expect(m?.unplaced.every((u) => u.reason === 'tooLarge') ?? true).toBe(true)
-      // 組の1枚は組の大きさ
-      for (const s of m?.sheets ?? []) expect([s.boardWidth, s.boardLength]).toEqual([choice.width, choice.length])
-      continue
-    }
-    seen.stackStock++
-    checkNoStock(job, m, remaining(job, r, choice, { pair: g.boardIds }), shapes)
+    expect(m?.unplaced.every((u) => u.reason === 'tooLarge') ?? true).toBe(true)
+    for (const s of m?.sheets ?? []) expect([s.boardWidth, s.boardLength, s.sheet]).toEqual([choice.width, choice.length, undefined])
   }
   return { r, dims }
 }
@@ -255,7 +257,6 @@ function checkNoStock(job: Job, m: PackingResult['materials'][number] | undefine
   for (const u of m?.unplaced ?? []) {
     const shape = shapes.get(u.partId)!
     seen.noStock++
-    if (m!.stack) seen.stackNoStock++
     for (const g of left) {
       if (g.left < 1) continue
       expect(orientationsFor(shape, g.size, job.settings.trim, m!.mode)).toEqual([])
@@ -271,18 +272,16 @@ function checkShortage(job: Job) {
   const dims = computeDimensions(job)
   const list = stockShortage(job, dims)
   const r0 = packJob(job, dims)
-  // 足りない行（材料の行・組の行）はすべて知らせる
+  // 足りない材料の行はすべて知らせる（組の行は手持ちを使わないので出ない。E-64）
   expect(list.map((s) => s.boardId)).toEqual(r0.materials.filter((m) => short(r0, m.boardId)).map((m) => m.boardId))
   for (const s of list) {
-    if (s.stack) seen.stackShortages++
+    expect(s.stack).toBeUndefined()
     for (const a of s.add) {
       if (a.count === null) continue
       const [width, length] = BOARD_SIZES[a.kind]
       const row = { id: 'added', sizeKind: a.kind, width, length, grain: 'long' as const, count: a.count }
-      // 画面と同じく、押した行1つにだけ足す（第2.3版：組の行は stackSheets に）
-      const added: Job = s.stack
-        ? { ...job, stackSheets: job.stackSheets.map((x) => (samePair(x.boardIds, s.stack!.boardIds) ? { ...x, stock: [...(x.stock ?? []), row] } : x)) }
-        : { ...job, boards: job.boards.map((b) => (b.id === s.boardId ? { ...b, stock: [...(b.stock ?? []), row] } : b)) }
+      // 画面と同じく、押した行1つにだけ足す
+      const added: Job = { ...job, boards: job.boards.map((b) => (b.id === s.boardId ? { ...b, stock: [...(b.stock ?? []), row] } : b)) }
       expect(short(packJob(added, dims), s.boardId)).toBe(false)
       seen.adds++
     }
@@ -340,8 +339,7 @@ describe('手持ちの材料：でたらめな仕事での確かめ', () => {
     expect(seen.adds).toBeGreaterThan(10)
     expect(seen.mixedSizes).toBeGreaterThan(5)
     expect(seen.stackStock).toBeGreaterThan(5)
-    expect(seen.stackNoStock).toBeGreaterThan(3)
-    expect(seen.stackShortages).toBeGreaterThan(3)
+    expect(seen.stackCustom).toBeGreaterThan(3)
   })
 
   it('部材150枚（手持ち・重ね切りあり）で packJob が 1秒以内', () => {

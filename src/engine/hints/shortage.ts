@@ -1,11 +1,10 @@
 // 手持ちが足りないときの解決策（第2.2版。architecture.md 14.8）。
-// 手持ちで木取りする行（材料の行・重ね切りの組の行。第2.3版）で、入らない片（noStock）がある行ごとに、
+// 手持ちで木取りする材料の行で、入らない片（noStock）がある行ごとに（重ね切りの組は手持ちを使わない。architecture.md 15.9）、
 // 3×6・4×8 を何枚足せば入るか、切り代 → 端切りを小さくすれば今の手持ちで入るかを知らせる。仕事のデータは書き換えない
 import { computeDimensions } from '../dimensions'
 import { packJob } from '../packing'
 import { expandPieces, orientationsFor, type PieceShape } from '../packing/pieces'
-import { stackLabel } from '../packing/stack'
-import { samePair, usesStock } from '../packing/stock'
+import { usesStock } from '../packing/stock'
 import { round1 } from '../round'
 import { BOARD_SIZES, type DimensionResult, type Job, type PackingResult, type StockSheet } from '../types'
 import { smallerSteps } from './saving'
@@ -82,39 +81,35 @@ function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId:
   return { boardId, missing, count: Math.max(1, count), shapes }
 }
 
-/** 足りない行すべて（材料の行・組の行）に、kind を n 枚の行を足した写し（id は重ならないもの） */
-function withAdded(job: Job, ids: readonly string[], pairs: readonly (readonly [string, string])[], kind: AddKind, n: number): Job {
+/** 足りない材料の行すべてに、kind を n 枚の行を足した写し（id は重ならないもの） */
+function withAdded(job: Job, ids: readonly string[], kind: AddKind, n: number): Job {
   const [width, length] = BOARD_SIZES[kind]
   const row: StockSheet = { id: `shortage-${kind}`, sizeKind: kind, width, length, grain: 'long', count: n }
   return {
     ...job,
     boards: job.boards.map((b) => (ids.includes(b.id) ? { ...b, stock: [...(b.stock ?? []), row] } : b)),
-    stackSheets: job.stackSheets.map((s) => (pairs.some((p) => samePair(p, s.boardIds)) ? { ...s, stock: [...(s.stock ?? []), row] } : s)),
   }
 }
 
 /**
- * 手持ちが足りないときの解決策（仕様書 9「手持ちの材料」）。対象は stockOn の行（材料の行・重ね切りの組の行。第2.3版）で、
- * その結果に noStock の片がある行（まとめの並び＝材料の保存の並び、組は a の材料の直後）。
+ * 手持ちが足りないときの解決策（仕様書 9「手持ちの材料」）。対象は stockOn の材料の行で、
+ * その結果に noStock の片がある行（まとめの並び＝材料の保存の並び）。重ね切りの組の行は手持ちを使わないので対象にしない（15.9）。
  * 足りない行が無ければ packJob を追加で呼ばずに []（base を渡せば1回も呼ばない）。
  * - 足す枚数：3×6・4×8（木目 長手方向）それぞれ、足りない材料すべてに同じ n 枚の行を足して packJob し、
  *   その材料の noStock が無くなった一番小さい n。1, 2, 4, … と倍にして入る n を見つけてから、その手前との間を半分ずつ狭める
  *   （計算の回数を減らすため。上限は入らない片の数で、それで入らなければ null）。
  *   入らない片のうち1つでもそのサイズに入らない材料は試さずに null
  *   注意：ここでは足りない行すべてに同時に n 枚足して試すが、画面（StockShortageNotice）は押した行1つにだけ足す。
- *   第2.3版から材料の行と組の行は手持ちを分け合わないので、行ごとに別々に木取りし、結果は変わらない
+ *   材料の行どうしは手持ちを分け合わないので、行ごとに別々に木取りし、結果は変わらない
  * - 設定の変更：お知らせ（findSavingHints）と同じ試し方。切り代（設定の切り代を使う部材があるとき）を大きい値から、
  *   切り代で入らなかった材料だけ端切り。その材料の noStock が無くなる一番大きい値。組み合わせは試さない
  */
 export function stockShortage(job: Job, dims: DimensionResult, base?: PackingResult): StockShortage[] {
-  if (!job.boards.some((b) => usesStock(b)) && !(job.stackSheets ?? []).some((s) => usesStock(s))) return []
+  if (!job.boards.some((b) => usesStock(b))) return []
   const r0 = base ?? packJob(job, dims)
   // 手持ちの行だけが noStock を出す（サイズを選んだ行は tooLarge）
-  const shortRows = r0.materials.filter((m) => short(r0, m.boardId))
-  const ids = shortRows.map((m) => m.boardId)
+  const ids = r0.materials.filter((m) => !m.stack && short(r0, m.boardId)).map((m) => m.boardId)
   if (ids.length === 0) return []
-  const boardIds = shortRows.filter((m) => !m.stack).map((m) => m.boardId)
-  const pairs = shortRows.flatMap((m) => (m.stack ? [m.stack.boardIds] : []))
 
   const { trim, cutMode } = job.settings
   const fitMode = cutMode === 'horizontal' ? 'horizontal' : 'vertical'
@@ -135,7 +130,7 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
     const trial = (n: number) => {
       let r = memo.get(n)
       if (!r) {
-        r = packJob(withAdded(job, boardIds, pairs, kind, n), dims)
+        r = packJob(withAdded(job, ids, kind, n), dims)
         memo.set(n, r)
       }
       return r
@@ -177,26 +172,15 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
   tryKind('trim', smallerSteps(trim))
 
   return targets.map((t): StockShortage => {
-    const stack = shortRows.find((m) => m.boardId === t.boardId)?.stack
-    let label: string
-    let message: string
-    if (stack) {
-      label = stackLabel(job, stack.boardIds)
-      message = `${label}が足りません（入らない部材：${t.missing.join('、')}）`
-    } else {
-      const board = job.boards.find((b) => b.id === t.boardId)!
-      label = `${board.material} ${round1(board.thickness)}mm`
-      message = `${label} が足りません（入らない部材：${t.missing.join('、')}）`
-    }
-    const out: StockShortage = {
+    const board = job.boards.find((b) => b.id === t.boardId)!
+    const label = `${board.material} ${round1(board.thickness)}mm`
+    return {
       boardId: t.boardId,
       label,
       missing: t.missing,
       add: ADD_KINDS.map((kind) => ({ kind, count: adds.get(t.boardId)!.get(kind) ?? null })),
       change: changes.get(t.boardId) ?? null,
-      message,
+      message: `${label} が足りません（入らない部材：${t.missing.join('、')}）`,
     }
-    if (stack) out.stack = { boardIds: [stack.boardIds[0], stack.boardIds[1]] }
-    return out
   })
 }
