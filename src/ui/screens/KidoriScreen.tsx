@@ -7,7 +7,7 @@ import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
-import { usesStock } from '../../engine/packing/stock'
+import { stackChoice, usesStock } from '../../engine/packing/stock'
 import { stockShortage } from '../../engine/hints/shortage'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
 import {
@@ -19,10 +19,11 @@ import {
   type FrozenSheetView,
   type MaterialSummary,
   type SizeCount,
+  type StockUsage,
 } from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
-import type { Board, BoardGrain, MaterialResult, PackingResult, SheetLayout } from '../../engine/types'
+import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
 import { boardLabel, clearLegacyCut, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { SavingHints } from '../components/SavingHints'
@@ -30,7 +31,6 @@ import { Segmented } from '../components/Segmented'
 import { SheetChecklist } from '../components/SheetChecklist'
 import { SheetDiagram } from '../components/SheetDiagram'
 import { SheetSizePicker } from '../components/SheetSizePicker'
-import { StockEditor } from '../components/StockEditor'
 import { StockShortageNotice } from '../components/StockShortageNotice'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
@@ -70,7 +70,9 @@ interface Section {
   sheets: SheetEntry[]
   /** 切り終わった1枚（通常の一覧には出さない） */
   finished: SheetEntry[]
-  /** 手持ちで木取りする材料（組なら a・b のどちらか）。1枚ごとに大きさを添え、まとめはサイズ別の枚数 */
+  /** その行のサイズの設定（材料の行は材料、組の行は stackChoice）。材料が仕事に無ければ null */
+  choice: SheetChoice | null
+  /** その行の手持ちで木取りする（第2.3版：組は組の行の設定）。1枚ごとに大きさを添え、まとめはサイズ別の枚数 */
   stocked: boolean
 }
 
@@ -147,10 +149,6 @@ export function KidoriScreen() {
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
-  // 手持ちの段に出す材料：木取りする片のある材料（組だけで使う材料を含む）と、手持ちで木取りにしている材料
-  const stockBoards = orderedBoards(job).filter(
-    (b) => b.stockOn === true || result.materials.some((m) => (m.stack ? m.stack.boardIds.includes(b.id) : m.boardId === b.id)),
-  )
 
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
   // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
@@ -169,6 +167,8 @@ export function KidoriScreen() {
     const pair = summary.stack?.boardIds ?? null
     const board = boardOf(pair ? pair[0] : boardId)
     const m = resultOf(boardId)
+    // 組の行は組の設定（第2.3版。1つ目の材料の設定ではない）
+    const choice: SheetChoice | null = pair ? (board && boardOf(pair[1]) ? stackChoice(job, pair) : null) : board
     const mine = views.filter((v) =>
       pair
         ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === boardId
@@ -203,10 +203,8 @@ export function KidoriScreen() {
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
         finished: mine.filter((v) => v.complete).map(frozenEntry),
-        stocked: (pair ?? [boardId]).some((id) => {
-          const b = boardOf(id)
-          return b !== null && usesStock(b)
-        }),
+        choice,
+        stocked: choice !== null && usesStock(choice),
       },
     ]
   })
@@ -271,25 +269,15 @@ export function KidoriScreen() {
                 mode={sec.mode}
                 m={resultOf(sec.boardId)}
                 auto={s.cutMode === 'auto'}
-                board={boardOf(sec.stack ? sec.stack[0] : sec.boardId)}
+                target={sec.stack ?? sec.boardId}
+                choice={sec.choice}
+                usage={usage.find((u) => u.boardId === sec.boardId) ?? null}
                 comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
                 bySize={sec.stocked ? (sizeCounts.find((c) => c.boardId === sec.boardId)?.bySize ?? []) : null}
               />
             ))}
           </ul>
         </div>
-      )}
-
-      {stockBoards.length > 0 && (
-        <section aria-label="手持ちの材料" className="stk">
-          <h3>
-            <Help title="手持ちの材料">
-              材料ごとに、サイズを1つ選ぶかわりに、手元にある材料（例：4×8 ×3枚、3×6 ×2枚）を登録して、その範囲で木取りできます。
-              大きい部材から順に、それが収まる一番小さい材料を選んで並べます。「サイズを選ぶ」に戻しても、登録した手持ちは残ります。
-            </Help>
-          </h3>
-          <StockEditor boards={stockBoards} usage={usage} />
-        </section>
       )}
 
       {unplaced.length > 0 && (
@@ -421,13 +409,17 @@ interface MaterialRowProps {
   /** 計算した結果（固定した1枚しか無い材料は null のことがある） */
   m: MaterialResult | null
   auto: boolean
-  board: Board | null
+  /** 操作する行（材料の id、組なら2つの材料の id） */
+  target: string | [string, string]
+  /** その行のサイズの設定（材料が仕事に無ければ null。サイズの選択を出さない） */
+  choice: SheetChoice | null
+  usage: StockUsage | null
   comparison: MaterialSizeComparison | null
   /** 手持ちで木取りする材料（組）なら、サイズ別の枚数（サイズの選択のかわりに出す） */
   bySize: SizeCount[] | null
 }
 
-function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison, bySize }: MaterialRowProps) {
+function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usage, comparison, bySize }: MaterialRowProps) {
   const n = summary.sheetCount
   return (
     <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
@@ -448,14 +440,13 @@ function MaterialRow({ label, summary, stack, mode, m, auto, board, comparison, 
           {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
         </div>
       )}
-      {bySize ? (
-        bySize.length > 0 && (
-          <div className="kd-mat-mode num">
-            手持ち：<b>{bySize.map((c) => `${c.label} ×${c.count}`).join('・')}</b>
-          </div>
-        )
-      ) : (
-        board && m && <SheetSizePicker board={board} boardIds={stack} label={label} compare={comparison} current={m} />
+      {bySize && bySize.length > 0 && (
+        <div className="kd-mat-mode num">
+          手持ち：<b>{bySize.map((c) => `${c.label} ×${c.count}`).join('・')}</b>
+        </div>
+      )}
+      {choice && (
+        <SheetSizePicker target={target} choice={choice} label={label} compare={comparison} current={m} usage={usage} />
       )}
     </li>
   )
