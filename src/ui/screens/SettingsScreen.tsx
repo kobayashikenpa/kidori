@@ -107,6 +107,16 @@ export function SettingsScreen() {
           saveTheme(v)
         }}
       />
+
+      <h3>使い方</h3>
+      <a
+        className="btn"
+        href="https://github.com/kobayashikenpa/kidori/blob/main/docs/manual.md"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        取扱説明書を開く
+      </a>
     </section>
   )
 }
