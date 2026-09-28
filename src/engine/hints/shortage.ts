@@ -1,19 +1,23 @@
 // 手持ちが足りないときの解決策（第2.2版。architecture.md 14.8）。
-// 手持ちで木取りする材料で、入らない片（noStock）がある材料ごとに、
+// 手持ちで木取りする行（材料の行・重ね切りの組の行。第2.3版）で、入らない片（noStock）がある行ごとに、
 // 3×6・4×8 を何枚足せば入るか、切り代 → 端切りを小さくすれば今の手持ちで入るかを知らせる。仕事のデータは書き換えない
 import { computeDimensions } from '../dimensions'
 import { packJob } from '../packing'
 import { expandPieces, orientationsFor, type PieceShape } from '../packing/pieces'
-import { usesStock } from '../packing/stock'
+import { stackLabel } from '../packing/stack'
+import { samePair, usesStock } from '../packing/stock'
 import { round1 } from '../round'
-import { BOARD_SIZES, type DimensionResult, type Job, type PackingResult } from '../types'
+import { BOARD_SIZES, type DimensionResult, type Job, type PackingResult, type StockSheet } from '../types'
 import { smallerSteps } from './saving'
 
 export type AddKind = 'saburoku' | 'shihachi'
 
 export interface StockShortage {
+  /** 材料の id。重ね切りの組の行（第2.3版）は stackKey(a, b) */
   boardId: string
-  /** 「シナランバー 18mm」 */
+  /** 重ね切りの組の行（第2.3版）なら、組の2つの材料（足すときは組の行に足す） */
+  stack?: { boardIds: [string, string] }
+  /** 「シナランバー 18mm」。組の行は「メラミン1＋ラワン4（重ね切り）」 */
   label: string
   /** 入らない部材の名前（部材の並び） */
   missing: string[]
@@ -21,20 +25,15 @@ export interface StockShortage {
   add: { kind: AddKind; count: number | null }[]
   /** 今の手持ちのままで入る設定（一番大きい値）。無ければ null */
   change: { kind: 'allowance' | 'trim'; value: number } | null
-  /** 「シナランバー 18mm が足りません（入らない部材：棚板）」 */
+  /** 「シナランバー 18mm が足りません（入らない部材：棚板）」「メラミン1＋ラワン4（重ね切り）が足りません（入らない部材：棚板）」 */
   message: string
 }
 
 const ADD_KINDS: AddKind[] = ['saburoku', 'shihachi']
 
-/** その材料のふつうの結果に、手持ちが足りない片があるか */
+/** その行（材料のふつうの結果、または組の結果。boardId は材料の id か stackKey）に、手持ちが足りない片があるか */
 function short(r: PackingResult, boardId: string): boolean {
-  return r.materials.some((m) => !m.stack && m.boardId === boardId && m.unplaced.some((u) => u.reason === 'noStock'))
-}
-
-/** 手持ちが足りない材料の id（材料の保存の並び） */
-function shortBoardIds(job: Job, r: PackingResult): string[] {
-  return job.boards.filter((b) => usesStock(b) && short(r, b.id)).map((b) => b.id)
+  return r.materials.some((m) => m.boardId === boardId && m.unplaced.some((u) => u.reason === 'noStock'))
 }
 
 interface Target {
@@ -47,11 +46,11 @@ interface Target {
 
 /** 入らない片：部材ごとに（木取りする片の数 − 置けた片の数） */
 function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId: string): Target {
-  const m = base.materials.find((x) => !x.stack && x.boardId === boardId)!
+  const m = base.materials.find((x) => x.boardId === boardId)!
   const partIds = new Set(m.unplaced.filter((u) => u.reason === 'noStock').map((u) => u.partId))
   const expected = new Map<string, { n: number; shape?: PieceShape }>()
   for (const g of expandPieces(job, dims).groups) {
-    if (g.board.id !== boardId && !g.stack?.boardIds.includes(boardId)) continue
+    if ((g.stack?.key ?? g.board.id) !== boardId) continue
     for (const p of g.pieces) {
       if (!partIds.has(p.partId)) continue
       const e = expected.get(p.partId) ?? { n: 0, shape: p.shape }
@@ -60,7 +59,7 @@ function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId:
     }
   }
   for (const r of base.materials) {
-    if (r.boardId !== boardId && !r.stack?.boardIds.includes(boardId)) continue
+    if (r.boardId !== boardId) continue
     for (const s of r.sheets) {
       for (const p of s.placements) {
         const e = expected.get(p.partId)
@@ -83,36 +82,39 @@ function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId:
   return { boardId, missing, count: Math.max(1, count), shapes }
 }
 
-/** 足りない材料すべてに、kind を n 枚の行を足した写し（id は重ならないもの） */
-function withAdded(job: Job, boardIds: readonly string[], kind: AddKind, n: number): Job {
+/** 足りない行すべて（材料の行・組の行）に、kind を n 枚の行を足した写し（id は重ならないもの） */
+function withAdded(job: Job, ids: readonly string[], pairs: readonly (readonly [string, string])[], kind: AddKind, n: number): Job {
   const [width, length] = BOARD_SIZES[kind]
+  const row: StockSheet = { id: `shortage-${kind}`, sizeKind: kind, width, length, grain: 'long', count: n }
   return {
     ...job,
-    boards: job.boards.map((b) =>
-      boardIds.includes(b.id)
-        ? { ...b, stock: [...(b.stock ?? []), { id: `shortage-${kind}`, sizeKind: kind, width, length, grain: 'long' as const, count: n }] }
-        : b,
-    ),
+    boards: job.boards.map((b) => (ids.includes(b.id) ? { ...b, stock: [...(b.stock ?? []), row] } : b)),
+    stackSheets: job.stackSheets.map((s) => (pairs.some((p) => samePair(p, s.boardIds)) ? { ...s, stock: [...(s.stock ?? []), row] } : s)),
   }
 }
 
 /**
- * 手持ちが足りないときの解決策（仕様書 9「手持ちの材料」）。対象は stockOn の材料で、ふつうの結果に noStock の片がある材料（保存の並び）。
- * 足りない材料が無ければ packJob を追加で呼ばずに []（base を渡せば1回も呼ばない）。
+ * 手持ちが足りないときの解決策（仕様書 9「手持ちの材料」）。対象は stockOn の行（材料の行・重ね切りの組の行。第2.3版）で、
+ * その結果に noStock の片がある行（まとめの並び＝材料の保存の並び、組は a の材料の直後）。
+ * 足りない行が無ければ packJob を追加で呼ばずに []（base を渡せば1回も呼ばない）。
  * - 足す枚数：3×6・4×8（木目 長手方向）それぞれ、足りない材料すべてに同じ n 枚の行を足して packJob し、
  *   その材料の noStock が無くなった一番小さい n。1, 2, 4, … と倍にして入る n を見つけてから、その手前との間を半分ずつ狭める
  *   （計算の回数を減らすため。上限は入らない片の数で、それで入らなければ null）。
  *   入らない片のうち1つでもそのサイズに入らない材料は試さずに null
- *   注意：ここでは足りない材料すべてに同時に n 枚足して試すが、画面（StockShortageNotice）は押した材料1つにだけ足す。
- *   材料どうしは重ね切りの組でなければ別々に木取りするので結果は変わらない（テストした場合では同じになることを確かめた）
+ *   注意：ここでは足りない行すべてに同時に n 枚足して試すが、画面（StockShortageNotice）は押した行1つにだけ足す。
+ *   第2.3版から材料の行と組の行は手持ちを分け合わないので、行ごとに別々に木取りし、結果は変わらない
  * - 設定の変更：お知らせ（findSavingHints）と同じ試し方。切り代（設定の切り代を使う部材があるとき）を大きい値から、
  *   切り代で入らなかった材料だけ端切り。その材料の noStock が無くなる一番大きい値。組み合わせは試さない
  */
 export function stockShortage(job: Job, dims: DimensionResult, base?: PackingResult): StockShortage[] {
-  if (!job.boards.some((b) => usesStock(b))) return []
+  if (!job.boards.some((b) => usesStock(b)) && !(job.stackSheets ?? []).some((s) => usesStock(s))) return []
   const r0 = base ?? packJob(job, dims)
-  const ids = shortBoardIds(job, r0)
+  // 手持ちの行だけが noStock を出す（サイズを選んだ行は tooLarge）
+  const shortRows = r0.materials.filter((m) => short(r0, m.boardId))
+  const ids = shortRows.map((m) => m.boardId)
   if (ids.length === 0) return []
+  const boardIds = shortRows.filter((m) => !m.stack).map((m) => m.boardId)
+  const pairs = shortRows.flatMap((m) => (m.stack ? [m.stack.boardIds] : []))
 
   const { trim, cutMode } = job.settings
   const fitMode = cutMode === 'horizontal' ? 'horizontal' : 'vertical'
@@ -133,7 +135,7 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
     const trial = (n: number) => {
       let r = memo.get(n)
       if (!r) {
-        r = packJob(withAdded(job, ids, kind, n), dims)
+        r = packJob(withAdded(job, boardIds, pairs, kind, n), dims)
         memo.set(n, r)
       }
       return r
@@ -175,15 +177,26 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
   tryKind('trim', smallerSteps(trim))
 
   return targets.map((t): StockShortage => {
-    const board = job.boards.find((b) => b.id === t.boardId)!
-    const label = `${board.material} ${round1(board.thickness)}mm`
-    return {
+    const stack = shortRows.find((m) => m.boardId === t.boardId)?.stack
+    let label: string
+    let message: string
+    if (stack) {
+      label = stackLabel(job, stack.boardIds)
+      message = `${label}が足りません（入らない部材：${t.missing.join('、')}）`
+    } else {
+      const board = job.boards.find((b) => b.id === t.boardId)!
+      label = `${board.material} ${round1(board.thickness)}mm`
+      message = `${label} が足りません（入らない部材：${t.missing.join('、')}）`
+    }
+    const out: StockShortage = {
       boardId: t.boardId,
       label,
       missing: t.missing,
       add: ADD_KINDS.map((kind) => ({ kind, count: adds.get(t.boardId)!.get(kind) ?? null })),
       change: changes.get(t.boardId) ?? null,
-      message: `${label} が足りません（入らない部材：${t.missing.join('、')}）`,
+      message,
     }
+    if (stack) out.stack = { boardIds: [stack.boardIds[0], stack.boardIds[1]] }
+    return out
   })
 }

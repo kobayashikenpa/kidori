@@ -98,13 +98,12 @@ describe('stockShortage（手持ちが足りないときの解決策）', () => 
     expect(run(withStock(sampleFlushJob(true), LAUAN_4_ID, [['3×6', 1]]))).toEqual([])
   })
 
-  it('材料を減らせるときのお知らせは、手持ちが足りない材料（とその材料の入る組）に出さない', () => {
+  it('材料を減らせるときのお知らせは、手持ちが足りない材料に出さない（組は組の手持ちなので別。第2.3版）', () => {
     // 端切りを小さくすると3枚 → 2枚になる仕事でも、手持ちが足りなければお知らせは出ない
     const job = lumberStock([['3×6', 2]])
     expect(findSavingHints(job).filter((h) => h.materials.some((m) => m.boardId === LUMBER_18_ID))).toEqual([])
     const stacked = withStock(sampleFlushJob(true), LAUAN_4_ID, [{ width: 600, length: 1200, grain: 'long', count: 5 }])
     expect(findSavingHints(stacked).flatMap((h) => h.materials.map((m) => m.boardId))).not.toContain(LAUAN_4_ID)
-    expect(findSavingHints(stacked).flatMap((h) => h.materials.map((m) => m.boardId)).some((id) => id.includes(LAUAN_4_ID))).toBe(false)
   })
 
   it('部材150枚で 1秒以内', () => {

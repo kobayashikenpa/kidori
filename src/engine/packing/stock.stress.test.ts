@@ -127,7 +127,7 @@ function randomJob(r: Rng, pieces: [number, number] = [4, 30]): Job {
 // ---------- 確かめ ----------
 
 /** 確かめた数（でたらめな仕事で本当に確かめられているか） */
-const seen = { sheets: 0, noStock: 0, adds: 0, changes: 0, mixedSizes: 0, stackStock: 0, stackNoStock: 0 }
+const seen = { sheets: 0, noStock: 0, adds: 0, changes: 0, mixedSizes: 0, stackStock: 0, stackNoStock: 0, stackShortages: 0 }
 
 /** 片の集まりが、端から端までの一直線の切断をくり返して切り分けられるか（ギロチン） */
 function guillotine(rects: readonly Rect[]): boolean {
@@ -264,23 +264,25 @@ function checkNoStock(job: Job, m: PackingResult['materials'][number] | undefine
 }
 
 function short(r: PackingResult, boardId: string): boolean {
-  return r.materials.some((m) => !m.stack && m.boardId === boardId && m.unplaced.some((u) => u.reason === 'noStock'))
+  return r.materials.some((m) => m.boardId === boardId && m.unplaced.some((u) => u.reason === 'noStock'))
 }
 
 function checkShortage(job: Job) {
   const dims = computeDimensions(job)
   const list = stockShortage(job, dims)
-  const ids = list.map((s) => s.boardId)
+  const r0 = packJob(job, dims)
+  // 足りない行（材料の行・組の行）はすべて知らせる
+  expect(list.map((s) => s.boardId)).toEqual(r0.materials.filter((m) => short(r0, m.boardId)).map((m) => m.boardId))
   for (const s of list) {
+    if (s.stack) seen.stackShortages++
     for (const a of s.add) {
       if (a.count === null) continue
       const [width, length] = BOARD_SIZES[a.kind]
-      const added: Job = {
-        ...job,
-        boards: job.boards.map((b) =>
-          ids.includes(b.id) ? { ...b, stock: [...(b.stock ?? []), { id: 'added', sizeKind: a.kind, width, length, grain: 'long' as const, count: a.count! }] } : b,
-        ),
-      }
+      const row = { id: 'added', sizeKind: a.kind, width, length, grain: 'long' as const, count: a.count }
+      // 画面と同じく、押した行1つにだけ足す（第2.3版：組の行は stackSheets に）
+      const added: Job = s.stack
+        ? { ...job, stackSheets: job.stackSheets.map((x) => (samePair(x.boardIds, s.stack!.boardIds) ? { ...x, stock: [...(x.stock ?? []), row] } : x)) }
+        : { ...job, boards: job.boards.map((b) => (b.id === s.boardId ? { ...b, stock: [...(b.stock ?? []), row] } : b)) }
       expect(short(packJob(added, dims), s.boardId)).toBe(false)
       seen.adds++
     }
@@ -339,6 +341,7 @@ describe('手持ちの材料：でたらめな仕事での確かめ', () => {
     expect(seen.mixedSizes).toBeGreaterThan(5)
     expect(seen.stackStock).toBeGreaterThan(5)
     expect(seen.stackNoStock).toBeGreaterThan(3)
+    expect(seen.stackShortages).toBeGreaterThan(3)
   })
 
   it('部材150枚（手持ち・重ね切りあり）で packJob が 1秒以内', () => {
