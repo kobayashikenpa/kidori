@@ -3,12 +3,16 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
-import { canStack, stackKey } from '../engine/packing/stack'
+import { canStack, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { stackChoice, usesStock } from '../engine/packing/stock'
 import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
 import { defaultSettings } from '../engine/defaults'
 import { setPieceCheck, type OpResult } from './jobs'
+import { sanitizeJobs } from './storage'
+import golden from './fixtures/v22StackGolden.json'
+import { round1 } from '../engine/round'
+import type { PackingResult } from '../engine/types'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 
@@ -33,7 +37,8 @@ const SIZES: Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'>[] = [
   { sizeKind: 'custom', width: 910, length: 1820, grain: 'short' },
 ]
 
-function randomJob(r: Rand, seed: number, bigger = false): Job {
+/** legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる） */
+function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   const boards: Board[] = [
     ['メラミン', 1],
     ['ラワン', 2.5],
@@ -77,7 +82,7 @@ function randomJob(r: Rand, seed: number, bigger = false): Job {
   }
   // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
   const stackSheets: StackSheet[] = []
-  for (const f of flushes) {
+  for (const f of legacy ? [] : flushes) {
     if (!canStack(f) || r() < 0.3) continue
     const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
     if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
@@ -288,4 +293,64 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       expect(performance.now() - t).toBeLessThan(2000)
     }
   })
+
+  it('第2.2版のデータの移し替え：今まで重ねていた組は配置が変わらない。重ねていなかった組は a のサイズで重ねる', () => {
+    // v22StackGolden.json は第2.2版（コミット dc8e29d）の packJob の結果の要約（legacy の乱数の仕事 150 件）
+    const table = golden as Record<string, string[]>
+    let unchanged = 0
+    let changed = 0
+    for (let seed = 1; seed <= 150; seed++) {
+      const legacyJob = randomJob(rng(seed), seed, false, true)
+      const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
+      delete raw.stackSheets
+      const { jobs, fixes } = sanitizeJobs([raw])
+      expect(fixes).toBe(0)
+      const job = jobs[0]
+      const groups = stackPlan(job).groups
+      // 組の行は組ごとに1つ、サイズは a の材料のサイズ
+      expect(job.stackSheets.map((x) => x.boardIds)).toEqual(groups.map((g) => g.boardIds))
+      for (const x of job.stackSheets) {
+        const a = job.boards.find((b) => b.id === x.boardIds[0])!
+        expect([x.sizeKind, x.width, x.length, x.grain]).toEqual([a.sizeKind, a.width, a.length, a.grain])
+      }
+      const r = checkJob(job)
+      const sameSize = groups.every((g) => {
+        const [a, b] = g.boardIds.map((id) => job.boards.find((x) => x.id === id)!)
+        return round1(a.width) === round1(b.width) && round1(a.length) === round1(b.length) && a.grain === b.grain
+      })
+      if (sameSize) {
+        // 今まで重ねていた（またはどの組もない）仕事は、配置がまったく同じ
+        expect(digest(r), `seed ${seed}`).toEqual(table[`s${seed}`])
+        unchanged++
+      } else {
+        // 今まで重ねていなかった組（サイズがそろわない）も組として並ぶ（第2.3版の変更）
+        const keys = new Set(r.materials.filter((m) => m.stack).map((m) => m.boardId))
+        const before = new Set(table[`s${seed}`].map((d) => d.split('|')[0]))
+        expect([...keys].some((k) => !before.has(k)) || keys.size === 0).toBe(true)
+        changed++
+      }
+    }
+    expect(unchanged).toBeGreaterThan(50)
+    expect(changed).toBeGreaterThan(3)
+  })
 })
+
+/** 結果の要約（第2.2版の結果と比べる。v22StackGolden.json は第2.2版のコードでこの関数と同じ作り方で作った） */
+function digest(r: PackingResult): string[] {
+  const fnv = (s: string) => {
+    let h = 0x811c9dc5
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i)
+      h = Math.imul(h, 0x01000193) >>> 0
+    }
+    return h.toString(36)
+  }
+  return r.materials.map((m) => {
+    const body = JSON.stringify([
+      m.mode,
+      m.sheets.map((s) => [s.boardWidth, s.boardLength, s.sheet?.stockId ?? null, s.placements.map((p) => [p.pieceId, round1(p.x), round1(p.y), round1(p.w), round1(p.h)])]),
+      m.unplaced,
+    ])
+    return `${m.boardId}|${m.sheetCount}|${fnv(body)}`
+  })
+}

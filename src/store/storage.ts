@@ -2,6 +2,8 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
+import { stackPlan } from '../engine/packing/stack'
+import { commonStock, samePair, stockKinds, usesStock } from '../engine/packing/stock'
 import { canStack } from '../engine/packing/stack'
 import { eq1 } from '../engine/round'
 import {
@@ -250,6 +252,73 @@ function sanitizeStock(v: Record<string, unknown>, fx: Fixes): Pick<Board, 'stoc
   }
   if (out.stock && out.stock.length === 0) delete out.stock
   return out
+}
+
+/** 読めた大きさ（sanitizeBoard と同じ検査）。読めなければ null */
+function sanitizeSize(v: Record<string, unknown>, fx: Fixes): Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'> | null {
+  if (!isPositive(v.width) || !isPositive(v.length)) return null
+  return {
+    sizeKind: pick(v.sizeKind, (x): x is BoardSizeKind => SIZE_KINDS.includes(x as BoardSizeKind), 'custom', fx),
+    width: v.width > v.length ? (fx.count++, v.length) : v.width,
+    length: Math.max(v.width, v.length),
+    grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
+  }
+}
+
+/**
+ * 重ね切りの組の設定（第2.3版。architecture.md 15.6）。配列でなければ []。
+ * 行ごとに、boardIds が仕事にある違う2つの材料で、同じ組（並びを問わず）の行が前に無いこと、大きさが読めること、でなければ外す。
+ * 大きさ・手持ちは材料と同じ検査・修復（sanitizeBoard・sanitizeStock）。どれも直した数に数える
+ */
+function sanitizeStackSheets(v: unknown, boards: readonly Board[], fx: Fixes): StackSheet[] {
+  if (!Array.isArray(v)) {
+    fx.count++
+    return []
+  }
+  const ids = new Set(boards.map((b) => b.id))
+  const out: StackSheet[] = []
+  for (const x of v) {
+    const pair = isRecord(x) && Array.isArray(x.boardIds) && x.boardIds.length === 2 ? (x.boardIds as unknown[]) : null
+    const ok =
+      pair !== null &&
+      pair.every((id) => typeof id === 'string' && ids.has(id)) &&
+      pair[0] !== pair[1] &&
+      !out.some((s) => samePair(s.boardIds, pair as [string, string]))
+    const size = ok ? sanitizeSize(x as Record<string, unknown>, fx) : null
+    if (!ok || !size) {
+      fx.count++
+      continue
+    }
+    out.push({ boardIds: [pair[0] as string, pair[1] as string], ...size, ...sanitizeStock(x as Record<string, unknown>, fx) })
+  }
+  return out
+}
+
+/**
+ * 第2.2版までのデータ（stackSheets が無い）の移し替え（architecture.md 15.6）。重ね切りの組（stackPlan）ごとに1行：
+ * サイズは a の材料の今のサイズ（今まで重ねていた組は a・b が同じサイズ。そろっていなかった組も a のサイズで重ねるようになる）。
+ * a か b が手持ちなら、そろう手持ちの行（枚数の少ないほう。commonStock のうち枚数が決まっている行）を組の手持ちにする。
+ * 材料の手持ちはそのまま（組の分を引かない。未決事項 43）。壊れていたわけではないので直した数に数えない
+ */
+function migrateStackSheets(boards: Board[], flushes: Flush[]): StackSheet[] {
+  const byId = new Map(boards.map((b) => [b.id, b]))
+  return stackPlan({ boards, flushes }).groups.map((g): StackSheet => {
+    const a = byId.get(g.boardIds[0])!
+    const b = byId.get(g.boardIds[1])!
+    const row: StackSheet = { boardIds: [a.id, b.id], sizeKind: a.sizeKind, width: a.width, length: a.length, grain: a.grain }
+    if (usesStock(a) || usesStock(b)) {
+      const stock: StockSheet[] = []
+      for (const k of commonStock(stockKinds(a), stockKinds(b))) {
+        if (!Number.isFinite(k.count) || k.stockId === null || stock.some((s) => s.id === k.stockId)) continue
+        stock.push({ id: k.stockId, sizeKind: k.sizeKind, width: k.width, length: k.length, grain: k.grain, count: k.count })
+      }
+      if (stock.length > 0) {
+        row.stockOn = true
+        row.stock = stock
+      }
+    }
+    return row
+  })
 }
 
 const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
@@ -563,7 +632,8 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     flushes,
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
-    stackSheets: Array.isArray(v.stackSheets) ? (v.stackSheets as StackSheet[]) : [],
+    // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える
+    stackSheets: v.stackSheets === undefined ? migrateStackSheets(boards, flushes) : sanitizeStackSheets(v.stackSheets, boards, fx),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }
