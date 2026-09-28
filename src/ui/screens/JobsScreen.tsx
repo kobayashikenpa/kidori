@@ -3,8 +3,10 @@ import { useState, type FormEvent } from 'react'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
 import { sampleFromTemplate } from '../../store/sample'
+import { buildShareFile, shareFileName } from '../../store/transfer/share'
 import { useJobStore } from '../../store/useJobStore'
 import { Help } from '../components/Help'
+import { shareFile, shareResultMessage } from '../platform/shareSheet'
 
 /** 更新日の表示（例：2026/9/25 14:05）。読めない日時なら空 */
 function formatDate(iso: string): string {
@@ -31,6 +33,8 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
   const [renameText, setRenameText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 送る・取り込むで失敗したときの知らせ（一覧の上に出す） */
+  const [failure, setFailure] = useState<string | null>(null)
 
   const jobs = [...state.jobs].sort(byUpdatedDesc)
 
@@ -38,6 +42,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
     setMode(null)
     setError(null)
     setNotice(null)
+    setFailure(null)
   }
 
   const open = (id: string) => {
@@ -84,6 +89,23 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
     )
     addJob(c, false)
     setNotice(`「${c.name}」を作りました。一番上に出ています`)
+  }
+
+  /** この仕事を送る。共有シートを開けるよう、ファイルは押した操作の中で同期に作る */
+  const send = (job: Job) => {
+    reset()
+    let file: File
+    try {
+      file = new File([buildShareFile(job, new Date())], shareFileName(job), { type: 'application/json' })
+    } catch {
+      setFailure('ファイルを作れませんでした')
+      return
+    }
+    void shareFile(file, job.name).then((r) => {
+      const m = shareResultMessage(r)
+      if (r === 'saved') setNotice(m)
+      else if (m) setFailure(m)
+    })
   }
 
   const remove = (job: Job) => {
@@ -138,6 +160,11 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       )}
 
       {notice && <p className="msg ok banner">{notice}</p>}
+      {failure && (
+        <p className="msg err banner" role="alert">
+          {failure}
+        </p>
+      )}
 
       <h3>保存した仕事（{jobs.length}件）</h3>
       {jobs.length === 0 && (
@@ -230,6 +257,9 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
                       削除
                     </button>
                   </div>
+                  <button type="button" className="btn wide" onClick={() => send(job)}>
+                    この仕事を送る
+                  </button>
                 </>
               )}
             </div>

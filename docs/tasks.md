@@ -1023,7 +1023,7 @@
 
 ### 画面（ui）
 
-### [ ] U-70 仕事の画面：この仕事を送る
+### [x] U-70 仕事の画面：この仕事を送る
 - 担当：ui-dev ／ 依存：S-26 ／ 仕様書：10.5（共有）・9.1
 - やること：`platform/shareSheet.ts` の `shareFile(file)`（`canShare({ files })` なら `navigator.share({ files, title })`、`AbortError` は何も出さない、できなければ `<a download>` で保存して「ファイルを保存しました。LINE などからこのファイルを送ってください」）。仕事の一覧の各仕事に「この仕事を送る」。押したら同期で `buildShareFile` の JSON を `File`（`shareFileName`・`application/json`）にして `shareFile`（16.4）
 - 完了の条件：iPhone の Safari とホーム画面のアプリで、見本の「この仕事を送る」から共有シートが開き、LINE・メール・AirDrop・「ファイル」に保存を選べ、`本棚W900.kidori.json` が送れる。閉じても何も出ない。PC ではダウンロードされて知らせが出る。Android の Chrome で共有シートが開くか・保存になるかを確かめて報告する（16.4 の注意）。幅 375px で横にはみ出さない、押せる所は 44px 以上
