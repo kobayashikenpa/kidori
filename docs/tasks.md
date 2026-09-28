@@ -1011,7 +1011,7 @@
 - やること：`transfer/envelope.ts`（`{ app: 'kidori', kind: 'share'|'backup', version: 1, dataVersion, exportedAt }` と検査）と `transfer/read.ts` の `readTransferFile(text)`：JSON → 外側の検査 → `kind` で分ける → `sanitizeJobs`。共有は `{ ok, kind: 'share', job, summary, notice }`（`shareSummary`：部材の行の数・枚数の合計）、バックアップは `{ ok, kind: 'backup', jobs, template, notice }`（`template` は `loadTemplate` と同じ検査、だめなら `null`）。20MB 超は読まない。例外を投げない。`transfer/fixtures/` に `version: 1` の共有・バックアップのファイルを手で書いて置く（16.2・16.4・16.5）
 - 完了の条件：見本を入れた共有のファイルの summary が「部材 5種類・9枚」。空の文字列・JSON でない・途中で切れた JSON・`app` が違う・`kind` が知らない値・`job`／`jobs` の形が違う・仕事が1つも読めない・仕事が0件のバックアップ は `ok: false`「読み込めませんでした」、`version: 99` は「新しい版」の文言。`dataVersion: 1` の部材ごとの逃げがある仕事・`stackSheets` の無い仕事は今の読み込みと同じに移し替わる（一部直したときは `notice` あり）。fixtures の2つが読める
 
-### [~] S-26 共有のファイル（buildShareFile・shareFileName・importShared）
+### [x] S-26 共有のファイル（buildShareFile・shareFileName・importShared）
 - 担当：engine-dev ／ 依存：E-65・S-24・S-25 ／ 仕様書：10.5（共有）
 - やること：`transfer/share.ts`：`buildShareFile(job, now)`（使っている材料・フラッシュ・逃げ・組の行だけ、固定した1枚なし、チェックは全部 false・`cutByBoard` なし、メモ・手持ちはそのまま）、`shareFileName(job)`（空白とファイル名に使えない文字を除いて `.kidori.json`、空なら `kidori-仕事.kidori.json`、50 文字まで）、`importShared(job, existingNames, now)`（`rekeyJob(…, { frozen: false })`・同じ名前なら `copyName`・日付は取り込んだ時刻）（16.4）
 - 完了の条件：見本の `readTransferFile(buildShareFile(見本))` → `importShared` の仕事の寸法表と木取り（組 5枚 85.2% など、見本で期待する値）が元と同じで、id は全部元と違う。固定した1枚・チェック・`cutByBoard` は無い。初期の ラワン2.5・5.5・逃げ0.5 は入らない。「本棚 W900」→ `本棚W900.kidori.json`、`a/b:c` → `abc.kidori.json`、空白だけ → `kidori-仕事.kidori.json`。同じ名前があると「本棚 W900 のコピー」。見本・部材 50 のファイルの大きさをテストで出して architecture.md 16.4 の目安を直す
