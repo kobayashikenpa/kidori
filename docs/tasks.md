@@ -1001,7 +1001,7 @@
 
 ### 保存と操作（store）
 
-### [~] S-24 id のつけ替え（rekeyJob）と、copyJob の置き換え
+### [x] S-24 id のつけ替え（rekeyJob）と、copyJob の置き換え
 - 担当：engine-dev ／ 依存：E-65 ／ 仕様書：10・10.5
 - やること：`jobs.ts` に `rekeyJob(job, ids, { frozen })`（材料・フラッシュ・部材・逃げの id を新しくし、参照をすべてつけ替える。`frozen: true` なら固定した1枚の `boardId`・`stackWith.boardId`・`placements` の `partId`／`pieceId`・`checked` もつけ替える）。`copyJob` は `rekeyJob(…, { frozen: false })` を使う（16.3）。`reducer.ts` に `addJobs`（いくつかを1回で足す。`open` で最後の1つを開く）
 - 完了の条件：今の `copyJob` のテストがそのまま通る。見本のコピーで逃げの id も新しくなり、寸法表・木取りの結果が同じ。重ね切りの組の1枚と ラワン 4 の1枚をチェックした見本を `frozen: true` でつけ替えると、`frozenSheetViews` のチェック数・「部材が変わっています」が無いこと・`frozenDemand` の数が元と同じで、元の仕事は書き換わらない。`addJobs` で2つ足すと state の変更は1回

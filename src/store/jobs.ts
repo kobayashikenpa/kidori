@@ -10,7 +10,7 @@ import {
   partsUsingBoardThicknesses,
   partsUsingNige,
   partsUsingNiges,
-  remapBoardIds,
+  remapRefIds,
 } from '../engine/formula/usages'
 import { normalizePartName, validatePartName } from '../engine/formula/tokenize'
 import { freezeSheet } from '../engine/progress/frozen'
@@ -21,6 +21,7 @@ import {
   type Board,
   type BoardSizeKind,
   type Flush,
+  type FrozenSheet,
   type Job,
   type Nige,
   type Part,
@@ -116,10 +117,106 @@ export function copyName(name: string, existingNames: readonly string[]): string
   }
 }
 
+/** rekeyJob に渡す id：仕事の id と、材料・フラッシュ・部材・逃げの新しい id を作る関数 */
+export interface RekeyIds {
+  job: string
+  next: (prefix: 'board' | 'flush' | 'part' | 'nige') => string
+}
+
 /**
- * 仕事をコピーする（似た家具を作るとき用）。仕事・板・部材の id は新しくし、部材が使う板は新しい板の id につけ替える。
- * 式の部材の参照は名前なのでそのまま。材料の厚み {t:…} は新しい板（フラッシュ）の id につけ替える。逃げの id は設定ごと写すのでそのまま。
- * フラッシュの id・表面材・部材の flushId・表面材ごとの完了もつけ替える。
+ * 仕事の id を全部新しくした写しを作る（第2.4版。architecture.md 16.3）。元の仕事は書き換えない（深いコピー）。
+ * 材料・フラッシュ・部材・逃げの id を next で作り直し、表面材・部材の boardId／flushId・式の {t:}／{n:}・
+ * cutByBoard のキー・stackSheets.boardIds をつけ替える。式の部材の参照は名前なのでそのまま。
+ * 手持ちの行・固定した1枚の id は仕事の中だけの id なのでそのまま。名前・作成日・更新日もそのまま。
+ * - frozen: false：固定した1枚は [] にする（コピー・共有の取り込み）
+ * - frozen: true：固定した1枚の boardId・stackWith.boardId・片の partId／pieceId・checked もつけ替える（バックアップの取り込み）。
+ *   表に無い id（削除された材料・部材）はそのまま残す
+ */
+export function rekeyJob(job: Job, ids: RekeyIds, opts: { frozen: boolean }): Job {
+  const boardIds = new Map<string, string>()
+  const boards = job.boards.map((b) => {
+    const nid = ids.next('board')
+    boardIds.set(b.id, nid)
+    // 手持ち（第2.2版）も写す（行は別のオブジェクトにする）
+    return b.stock ? { ...b, id: nid, stock: b.stock.map((s) => ({ ...s })) } : { ...b, id: nid }
+  })
+  const board = (id: string) => boardIds.get(id) ?? id
+  const flushIds = new Map<string, string>()
+  const flushes = job.flushes.map((f) => {
+    const nid = ids.next('flush')
+    flushIds.set(f.id, nid)
+    return { ...f, id: nid, faces: f.faces.map((x) => ({ boardId: board(x.boardId), count: x.count })) }
+  })
+  const nigeIds = new Map<string, string>()
+  const nige = job.settings.nige.map((n) => {
+    const nid = ids.next('nige')
+    nigeIds.set(n.id, nid)
+    return { ...n, id: nid }
+  })
+  // 式の {t:…} は材料とフラッシュのどちらも指す
+  const maps = { thickness: new Map([...boardIds, ...flushIds]), nige: nigeIds }
+  const partIds = new Map<string, string>()
+  const parts = job.parts.map((p) => {
+    const nid = ids.next('part')
+    partIds.set(p.id, nid)
+    const part: Part = {
+      ...p,
+      id: nid,
+      boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
+      expr: {
+        W: remapRefIds(p.expr.W, maps),
+        H: remapRefIds(p.expr.H, maps),
+        D: remapRefIds(p.expr.D, maps),
+      },
+      checks: { ...p.checks },
+    }
+    if (p.flushId !== undefined) part.flushId = flushIds.get(p.flushId) ?? p.flushId
+    const done = p.checks.cutByBoard
+    if (done) {
+      part.checks.cutByBoard = Object.fromEntries(Object.entries(done).map(([k, v]) => [board(k), v]))
+    }
+    return part
+  })
+  /** 片の id（`${partId}#n`）の部材の部分をつけ替える */
+  const piece = (pieceId: string) => {
+    const i = pieceId.lastIndexOf('#')
+    if (i < 0) return pieceId
+    const to = partIds.get(pieceId.slice(0, i))
+    return to === undefined ? pieceId : `${to}${pieceId.slice(i)}`
+  }
+  const frozenSheets: FrozenSheet[] = opts.frozen
+    ? job.frozenSheets.map((f) => {
+        const copy = JSON.parse(JSON.stringify(f)) as FrozenSheet
+        copy.boardId = board(f.boardId)
+        if (copy.stackWith) copy.stackWith.boardId = board(copy.stackWith.boardId)
+        for (const pl of copy.layout.placements) {
+          pl.partId = partIds.get(pl.partId) ?? pl.partId
+          pl.pieceId = piece(pl.pieceId)
+        }
+        copy.checked = copy.checked.map(piece)
+        return copy
+      })
+    : []
+  return {
+    ...job,
+    id: ids.job,
+    settings: { ...job.settings, nige },
+    boards,
+    flushes,
+    parts,
+    frozenSheets,
+    // 組の設定（第2.3版）は新しい材料の id につけ替え、手持ちの行も写す
+    stackSheets: job.stackSheets.map((s) => {
+      const copy: StackSheet = { ...s, boardIds: [board(s.boardIds[0]), board(s.boardIds[1])] }
+      if (s.stock) copy.stock = s.stock.map((x) => ({ ...x }))
+      return copy
+    }),
+  }
+}
+
+/**
+ * 仕事をコピーする（似た家具を作るとき用）。rekeyJob（frozen: false）で id を全部新しくし（逃げの id も新しくなる。第2.4版）、
+ * 名前を「〇〇 のコピー」、作成日・更新日を now にする。固定した1枚（切った記録）は写さない（第1.8版。未決事項 32）。
  * 元の仕事は書き換えない
  */
 export function copyJob(
@@ -129,55 +226,9 @@ export function copyJob(
   id: string = newId('job'),
 ): Job {
   const t = now.toISOString()
-  const boardIds = new Map<string, string>()
-  const boards = job.boards.map((b) => {
-    const nid = newId('board')
-    boardIds.set(b.id, nid)
-    // 手持ち（第2.2版）も写す（行は別のオブジェクトにする）
-    return b.stock ? { ...b, id: nid, stock: b.stock.map((s) => ({ ...s })) } : { ...b, id: nid }
-  })
-  const flushIds = new Map<string, string>()
-  const flushes = job.flushes.map((f) => {
-    const nid = newId('flush')
-    flushIds.set(f.id, nid)
-    return { ...f, id: nid, faces: f.faces.map((x) => ({ boardId: boardIds.get(x.boardId) ?? x.boardId, count: x.count })) }
-  })
-  // 式の {t:…} は材料とフラッシュのどちらも指す
-  const thicknessIds = new Map([...boardIds, ...flushIds])
-  const parts = job.parts.map((p) => {
-    const part: Part = {
-      ...p,
-      id: newId('part'),
-      boardId: p.boardId === null ? null : (boardIds.get(p.boardId) ?? null),
-      expr: {
-        W: remapBoardIds(p.expr.W, thicknessIds),
-        H: remapBoardIds(p.expr.H, thicknessIds),
-        D: remapBoardIds(p.expr.D, thicknessIds),
-      },
-      checks: { ...p.checks },
-    }
-    if (p.flushId !== undefined) part.flushId = flushIds.get(p.flushId) ?? p.flushId
-    const done = p.checks.cutByBoard
-    if (done) {
-      part.checks.cutByBoard = Object.fromEntries(Object.entries(done).map(([k, v]) => [boardIds.get(k) ?? k, v]))
-    }
-    return part
-  })
   return {
-    id,
+    ...rekeyJob(job, { job: id, next: newId }, { frozen: false }),
     name: copyName(job.name, existingNames),
-    settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
-    boards,
-    flushes,
-    parts,
-    // 固定した1枚（切った記録）は写さない（第1.8版。未決事項 32）
-    frozenSheets: [],
-    // 組の設定（第2.3版）は新しい材料の id につけ替え、手持ちの行も写す
-    stackSheets: job.stackSheets.map((s) => {
-      const copy: StackSheet = { ...s, boardIds: [boardIds.get(s.boardIds[0]) ?? s.boardIds[0], boardIds.get(s.boardIds[1]) ?? s.boardIds[1]] }
-      if (s.stock) copy.stock = s.stock.map((x) => ({ ...x }))
-      return copy
-    }),
     createdAt: t,
     updatedAt: t,
   }

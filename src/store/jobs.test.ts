@@ -219,7 +219,9 @@ describe('仕事の名前・コピー・削除', () => {
     expect(copy.name).toBe('本棚 W900 のコピー')
     expect(copy.createdAt).toBe('2026-09-25T00:00:00.000Z')
     expect(copy.updatedAt).toBe('2026-09-25T00:00:00.000Z')
-    expect(copy.settings).toEqual(src.settings)
+    // 第2.4版から逃げの id も新しくなる（architecture.md 16.3）。id を除けば設定は同じ
+    const noNigeId = (st: Job['settings']) => ({ ...st, nige: st.nige.map((n) => ({ name: n.name, value: n.value })) })
+    expect(noNigeId(copy.settings)).toEqual(noNigeId(src.settings))
     expect(copy.boards).toHaveLength(src.boards.length)
     expect(copy.parts).toHaveLength(src.parts.length)
     const srcBoardIds = new Set(src.boards.map((b) => b.id))
@@ -230,8 +232,11 @@ describe('仕事の名前・コピー・削除', () => {
     const lumber = copy.boards.find((b) => b.material === 'シナランバー' && b.thickness === 18)
     expect(lumber).toBeDefined()
     expect(partsUsingBoard(copy, lumber!.id)).toEqual(partsUsingBoard(src, LUMBER_18_ID))
-    // 式は名前で参照しているので、そのまま
-    expect(copy.parts.map((p) => p.expr)).toEqual(src.parts.map((p) => p.expr))
+    // 式は名前で参照しているので、そのまま（逃げ {n:…} だけ新しい逃げの id につけ替わる）
+    const nigeBack = new Map(copy.settings.nige.map((n, i) => [n.id, src.settings.nige[i].id]))
+    const back = (e: string) => e.replace(/\{n:([^}]*)\}/g, (_, id: string) => `{n:${nigeBack.get(id) ?? id}}`)
+    expect(copy.parts.map((p) => ({ W: back(p.expr.W), H: back(p.expr.H), D: back(p.expr.D) }))).toEqual(src.parts.map((p) => p.expr))
+    expect(copy.parts.find((p) => p.name === '棚板')!.expr.W).toBe(`天地板.W - {n:${copy.settings.nige[1].id}}`)
   })
 
   it('コピーの寸法は元と同じに計算できる', () => {
