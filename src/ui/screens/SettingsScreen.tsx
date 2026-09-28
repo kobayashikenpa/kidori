@@ -43,7 +43,7 @@ export function SettingsScreen() {
 
         <div className="field">
           <Help className="label" title="端切り">
-            刃厚を含む幅です。縦切り優先は右側の長手を、横切り優先は上側の長手と右側の妻手を落とします
+            刃厚を含む幅です。縦切り優先は右側の長手を、横切り優先は下側の長手と右側の妻手を落とします
           </Help>
           <NumberField ariaLabel="端切り" value={s.trim} onChange={(v) => v !== null && set({ trim: v })} />
         </div>
