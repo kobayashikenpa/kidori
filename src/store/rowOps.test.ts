@@ -2,6 +2,7 @@
 // 組の行は 3×6／4×8 だけ（自由入力・手持ちの操作は断る）
 import { describe, expect, it } from 'vitest'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../engine/fixtures/flush'
+import { cutFaces } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
 import {
   addRowStock,
@@ -32,7 +33,7 @@ describe('見本の組の設定', () => {
   it('見本（ひな形から）の組（メラミン 1＋ラワン 4）の設定は 3×6。ラワン 4 の行を 4×8 にしてもメラミン 1 は 3×6 のまま', () => {
     const sample = sampleFromTemplate(defaultTemplate(), NOW)
     const [f] = sample.flushes.filter((x) => x.name === 'フラッシュ25')
-    const ids = f.faces.map((x) => x.boardId)
+    const ids = cutFaces(f, sample.boards).map((x) => x.boardId)
     expect(sample.stackSheets).toEqual([{ boardIds: ids, ...S36 }])
     const lauan = ids[1]
     const j = must(setRowSize(sample, lauan, S48))

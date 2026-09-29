@@ -43,7 +43,7 @@ function frozenJob(): Job {
 }
 
 function stored(jobs: unknown[]) {
-  return memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 2, jobs }), [CURRENT_JOB_KEY]: 'job-bookshelf-w900' })
+  return memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs }), [CURRENT_JOB_KEY]: 'job-bookshelf-w900' })
 }
 /** 保存データの仕事（JSON）の固定した1枚を書き換えて読む */
 function loadEdited(edit: (sheets: any[]) => unknown, replace?: unknown) {
@@ -76,7 +76,7 @@ describe('読み込み（sanitizeJob）の frozenSheets', () => {
     }
     const raw = JSON.parse(JSON.stringify(job))
     delete raw.frozenSheets
-    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [raw] }) }), NOW)
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [raw] }) }), NOW)
     expect(r.status).toBe('ok')
     expect(r.data.jobs[0]).toEqual(job)
   })

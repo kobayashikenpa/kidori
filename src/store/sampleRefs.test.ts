@@ -27,12 +27,12 @@ describe('見本の式の逃げのつけ替え（remapRefIds）', () => {
 })
 
 describe('見本の jobRefIds', () => {
-  it('材料 メラミン1・ラワン4、フラッシュ25、逃げ1 だけ（ラワン2.5・5.5・逃げ0.5 は入らない）', () => {
+  it('材料 芯材15・メラミン1・ラワン4、フラッシュ25、逃げ1 だけ（ラワン2.5・5.5・逃げ0.5 は入らない）', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     const r = jobRefIds(job)
     const boards = job.boards.filter((b) => r.boardIds.has(b.id)).map((b) => `${b.material}${b.thickness}`)
-    expect(boards.sort()).toEqual(['メラミン1', 'ラワン4'])
-    expect(r.boardIds.size).toBe(2)
+    expect(boards.sort()).toEqual(['メラミン1', 'ラワン4', '芯材15'])
+    expect(r.boardIds.size).toBe(3)
     expect(job.flushes.filter((f) => r.flushIds.has(f.id)).map((f) => f.name)).toEqual([SAMPLE_FLUSH_NAME])
     expect(r.flushIds.size).toBe(1)
     expect(job.settings.nige.filter((n) => r.nigeIds.has(n.id)).map((n) => n.value)).toEqual([1])

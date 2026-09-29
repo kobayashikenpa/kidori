@@ -54,10 +54,10 @@ function roundTrip(job: Job, names: string[] = []): Job {
 }
 
 describe('buildShareFile', () => {
-  it('外側は app・kind: share・version 1・dataVersion 2・exportedAt。空白なしの JSON', () => {
+  it('外側は app・kind: share・version 1・dataVersion 3・exportedAt。空白なしの JSON', () => {
     const text = buildShareFile(sampleFromTemplate(defaultTemplate(), NOW), NOW)
     const data = JSON.parse(text)
-    expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'share', 1, 2, NOW.toISOString()])
+    expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'share', 1, 3, NOW.toISOString()])
     expect(text).toBe(JSON.stringify(data))
   })
 
@@ -66,7 +66,7 @@ describe('buildShareFile', () => {
     const before = JSON.stringify(src)
     const job = JSON.parse(buildShareFile(src, NOW)).job as Job
     expect(JSON.stringify(src)).toBe(before)
-    expect(job.boards.map((b) => `${b.material}${b.thickness}`)).toEqual(['メラミン1', 'ラワン4'])
+    expect(job.boards.map((b) => `${b.material}${b.thickness}`)).toEqual(['メラミン1', 'ラワン4', '芯材15'])
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ25'])
     expect(job.settings.nige.map((n) => n.value)).toEqual([1])
     expect(job.stackSheets).toHaveLength(1)
@@ -105,7 +105,7 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
     expect(out.frozenSheets).toEqual([])
     for (const p of out.parts) expect(p.checks).toEqual({ finished: false, cut: false })
     // 初期の ラワン2.5・5.5・逃げ0.5 は入らない
-    expect(out.boards.map((b) => b.thickness)).toEqual([1, 4])
+    expect(out.boards.map((b) => b.thickness)).toEqual([1, 4, 15])
     expect(out.settings.nige.map((n) => n.value)).toEqual([1])
     expect(out.name).toBe('本棚 W900')
     expect(out.createdAt).toBe(LATER.toISOString())

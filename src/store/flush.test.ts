@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { FLUSH_25_ID, flushJob, LAUAN_4_ID, MELAMINE_1_ID } from '../engine/fixtures/flush'
+import { migrateFlushCores } from '../engine/migrate/flushCore'
 import { expandPieces } from '../engine/packing/pieces'
 import type { Job } from '../engine/types'
 import { sampleFromTemplate } from './sample'
@@ -191,6 +192,12 @@ function richJob(): Job {
   return job
 }
 
+/** richJob の芯材（core）を 芯材15（木取りしない）の材料に移した形（第2.5版の保存データの形） */
+function richGroupJob(): Job {
+  const job = richJob()
+  return { ...job, ...migrateFlushCores(job.boards, job.flushes, () => 'board-core-15') }
+}
+
 describe('仕事のコピー', () => {
   it('フラッシュ・表面材・部材の flushId・完了・式の {t:…} を新しい id につけ替える', () => {
     const src = richJob()
@@ -220,19 +227,23 @@ describe('仕事のコピー', () => {
 describe('最後に使った設定（ひな形）', () => {
   it('ひな形のフラッシュは表面材を材料名＋厚みで持ち、新しい仕事では新しい材料の id を指す', () => {
     const t = templateOf(flushJob())
+    // 以前の形（芯材 core 15）のフラッシュは、芯材15（木取りしない）の材料と中身に移して写す（第2.5版）
+    expect(t.materials.at(-1)).toEqual({ material: '芯材', thickness: 15, noCut: true })
     expect(t.flushes).toEqual([
       {
         name: 'フラッシュ25',
-        core: 15,
         faces: [
+          { material: '芯材', thickness: 15, count: 1 },
           { material: 'メラミン', thickness: 1, count: 2 },
           { material: 'ラワン', thickness: 4, count: 2 },
         ],
+        form: 'flush',
+        autoName: true,
       },
     ])
     const job = createJob('新しい机', t)
     expect(job.flushes).toHaveLength(1)
-    expect(job.flushes[0].faces.map((f) => f.boardId)).toEqual(job.boards.map((b) => b.id))
+    expect(job.flushes[0].faces.map((f) => f.boardId)).toEqual([job.boards[2].id, job.boards[0].id, job.boards[1].id])
     expect(job.boards.map((b) => b.id)).not.toContain(MELAMINE_1_ID)
   })
 
@@ -270,14 +281,14 @@ describe('保存と読み込み', () => {
   it('第1.4版の形（flushes が無い）の保存データは、フラッシュ [] を足すだけでそのまま読める', () => {
     const { flushes: _f, ...old } = createJob('棚', defaultTemplate(), new Date('2026-01-01'), 'job-old')
     const oldJob = { ...old, parts: [newPart({ id: 'p1', name: '天板', boardId: old.boards[0].id, expr: { W: '900', H: '1', D: '600' } })] }
-    const st = memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [oldJob] }) })
+    const st = memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [oldJob] }) })
     const r = loadSaved(st)
     expect(r.status).toBe('ok')
     expect(r.data.jobs).toEqual([{ ...oldJob, flushes: [] }])
   })
 
   it('フラッシュ・部材の flushId・表面材ごとの完了を保存して読み直せる', () => {
-    const job = richJob()
+    const job = richGroupJob()
     const st = memoryStorage()
     saveSaved(st, { jobs: [job], currentJobId: job.id })
     const r = loadSaved(st)
@@ -286,7 +297,7 @@ describe('保存と読み込み', () => {
   })
 
   it('無い材料の表面材・無いフラッシュを指す部材・読めないフラッシュは直して読む', () => {
-    const job = richJob()
+    const job = richGroupJob()
     const bad = {
       ...job,
       flushes: [
@@ -295,7 +306,7 @@ describe('保存と読み込み', () => {
       ],
       parts: [...job.parts, { ...job.parts[0], id: 'p-x', name: '地板', flushId: 'なし' }],
     }
-    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [bad] }) }))
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [bad] }) }))
     expect(r.status).toBe('repaired')
     const j = r.data.jobs[0]
     expect(j.flushes).toEqual(job.flushes)

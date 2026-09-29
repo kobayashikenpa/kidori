@@ -2,6 +2,7 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
+import { migrateFlushCores, migrateFlushSpecCores, type LegacyFlush, type LegacySpecGroup } from '../engine/migrate/flushCore'
 import { canStack, stackPlan } from '../engine/packing/stack'
 import { samePair, sameStockSize, usesStock } from '../engine/packing/stock'
 import { eq1 } from '../engine/round'
@@ -19,6 +20,7 @@ import {
   type Rect,
   type SheetLayout,
   type Flush,
+  type GroupForm,
   type Job,
   type Nige,
   type PartGrain,
@@ -28,13 +30,23 @@ import {
 import { newId } from './jobs'
 import { defaultTemplate, templateOf, type FlushSpec, type MaterialSpec, type SettingsTemplate } from './template'
 
-/** 最後に使った設定（ひな形）のキー（{ version: 1, template }） */
-export const TEMPLATE_KEY = 'kidori.lastSettings.v1'
-
-/** 保存データ第2版のキー（{ version: 2, jobs }） */
-export const JOBS_KEY = 'kidori.jobs.v2'
 /**
- * 以前の版（第1版）のキー。第2版が無いときだけ読み、移し替えて第2版に書く。
+ * 最後に使った設定（ひな形）のキー。中身は { version: 2, template }（第2.5版。材料グループの形）。
+ * version 1（芯材 core のあるフラッシュ）も読んで移す
+ */
+export const TEMPLATE_KEY = 'kidori.lastSettings.v1'
+/** ひな形の中身の版 */
+const TEMPLATE_VERSION = 2
+
+/** 保存データ第3版のキー（{ version: 3, jobs }。第2.5版の材料グループの形） */
+export const JOBS_KEY = 'kidori.jobs.v3'
+/**
+ * 保存データ第2版のキー（{ version: 2, jobs }）。第3版が無いときだけ読み、移し替えて第3版に書く。
+ * 前の版のアプリが読んでも新しいデータを壊さないよう、また控えとして、消さず・書き換えない
+ */
+export const JOBS_V2_KEY = 'kidori.jobs.v2'
+/**
+ * 以前の版（第1版）のキー。第3版・第2版が無いときだけ読み、移し替えて第3版に書く。
  * 移し替えがうまくいかなかったときの控えとして、消さず・書き換えない
  */
 export const LEGACY_JOBS_KEY = 'kidori.jobs.v1'
@@ -100,12 +112,17 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 // 手で書き換えたデータや途中までのデータでも画面が真っ白にならないよう、
 // 読めない部材・板・仕事は外し、おかしな値は初期値に直す。直したら fixes に数える
 
+/** 保存データの版（1：第1版、2：第1.1版〜第2.4版、3：第2.5版〜） */
+export type DataVersion = 1 | 2 | 3
+/** 今の保存データの版 */
+export const DATA_VERSION = 3
+
 interface Fixes {
   count: number
   /**
    * 読んでいるデータの版。第1版には逃げ・メモ・チェックが無いのが当たり前なので、無くても直した数に数えない
    */
-  version: 1 | 2
+  version: DataVersion
   /** 読み込むときに重ね切りを外したフラッシュの名前（サイズがそろわない組。15.9）。知らせに出す */
   unstacked: string[]
 }
@@ -199,6 +216,8 @@ function sanitizeBoard(v: unknown, fx: Fixes): Board | null {
     grain: pick(v.grain, (x): x is Board['grain'] => x === 'long' || x === 'short', 'long', fx),
     // 最初から入っている材料の印（第1.2版）。無ければ付けない（並び順は engine の orderedBoards が以前のデータも判定する）
     ...(v.builtIn === true ? { builtIn: true as const } : {}),
+    // 木取りしない（第2.5版）。true のときだけ持つ（ほかの値は外して直した数に数える）
+    ...(v.noCut === true ? { noCut: true as const } : (v.noCut !== undefined && fx.count++, {})),
     ...sanitizeStock(v, fx),
   }
 }
@@ -348,20 +367,22 @@ function settleStacks(
 }
 
 const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
+const GROUP_FORMS: readonly GroupForm[] = ['flush', 'beta', 'empty']
 
 /**
  * フラッシュ（第1.5版）。無ければ []（第1.4版までのデータ。直した数に数えない）。
- * id が空・前と同じ、名前が空・前と同じ（全角半角をそろえて比べる）、芯材が 0 以下のフラッシュは外す。
- * 無い材料・前と同じ材料・枚数が1以上の整数でない表面材は外す
+ * id が空・前と同じ、名前が空・前と同じ（全角半角をそろえて比べる）、以前の版の芯材（core）があって 0 以下のフラッシュは外す。
+ * 無い材料・前と同じ材料・枚数が1以上の整数でない中身は外す。form は3つのどれか、autoName は true のときだけ残す（第2.5版）。
+ * 芯材（core）はそのまま返す（sanitizeJob で migrateFlushCores に渡す）
  */
-function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): Flush[] {
+function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): LegacyFlush[] {
   const boardIds = new Set(boards.map((b) => b.id))
   if (v === undefined) return []
   if (!Array.isArray(v)) {
     fx.count++
     return []
   }
-  const out: Flush[] = []
+  const out: LegacyFlush[] = []
   for (const x of v) {
     const name = isRecord(x) && typeof x.name === 'string' ? x.name.trim() : ''
     const key = name.normalize('NFKC')
@@ -369,7 +390,7 @@ function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): Flush
       !isRecord(x) ||
       !isId(x.id) ||
       !name ||
-      !isPositive(x.core) ||
+      (x.core !== undefined && !isPositive(x.core)) ||
       out.some((f) => f.id === x.id || f.name.normalize('NFKC') === key)
     ) {
       fx.count++
@@ -389,10 +410,16 @@ function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): Flush
       }
       faces.push({ boardId, count: f.count })
     }
-    const flush: Flush = { id: x.id, name, core: x.core, faces }
+    const flush: LegacyFlush = { id: x.id, name, faces }
+    if (isPositive(x.core)) flush.core = x.core
     // 重ね切り（第2.0版）：true で canStack のときだけ残す。それ以外で stack があれば外して数える
+    // （以前の芯材は木取りしない中身になるので、芯材を移す前の中身で判定しても答えは同じ）
     if (x.stack === true && canStack(flush, boards)) flush.stack = true
     else if (x.stack !== undefined) fx.count++
+    if (GROUP_FORMS.includes(x.form as GroupForm)) flush.form = x.form as GroupForm
+    else if (x.form !== undefined) fx.count++
+    if (x.autoName === true) flush.autoName = true
+    else if (x.autoName !== undefined) fx.count++
     out.push(flush)
   }
   return out
@@ -447,7 +474,7 @@ function sanitizePart(
     boardId = null
   }
   const cutByBoard = flushId === undefined ? undefined : sanitizeCutByBoard(isRecord(v.checks) ? v.checks.cutByBoard : undefined, fx)
-  const v2 = fx.version === 2
+  const v2 = fx.version >= 2
   const memo = typeof v.memo === 'string' ? v.memo : (v2 && fx.count++, '')
   const checkOk = isRecord(v.checks) && typeof v.checks.finished === 'boolean' && typeof v.checks.cut === 'boolean'
   if (v2 && !checkOk) fx.count++
@@ -630,11 +657,15 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     else boards.push(b)
   }
 
+  // 以前の版のフラッシュの芯材（core）を「芯材◯（木取りしない）」の材料と中身に移す（第2.5版。17.6）。
+  // 壊れていたわけではないので直した数に数えない。足した芯材の材料も boardIds に入れてから部材を読む
+  const moved = migrateFlushCores(boards, sanitizeFlushes(v.flushes, boards, fx), () => newId('board'))
+  boards.splice(0, boards.length, ...moved.boards)
   const boardIds = new Set(boards.map((b) => b.id))
   // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える。組は 3×6／4×8 だけ（15.9）
   const stacks = settleStacks(
     boards,
-    sanitizeFlushes(v.flushes, boards, fx),
+    moved.flushes,
     v.stackSheets === undefined ? null : sanitizeStackSheets(v.stackSheets, boards, fx),
   )
   const flushes = stacks.flushes
@@ -678,7 +709,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
  */
 export function sanitizeJobs(
   list: readonly unknown[],
-  version: 1 | 2 = 2,
+  version: DataVersion = DATA_VERSION,
 ): { jobs: Job[]; fixes: number; changed: string[]; unstacked: string[] } {
   const fx: Fixes = { count: 0, version, unstacked: [] }
   const jobs: Job[] = []
@@ -705,7 +736,7 @@ export function changedMessage(changed: readonly string[], unstacked: readonly s
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
-function parseJobList(raw: string, version: 1 | 2): unknown[] | null {
+function parseJobList(raw: string, version: DataVersion): unknown[] | null {
   let data: unknown
   try {
     data = JSON.parse(raw)
@@ -773,12 +804,16 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   let raw: string | null
   let current: string | null
-  let version: 1 | 2 = 2
+  let version: DataVersion = DATA_VERSION
   try {
     raw = storage.getItem(JOBS_KEY)
     current = storage.getItem(CURRENT_JOB_KEY)
+    // 第3版が無ければ第2版、それも無ければ第1版を読んで移し替える（以前の版のキーはそのまま残す）
     if (raw === null) {
-      // 第2版が無ければ、以前の版を読んで移し替える（以前の版のキーはそのまま残す）
+      raw = storage.getItem(JOBS_V2_KEY)
+      version = 2
+    }
+    if (raw === null) {
       raw = storage.getItem(LEGACY_JOBS_KEY)
       version = 1
     }
@@ -821,11 +856,11 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
 }
 
-/** 仕事の一覧と開いている仕事の id を第2版のキーに書く。以前の版のキーには触らない。例外は投げない */
+/** 仕事の一覧と開いている仕事の id を第3版のキーに書く。以前の版のキー（v2・v1）には触らない。例外は投げない */
 export function saveSaved(storage: KeyValueStorage | null, data: SavedData): SaveResult {
   if (!storage) return { ok: false, message: 'この端末では保存が使えません' }
   try {
-    storage.setItem(JOBS_KEY, JSON.stringify({ version: 2, jobs: data.jobs }))
+    storage.setItem(JOBS_KEY, JSON.stringify({ version: DATA_VERSION, jobs: data.jobs }))
     storage.setItem(CURRENT_JOB_KEY, data.currentJobId ?? '')
     return { ok: true }
   } catch {
@@ -848,17 +883,21 @@ function sanitizeMaterials(v: unknown): MaterialSpec[] {
     if (out.some((x) => x.material.normalize('NFKC') === key && eq1(x.thickness, thickness))) continue
     const spec: MaterialSpec = { material, thickness }
     if (m.builtIn === true) spec.builtIn = true
+    if (m.noCut === true) spec.noCut = true
     out.push(spec)
   }
   return out
 }
 
-/** ひな形のフラッシュ（第1.5版）。無ければ []。名前が空・重なる、芯材が 0 以下のものは外し、読めない表面材は外す */
-function sanitizeFlushSpecs(v: unknown): FlushSpec[] {
+/**
+ * ひな形の材料グループ（第1.5版のフラッシュ）。無ければ []。名前が空・重なる、以前の芯材（core）があって 0 以下のものは外し、
+ * 読めない中身は外す。芯材（core）はそのまま返す（sanitizeTemplate で migrateFlushSpecCores に渡す）
+ */
+function sanitizeFlushSpecs(v: unknown): LegacySpecGroup[] {
   if (!Array.isArray(v)) return []
-  const out: FlushSpec[] = []
+  const out: LegacySpecGroup[] = []
   for (const f of v) {
-    if (!isRecord(f) || typeof f.name !== 'string' || !isPositive(f.core)) continue
+    if (!isRecord(f) || typeof f.name !== 'string' || (f.core !== undefined && !isPositive(f.core))) continue
     const name = f.name.trim()
     if (!name || out.some((x) => x.name.normalize('NFKC') === name.normalize('NFKC'))) continue
     const faces: FlushSpec['faces'] = []
@@ -866,8 +905,12 @@ function sanitizeFlushSpecs(v: unknown): FlushSpec[] {
       if (!isRecord(x) || typeof x.material !== 'string' || !x.material.trim() || !isPositive(x.thickness) || !isCount(x.count)) continue
       faces.push({ material: x.material.trim(), thickness: x.thickness, count: x.count })
     }
-    const spec: FlushSpec = { name, core: f.core, faces }
-    if (f.stack === true && faces.length === 2 && faces[0].count === faces[1].count) spec.stack = true
+    const spec: LegacySpecGroup = { name, faces }
+    if (isPositive(f.core)) spec.core = f.core
+    // 重ね切りは、木取りする中身が2種類で枚数が同じときだけ（材料の noCut は sanitizeTemplate で見る）
+    if (f.stack === true) spec.stack = true
+    if (GROUP_FORMS.includes(f.form as GroupForm)) spec.form = f.form as GroupForm
+    if (f.autoName === true) spec.autoName = true
     out.push(spec)
   }
   return out
@@ -891,7 +934,7 @@ export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job
   }
   try {
     const data: unknown = JSON.parse(raw)
-    if (!isRecord(data) || data.version !== 1) return defaultTemplate()
+    if (!isRecord(data) || (data.version !== 1 && data.version !== TEMPLATE_VERSION)) return defaultTemplate()
     return sanitizeTemplate(data.template) ?? defaultTemplate()
   } catch {
     return defaultTemplate()
@@ -905,12 +948,22 @@ export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job
 export function sanitizeTemplate(v: unknown): SettingsTemplate | null {
   try {
     if (!isRecord(v)) return null
-    const fx: Fixes = { count: 0, version: 2, unstacked: [] }
+    const fx: Fixes = { count: 0, version: DATA_VERSION, unstacked: [] }
     const settings = sanitizeSettings(v.settings, fx)
+    // 以前の版の芯材（core）を「芯材◯（木取りしない）」の材料と中身に移す（第2.5版。形で見分ける）
+    const moved = migrateFlushSpecCores(sanitizeMaterials(v.materials), sanitizeFlushSpecs(v.flushes))
+    const noCut = (x: { material: string; thickness: number }) =>
+      moved.materials.some((m) => m.noCut === true && m.material.normalize('NFKC') === x.material.normalize('NFKC') && eq1(m.thickness, x.thickness))
+    const flushes = moved.flushes.map((f) => {
+      const cut = f.faces.filter((x) => !noCut(x))
+      if (f.stack !== true || (cut.length === 2 && cut[0].count === cut[1].count)) return f
+      const { stack: _s, ...rest } = f
+      return rest
+    })
     return {
       settings: { ...settings, nige: settings.nige ?? defaultNige() },
-      materials: sanitizeMaterials(v.materials),
-      flushes: sanitizeFlushSpecs(v.flushes),
+      materials: moved.materials,
+      flushes,
     }
   } catch {
     return null
@@ -921,7 +974,7 @@ export function sanitizeTemplate(v: unknown): SettingsTemplate | null {
 export function saveTemplate(storage: KeyValueStorage | null, template: SettingsTemplate): SaveResult {
   if (!storage) return { ok: false, message: 'この端末では保存が使えません' }
   try {
-    storage.setItem(TEMPLATE_KEY, JSON.stringify({ version: 1, template }))
+    storage.setItem(TEMPLATE_KEY, JSON.stringify({ version: TEMPLATE_VERSION, template }))
     return { ok: true }
   } catch {
     return { ok: false, message: '保存できませんでした（端末の空き容量などを確かめてください）' }

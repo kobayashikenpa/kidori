@@ -2,7 +2,7 @@
 // 組は 3×6／4×8 だけ。サイズがそろわない・手持ち・自由入力の組は、読み込むときに重ね切りを外して知らせる
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
-import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../engine/fixtures/flush'
+import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob, sampleGroupJob } from '../engine/fixtures/flush'
 import { stockRows } from '../engine/fixtures/stock'
 import { packJob } from '../engine/packing'
 import { stackKey } from '../engine/packing/stack'
@@ -259,7 +259,7 @@ describe('stackSheets の検査・修復', () => {
   it('保存して読み込むと組の設定が残る', () => {
     const map = new Map<string, string>()
     const s: KeyValueStorage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) }
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S48 }]
     expect(saveSaved(s, { jobs: [job], currentJobId: job.id })).toEqual({ ok: true })
     const r = loadSaved(s, new Date('2026-09-28T00:00:00Z'))

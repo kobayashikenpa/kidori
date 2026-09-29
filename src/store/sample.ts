@@ -1,7 +1,7 @@
 // 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { eq1 } from '../engine/round'
-import { canStack } from '../engine/packing/stack'
+import { canStack, cutFaces } from '../engine/packing/stack'
 import { BOARD_SIZES, type Board, type Flush, type Job, type Part, type StackSheet } from '../engine/types'
 import { createJob, newId } from './jobs'
 import type { SettingsTemplate } from './template'
@@ -9,7 +9,7 @@ import type { SettingsTemplate } from './template'
 /** 見本の仕事の名前 */
 export const SAMPLE_NAME = '本棚 W900'
 
-/** 見本のフラッシュの名前（芯材15・メラミン1×2・ラワン4×2） */
+/** 見本の材料グループの名前（芯材15（木取りしない）×1・メラミン1×2・ラワン4×2） */
 export const SAMPLE_FLUSH_NAME = 'フラッシュ25'
 
 const key = (s: string) => s.trim().normalize('NFKC')
@@ -31,10 +31,11 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
 /**
  * ひな形から見本を作る。追加するたびに新しい仕事（id は新しく）。
  * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
- * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは メラミン1 も）、
- *   フラッシュ25（芯材15・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
+ * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは 芯材15（木取りしない）・メラミン1 も）、
+ *   フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版、form: flush・自動の名前＝第2.5版）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
  * - 見本で使う材料は 3×6（未決事項 24）。フラッシュ25 の重ね切りの組の設定も 3×6（第2.3版）
- * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。シナランバー・シナベニヤは使わない）。厚みは式の厚み（{t:…}）で書く
+ * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。ラワン・シナベニヤの無垢の板は使わない）。
+ *   芯材15 は木取りしない材料なので、木取りの画面には出ない（第2.5版）。厚みは式の厚み（{t:…}）で書く
  */
 export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
   const job = createJob(SAMPLE_NAME, template, now)
@@ -63,16 +64,22 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
       if (i >= 0) boards[i] = { ...boards[i], ...sheet }
     }
   } else {
+    // 芯材15：木取りしない材料（第2.5版）。同じ材料名＋厚みがあれば木取りしないにして使う
+    const core = boardFor('芯材', 15)
+    const i = boards.findIndex((b) => b.id === core)
+    boards[i] = { ...boards[i], noCut: true }
     flush = {
       id: newId('flush'),
       name: SAMPLE_FLUSH_NAME,
-      core: 15,
       faces: [
+        { boardId: core, count: 1 },
         { boardId: boardFor('メラミン', 1), count: 2 },
         { boardId: boardFor('ラワン', 4), count: 2 },
       ],
       // 重ね切りは初期オン（第2.1版。仕様書 4）
       stack: true,
+      form: 'flush',
+      autoName: true,
     }
     flushes = [...flushes, flush]
   }
@@ -111,7 +118,7 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
   // 組の a・b は材料の保存の並び
   const stackSheets: StackSheet[] = []
   if (canStack(flush, boards)) {
-    const ids = flush.faces.map((f) => f.boardId)
+    const ids = cutFaces(flush, boards).map((f) => f.boardId)
     const order = (id: string) => boards.findIndex((b) => b.id === id)
     const pair: [string, string] = order(ids[0]) < order(ids[1]) ? [ids[0], ids[1]] : [ids[1], ids[0]]
     stackSheets.push({ boardIds: pair, ...sheet })

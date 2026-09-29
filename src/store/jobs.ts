@@ -67,6 +67,7 @@ export function createJob(
   const boards = template.materials.map((m) => {
     const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
     if (m.builtIn) b.builtIn = true
+    if (m.noCut) b.noCut = true
     return b
   })
   // フラッシュの表面材は、材料名＋厚みが同じ材料の id に直す（見つからない表面材は外す）
@@ -75,13 +76,14 @@ export function createJob(
     const flush: Flush = {
       id: newId('flush'),
       name: f.name,
-      core: f.core,
       faces: f.faces.flatMap((x) => {
         const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
         return b ? [{ boardId: b.id, count: x.count }] : []
       }),
     }
     if (f.stack === true && canStack(flush, boards)) flush.stack = true
+    if (f.form !== undefined) flush.form = f.form
+    if (f.autoName === true) flush.autoName = true
     return flush
   })
   return {
@@ -581,7 +583,7 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
   // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
   const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
   if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
-  if (f.core === undefined || !(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
+  if (f.core !== undefined && !(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
   if (f.faces.length === 0) return '表面材を1つ以上選んでください'
   const seen = new Set<string>()
   for (const face of f.faces) {

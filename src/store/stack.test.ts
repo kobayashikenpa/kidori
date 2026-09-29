@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
-import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../engine/fixtures/flush'
+import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob, sampleGroupJob } from '../engine/fixtures/flush'
 import { packJob } from '../engine/packing'
 import { stackKey, stackPlan } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
@@ -118,7 +118,7 @@ describe('読み込み（sanitizeFlushes・固定した1枚の stackWith）', ()
 
 describe('保存・引き継ぎ・コピー', () => {
   it('保存して読み込むと stack と stackWith が残る', () => {
-    let job = sampleFlushJob(true)
+    let job = sampleGroupJob(true)
     const m = pack(job).materials[0]
     const t = { kind: 'computed', boardId: MELAMINE_1_ID, stackWith: LAUAN_4_ID, mode: m.mode, layout: m.sheets[0] } as const
     job = unwrap(setPieceCheck(job, t, m.sheets[0].placements[0].pieceId, true, NOW, 'sheet-1'))

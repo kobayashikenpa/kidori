@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
-import { canStack, stackKey, stackPlan } from '../engine/packing/stack'
+import { canStack, cutFaces, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { findStackSheet, stackChoice, usesStock } from '../engine/packing/stock'
 import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
@@ -149,8 +149,9 @@ function expected(job: Job, excluded: Set<string>): Map<string, number> {
   const out = new Map<string, number>()
   for (const p of job.parts) {
     if (excluded.has(p.id) || p.quantity < 1) continue
+    // 木取りしない材料（第2.5版の芯材）の中身は片にならない
     const faces = p.flushId !== undefined
-      ? job.flushes.find((f) => f.id === p.flushId)!.faces
+      ? cutFaces(job.flushes.find((f) => f.id === p.flushId)!, job.boards)
       : [{ boardId: p.boardId!, count: 1 }]
     for (const f of faces) out.set(`${p.id}|${f.boardId}`, (out.get(`${p.id}|${f.boardId}`) ?? 0) + f.count * p.quantity)
   }
@@ -324,7 +325,15 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
       expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
       expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
-      expect(job.flushes.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      // 芯材（core）は 芯材◯（木取りしない）の材料と中身の先頭に移る（第2.5版）。戻すと第2.2版と同じ
+      const cores = new Map(job.boards.filter((b) => b.noCut).map((b) => [b.id, b.thickness]))
+      const back = job.flushes.map(({ form: _f, autoName: _a, ...f }) => ({
+        ...f,
+        core: cores.get(f.faces[0].boardId),
+        faces: f.faces.slice(1),
+      }))
+      expect(back.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      expect(job.boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
       if (unstacked.length > 0) unstackedJobs++
       const r = checkJob(job)
       if (kinds.some((k) => k.kind === 'custom')) {
