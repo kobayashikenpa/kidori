@@ -1,37 +1,39 @@
-// 設定の画面のフラッシュの一覧（仕様書 4「フラッシュ」）：芯材・表面材（材料と枚数）・名前 の順で追加・変更、削除。
-// 新しく登録するときの表面材は defaultFlushFaces、名前は autoFlushName（芯材・表面材についてくる。手で書き換えたらその名前）
-// 厚みは engine の flushBreakdown で出す。見た目・操作は材料・調整寸法と同じ（SettingsList）
+// 設定の画面の材料グループの一覧（第2.5版。仕様書 4「材料と材料グループ」・architecture.md 17.10）。
+// コードの名前は Flush のまま（画面の言葉だけ「材料グループ」「中身」。17章の対応表）。
+// 追加のときは初めの形（フラッシュ／ベタ／空）を選び、中身は engine の defaultGroupFaces、名前は autoGroupName
+// （autoName の間は中身についてくる。手で書き換えたら外す）。厚み・重ね切りの判定は engine（flushBreakdown・canStack）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { canStack } from '../../engine/packing/stack'
 import {
-  autoFlushName,
-  defaultFlushFaces,
+  autoGroupName,
   defaultFlushStack,
+  defaultGroupFaces,
   flushBreakdown,
   flushBreakdownText,
-  isAutoFlushName,
   type FlushBreakdown,
 } from '../../engine/flush'
-import type { Flush, Job } from '../../engine/types'
-import { addFlush, flushesUsages, removeFlushes, updateFlush } from '../../store/jobs'
+import type { Flush, GroupForm, Job } from '../../engine/types'
+import { addFlush, flushesUsages, newId, removeFlushes, updateFlush, type FlushDraft } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
-import { fmt } from '../format'
 import { closeKeyboard } from '../keyboard'
+import { materialLabel, materialRuns } from '../materials'
 import { NumberField } from './NumberField'
+import { Segmented } from './Segmented'
 import { SettingsList } from './SettingsList'
 
-/** 入力中のフラッシュの内訳（engine の flushBreakdown を、仮の id で呼ぶ） */
-function draftBreakdown(job: Job, core: number, faces: Flush['faces']): FlushBreakdown | null {
-  return flushBreakdown({ boards: job.boards, flushes: [{ id: '__draft', name: '', core, faces }] }, '__draft')
-}
+const FORM_OPTIONS: { value: GroupForm; label: string }[] = [
+  { value: 'flush', label: 'フラッシュ' },
+  { value: 'beta', label: 'ベタ' },
+  { value: 'empty', label: '空' },
+]
 
 export function FlushEditor() {
   const { job, run } = useCurrentJob()
   return (
     <div className="stack">
       <SettingsList<Flush>
-        kind="フラッシュ"
+        kind="材料グループ"
         idPrefix="flush"
         items={job.flushes}
         label={(f) => f.name}
@@ -40,12 +42,12 @@ export function FlushEditor() {
           const users = flushesUsages(job, [f.id]).parts
           return `${b ? `厚み ${flushBreakdownText(b)}` : ''}${f.stack ? '　重ね切り' : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
         }}
-        warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '表面材がありません（編集で選んでください）' : null)}
+        warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '中身がありません（編集で選んでください）' : null)}
         add={<FlushForm flush={null} done={() => {}} />}
         renderEdit={(f, done) => <FlushForm flush={f} done={done} />}
         removeWarning={(ids) => {
           const u = flushesUsages(job, ids)
-          const one = ids.length > 1 ? '選んだフラッシュ' : 'このフラッシュ'
+          const one = ids.length > 1 ? '選んだ材料グループ' : 'この材料グループ'
           if (u.parts.length === 0 && u.thickness.length === 0) return null
           return (
             <>
@@ -63,181 +65,215 @@ export function FlushEditor() {
           )
         }}
         onRemove={(ids) => run((j) => removeFlushes(j, ids))}
-        emptyText="フラッシュがまだありません。"
+        emptyText="材料グループがまだありません。"
       />
     </div>
   )
 }
 
+/** 中身の1行。boardId が null の行は空欄（材料をまだ選んでいない）。count が null は打ちかけ */
 interface FaceRow {
   key: number
-  boardId: string
+  boardId: string | null
   count: number | null
 }
 
-/** フラッシュの追加（flush が null）・変更。芯材・表面材（材料と枚数、行を足せる）・名前 */
-function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
+/** 中身の欄 → engine に渡す形（空欄の行は外し、打ちかけの枚数は 0 として見る） */
+function toFaces(rows: readonly FaceRow[]): Flush['faces'] {
+  return rows.flatMap((r) => (r.boardId === null ? [] : [{ boardId: r.boardId, count: r.count ?? 0 }]))
+}
+
+/** 入力中の材料グループの内訳（engine の flushBreakdown を、仮の id で呼ぶ） */
+function draftBreakdown(job: Job, rows: readonly FaceRow[]): FlushBreakdown | null {
+  return flushBreakdown({ boards: job.boards, flushes: [{ id: '__draft', name: '', faces: toFaces(rows) }] }, '__draft')
+}
+
+interface FormProps {
+  /** 変える材料グループ。null なら追加 */
+  flush: Flush | null
+  /** 保存したら保存した材料グループの id、やめたら null */
+  done: (savedId: string | null) => void
+  /** 部材の編集の上に重ねて開くとき（MaterialEditSheet）：追加でも「やめる」「追加」を下に並べる */
+  overlay?: boolean
+}
+
+/**
+ * 材料グループの追加（flush が null）・変更。初めの形（追加のときだけ）・中身（材料 × 枚数）・厚み・名前・重ねて切る。
+ * 設定の画面と、部材の編集の上に重ねて開く編集（MaterialEditSheet）で使う
+ */
+export function FlushForm({ flush, done, overlay = false }: FormProps) {
   const { job, run } = useCurrentJob()
   const boards = orderedBoards(job)
-  const firstFaces = (): FaceRow[] => {
-    if (flush) return flush.faces.map((f, i) => ({ key: i, ...f }))
-    const init = defaultFlushFaces(job)
-    return init.length > 0 ? init.map((f, i) => ({ key: i, ...f })) : [{ key: 0, boardId: boards[0]?.id ?? '', count: 1 }]
-  }
-  const [name, setName] = useState(flush?.name ?? '')
-  // 名前が芯材・表面材についてくるか（新しく登録するとき、または自動の名前のフラッシュを編集するとき。手で書き換えたら外す）
-  const [nameAuto, setNameAuto] = useState(flush ? isAutoFlushName(flush.name) : true)
-  const takenNames = job.flushes.filter((f) => f.id !== flush?.id).map((f) => f.name)
-  const autoName = (c: number | null, fs: FaceRow[]): string => {
-    if (c === null) return ''
-    const b = draftBreakdown(job, c, fs.filter((f) => f.count !== null).map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })))
-    return b ? autoFlushName(b.total, takenNames) : ''
-  }
-  /** 芯材・表面材を変えたとき：自動の名前ならついていく */
-  const follow = (c: number | null, fs: FaceRow[]) => {
-    if (nameAuto) setName(autoName(c, fs))
-  }
-  const [core, setCore] = useState<number | null>(flush ? (flush.core ?? null) : null)
-  const [faces, setFaces] = useState<FaceRow[]>(firstFaces)
+  const noCutBoards = boards.filter((b) => b.noCut === true)
+  const cutRuns = materialRuns(boards.filter((b) => b.noCut !== true))
+  const rowsOf = (form: GroupForm): FaceRow[] => defaultGroupFaces(job, form).map((f, i) => ({ key: i, ...f }))
+
+  const [form, setForm] = useState<GroupForm>(flush?.form ?? 'flush')
+  const [rows, setRows] = useState<FaceRow[]>(() => (flush ? flush.faces.map((f, i) => ({ key: i, ...f })) : rowsOf('flush')))
   const [nextKey, setNextKey] = useState(100)
-  const [error, setError] = useState<string | null>(null)
-  /** 表面材の欄 → engine に渡す形（入力途中の枚数は 0 として見る） */
-  const toFaces = (fs: FaceRow[]) => fs.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 }))
-  // 新しいフラッシュは、重ねられる表面材なら初期オン（defaultFlushStack）。変更のときは保存した値
-  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(faces), job.boards)))
-  // 利用者がチェックを押したか（押していない新しいフラッシュは、表面材が重ねられるようになったらオンにする）
+  const takenNames = job.flushes.filter((f) => f.id !== flush?.id).map((f) => f.name)
+  const autoName = (fm: GroupForm, rs: readonly FaceRow[]): string =>
+    autoGroupName(fm, draftBreakdown(job, rs)?.total ?? 0, takenNames)
+  // 名前が中身についてくるか（追加のとき、または自動の名前の材料グループ。手で書き換えたら外す）
+  const [nameAuto, setNameAuto] = useState(flush ? flush.autoName === true : true)
+  const [name, setName] = useState(flush?.name ?? '')
+  // 新しい材料グループは、重ねられる中身なら初期オン（defaultFlushStack）。変更のときは保存した値
+  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(rows), job.boards)))
+  // 利用者がチェックを押したか（押していない新しい材料グループは、中身が重ねられるようになったらオンにする）
   const [stackTouched, setStackTouched] = useState(flush !== null)
+  const [error, setError] = useState<string | null>(null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
-  const pre = flush ? `flush-edit-${flush.id}` : 'flush-add'
+  const pre = flush ? `flush-edit-${flush.id}` : overlay ? 'flush-new' : 'flush-add'
 
-  /** 重ね切りの条件（表面材が2種類で枚数が同じ）。入力途中の枚数は 0 として見る */
-  const stackable = (fs: FaceRow[]) => canStack({ faces: toFaces(fs) }, job.boards)
-  const changeFaces = (next: FaceRow[]) => {
-    setFaces(next)
+  const stackable = (rs: readonly FaceRow[]) => canStack({ faces: toFaces(rs) }, job.boards)
+  const change = (next: FaceRow[], fm: GroupForm = form, touched = stackTouched) => {
+    setRows(next)
     if (!stackable(next)) setStack(false)
-    else if (!stackTouched) setStack(defaultFlushStack(toFaces(next), job.boards))
-    follow(core, next)
+    else if (!touched) setStack(defaultFlushStack(toFaces(next), job.boards))
+    if (nameAuto) setName(autoName(fm, next))
     setError(null)
   }
-  const setFace = (key: number, p: Partial<FaceRow>) => changeFaces(faces.map((f) => (f.key === key ? { ...f, ...p } : f)))
-  const ready = core !== null && faces.length > 0 && faces.every((f) => f.count !== null && f.boardId !== '')
-  const preview = draftBreakdown(
-    job,
-    core ?? 0,
-    faces.filter((f) => f.count !== null).map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })),
-  )
+  const setRow = (key: number, p: Partial<FaceRow>) => change(rows.map((r) => (r.key === key ? { ...r, ...p } : r)))
+  const chooseForm = (fm: GroupForm) => {
+    setForm(fm)
+    setStackTouched(false)
+    change(rowsOf(fm), fm, false)
+  }
+
+  const preview = draftBreakdown(job, rows)
+  const shownName = nameAuto && name.trim() === '' ? autoName(form, rows) : name
+  const ready = rows.length > 0 && rows.every((r) => r.boardId !== null && r.count !== null && r.count >= 1)
 
   const save = () => {
-    if (core === null) return setError('芯材の厚みを入れてください（例：15）')
-    if (faces.some((f) => f.count === null)) return setError('表面材の枚数を入れてください')
-    const draft = {
-      name: name.trim() === '' ? autoName(core, faces) : name,
-      core,
-      faces: faces.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 })),
-      ...(stack && stackable(faces) ? { stack: true as const } : {}),
+    const draft: FlushDraft = {
+      name: nameAuto || name.trim() === '' ? autoName(form, rows) : name,
+      // 空欄の行は '' で渡し、store の検査の文言（中身の材料を選んでください）で断る
+      faces: rows.map((r) => ({ boardId: r.boardId ?? '', count: r.count ?? 0 })),
+      form,
+      ...(nameAuto || name.trim() === '' ? { autoName: true as const } : {}),
+      ...(stack && stackable(rows) ? { stack: true as const } : {}),
     }
-    const r = run((j) => (flush ? updateFlush(j, flush.id, draft) : addFlush(j, draft)))
+    const id = flush?.id ?? newId('flush')
+    const r = run((j) => (flush ? updateFlush(j, flush.id, draft) : addFlush(j, draft, id)))
     if (!r.ok) return setError(r.message)
     closeKeyboard()
-    if (!flush) {
+    if (!flush && !overlay) {
+      setForm('flush')
+      const init = rowsOf('flush')
+      setRows(init)
       setName('')
       setNameAuto(true)
-      setCore(null)
-      const init = firstFaces()
-      setFaces(init)
       setStack(defaultFlushStack(toFaces(init), job.boards))
       setStackTouched(false)
       setError(null)
       setRound((n) => n + 1)
     }
-    done()
+    done(id)
   }
 
   const fields = (
     <>
-      {!flush && <span className="label">フラッシュを追加</span>}
-      <div className="list-add">
-        <div className="field" style={{ flex: 1, minWidth: 0 }}>
-          <label className="label" htmlFor={`${pre}-core`}>
-            芯材の厚み
-          </label>
-          <NumberField
-            key={round}
-            id={`${pre}-core`}
-            ariaLabel="芯材の厚み"
-            allowEmpty
-            placeholder="例：15"
-            value={core}
-            onChange={(v) => {
-              setCore(v)
-              follow(v, faces)
-              setError(null)
-            }}
-          />
+      {!flush && !overlay && <span className="label">材料グループを追加</span>}
+      {!flush && (
+        <div className="field" style={{ margin: 0 }}>
+          <span className="label">初めの形</span>
+          <Segmented<GroupForm> ariaLabel="初めの形" value={form} options={FORM_OPTIONS} onChange={chooseForm} />
         </div>
-      </div>
-      <span className="label">表面材（材料と、1部材あたりの枚数）</span>
-      {boards.length === 0 && <p className="msg warn" style={{ margin: 0 }}>先に「材料」を登録してください</p>}
-      {faces.map((f, i) => (
-        <div key={`${round}-${f.key}`} className="list-add" role="group" aria-label={`表面材${i + 1}`}>
-          <select
-            className="input"
-            style={{ flex: 2 }}
-            aria-label={`表面材${i + 1}の材料`}
-            value={f.boardId}
-            onChange={(e) => setFace(f.key, { boardId: e.target.value })}
-          >
-            {f.boardId === '' && <option value="">（材料を選ぶ）</option>}
-            {boards.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.material} {fmt(b.thickness)}mm
-              </option>
-            ))}
-          </select>
-          <span style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-            <NumberField
-              ariaLabel={`表面材${i + 1}の枚数`}
-              integer
-              allowEmpty
-              unit="枚"
-              value={f.count}
-              onChange={(v) => setFace(f.key, { count: v })}
-            />
-          </span>
-          {faces.length > 1 && (
+      )}
+      <span className="label">中身（材料と、1部材あたりの枚数）</span>
+      {boards.length === 0 && (
+        <p className="msg warn" style={{ margin: 0 }}>
+          先に「材料」を登録してください
+        </p>
+      )}
+      {rows.length === 0 && (
+        <p className="lead" style={{ margin: 0 }}>
+          中身がありません。「＋ 中身を足す」で材料を選んでください
+        </p>
+      )}
+      {rows.map((r, i) => {
+        const others = new Set(rows.filter((x) => x.key !== r.key).map((x) => x.boardId))
+        return (
+          <div key={`${round}-${r.key}`} className="list-add" role="group" aria-label={`中身${i + 1}`}>
+            <select
+              className="input"
+              style={{ flex: 2, minWidth: 0 }}
+              aria-label={`中身${i + 1}の材料`}
+              aria-invalid={r.boardId === null}
+              value={r.boardId ?? ''}
+              onChange={(e) => setRow(r.key, { boardId: e.target.value === '' ? null : e.target.value })}
+            >
+              {r.boardId === null && <option value="">（材料を選ぶ）</option>}
+              {noCutBoards.length > 0 && (
+                <optgroup label="木取りしない">
+                  {noCutBoards.map((b) => (
+                    <option key={b.id} value={b.id} disabled={others.has(b.id)}>
+                      {materialLabel(b)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {cutRuns.map((g) => (
+                <optgroup key={`${g.name}-${g.boards[0].id}`} label={`木取りする：${g.name}`}>
+                  {g.boards.map((b) => (
+                    <option key={b.id} value={b.id} disabled={others.has(b.id)}>
+                      {materialLabel(b)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <span style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+              <NumberField
+                ariaLabel={`中身${i + 1}の枚数`}
+                integer
+                allowEmpty
+                unit="枚"
+                value={r.count}
+                onChange={(v) => setRow(r.key, { count: v })}
+              />
+            </span>
             <button
               type="button"
               className="btn danger"
-              aria-label={`表面材${i + 1}を外す`}
-              onClick={() => changeFaces(faces.filter((x) => x.key !== f.key))}
+              aria-label={`中身${i + 1}を削除`}
+              onClick={() => change(rows.filter((x) => x.key !== r.key))}
             >
-              外す
+              削除
             </button>
-          )}
-        </div>
-      ))}
+          </div>
+        )
+      })}
+      {rows.some((r) => r.boardId === null) && (
+        <p className="msg warn" style={{ margin: 0 }}>
+          空欄の行の材料を選んでください（選ばないと{flush ? '変えられません' : '追加できません'}）
+        </p>
+      )}
       <button
         type="button"
         className="btn"
         onClick={() => {
-          const used = new Set(faces.map((f) => f.boardId))
-          const b = boards.find((x) => !used.has(x.id)) ?? boards[0]
-          changeFaces([...faces, { key: nextKey, boardId: b?.id ?? '', count: 1 }])
+          change([...rows, { key: nextKey, boardId: null, count: 1 }])
           setNextKey((n) => n + 1)
         }}
       >
-        ＋ 表面材を足す
+        ＋ 中身を足す
       </button>
+      {preview && (
+        <p className="thick-auto" style={{ margin: 0 }}>
+          厚み {flushBreakdownText(preview)}
+        </p>
+      )}
       <button
         type="button"
         role="checkbox"
         aria-checked={stack}
-        aria-disabled={!stackable(faces)}
-        aria-describedby={stackable(faces) ? undefined : `${pre}-stack-why`}
+        aria-disabled={!stackable(rows)}
+        aria-describedby={stackable(rows) ? undefined : `${pre}-stack-why`}
         className={`opt-check${stack ? ' on' : ''}`}
         onClick={() => {
-          if (!stackable(faces)) return
+          if (!stackable(rows)) return
           setStack((v) => !v)
           setStackTouched(true)
           setError(null)
@@ -246,14 +282,13 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
         <span className="check-box" aria-hidden="true">
           {stack ? '✓' : ''}
         </span>
-        <span>表面材を重ねて切る（2枚重ね）</span>
+        <span>重ねて切る（2枚重ね）</span>
       </button>
-      {!stackable(faces) && (
+      {!stackable(rows) && (
         <p id={`${pre}-stack-why`} className="lead" style={{ margin: 0 }}>
-          表面材が2種類で、枚数が同じときに選べます
+          木取りする中身が2種類で、枚数が同じときに選べます
         </p>
       )}
-      {preview && core !== null && <p className="thick-auto" style={{ margin: 0 }}>厚み {flushBreakdownText(preview)}</p>}
       <div className="field" style={{ margin: 0 }}>
         <label className="label" htmlFor={`${pre}-name`}>
           名前
@@ -261,17 +296,18 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
         <input
           id={`${pre}-name`}
           className="input"
-          value={name}
-          placeholder={autoName(core, faces) || '芯材を入れると自動で入ります'}
+          value={shownName}
+          placeholder={autoName(form, rows)}
           enterKeyHint="done"
           onChange={(e) => {
-            // 手で書き換えたらその名前を使う。空にしたら自動の名前に戻す（登録のとき自動の名前を入れる）
+            // 手で書き換えたらその名前を使う（自動の名前を外す）。空にしたら自動の名前に戻す
             const v = e.target.value
             setNameAuto(v.trim() === '')
             setName(v)
             setError(null)
           }}
         />
+        {nameAuto && <span className="hint">自動の名前です。中身を変えるとついてきます</span>}
       </div>
       {error && (
         <p className="msg err" role="alert" style={{ margin: 0 }}>
@@ -281,16 +317,16 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
     </>
   )
 
-  if (flush) {
+  if (flush || overlay) {
     return (
       <>
         {fields}
         <div className="sheet-foot">
-          <button type="button" className="btn" onClick={done}>
+          <button type="button" className="btn" onClick={() => done(null)}>
             やめる
           </button>
           <button type="button" className="btn primary" aria-disabled={!ready} onClick={save}>
-            変える
+            {flush ? '変える' : '追加'}
           </button>
         </div>
       </>
