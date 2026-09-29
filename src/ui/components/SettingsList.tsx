@@ -10,7 +10,7 @@ interface Props<T extends { id: string }> {
   /** 画面の中で重ならない id の頭 */
   idPrefix: string
   items: readonly T[]
-  /** 行の名前（逃げ1・シナランバー 18mm） */
+  /** 行の名前（逃げ1・ラワン 18mm） */
   label: (item: T) => string
   /** 行に出す「使っている部材」の文 */
   usage: (item: T) => string

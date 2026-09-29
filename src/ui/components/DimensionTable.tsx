@@ -3,7 +3,7 @@
 // 部材のメモは部材名の下に小さく出す。長いときは1行で省略し、部材名のところを押すと全文を出す（もう一度押すと戻す）。
 // 右端の「完了」で仕上がりの完了を付け外しする。完了した行の寸法はグレーにする。
 // 木取り寸法と切り出しの完了は寸法表に出さない（木取り画面で見る）。
-// フラッシュの部材は、厚みの数字を押したときの内訳に フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2） を出す。
+// 材料グループの部材は、厚みの数字を押したときの内訳に フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2） を出す。
 import { Fragment, useMemo, useState } from 'react'
 import { explainDimension, explanationText } from '../../engine/dimensions/explain'
 import { computeFinished } from '../../engine/dimensions/finished'
@@ -72,7 +72,7 @@ export function DimensionTable({ job, dims, onCheck }: Props) {
             const memoFull = memoOpen.has(p.id)
             const openAxis = open?.partId === p.id ? open.axis : null
             const openEx = openAxis ? ex[AXES.indexOf(openAxis)] : null
-            // フラッシュの部材の厚みを開いたとき：フラッシュの中身を出す。式がフラッシュの厚み1つだけなら式の内訳は省く
+            // 材料グループの部材の厚みを開いたとき：中身を出す。式が材料グループの厚み1つだけなら式の内訳は省く
             const flushText = flush && flushName !== undefined && openAxis !== null && openAxis === d.thicknessAxis ? flushCompositionText(flushName, flush) : null
             const onlyFlush =
               flushText !== null &&

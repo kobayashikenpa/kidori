@@ -28,7 +28,7 @@ export function BoardEditor() {
           const users = partsUsingBoard(job, b.id)
           const flushes = flushesUsingBoards(job, [b.id])
           const text = users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'
-          return flushes.length > 0 ? `${text}　フラッシュ：${flushes.join('・')}` : text
+          return flushes.length > 0 ? `${text}　材料グループ：${flushes.join('・')}` : text
         }}
         add={<BoardForm board={null} done={() => {}} />}
         renderEdit={(b, done) => <BoardForm board={b} done={done} />}
@@ -51,12 +51,12 @@ export function BoardEditor() {
               )}
               {u.flushes.length > 0 && (
                 <p className="msg warn" style={{ margin: 0 }}>
-                  フラッシュ <b>{u.flushes.join('・')}</b> の表面材に{one}を使っています。削除すると、その表面材は外れて、フラッシュの厚みが変わります。
+                  材料グループ：<b>{u.flushes.join('・')}</b> の中身に{one}を使っています。削除すると、その中身は外れて、材料グループの厚みが変わります。
                 </p>
               )}
               {emptied.length > 0 && (
                 <p className="msg warn" style={{ margin: 0 }}>
-                  <b>{emptied.join('・')}</b> の表面材が無くなります（木取りできなくなります）。
+                  <b>{emptied.join('・')}</b> の中身が無くなります（木取りできなくなります）。
                 </p>
               )}
             </>
@@ -117,7 +117,7 @@ export function BoardForm({ board, done }: { board: Board | null; done: () => vo
             id={`${pre}-material`}
             className="input"
             value={material}
-            placeholder="例：シナランバー"
+            placeholder="例：ラワン"
             enterKeyHint="next"
             onChange={(e) => {
               setMaterial(e.target.value)
