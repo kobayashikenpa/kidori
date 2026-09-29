@@ -60,6 +60,25 @@ export interface BoardPieces {
   unplaced: Unplaced[]
 }
 
+/**
+ * 1つの部材の、1つの材料から切る片の並び（第2.6版。組を作る前の形）。片の id は `${partId}#${start + 1}` 〜 `${partId}#${start + count}`
+ */
+export interface PieceRun {
+  partId: string
+  name: string
+  boardId: string
+  /** 片の id の連番の始まり（この値 + 1 が最初の片） */
+  start: number
+  /** 片の数（固定した片・木取り済みを引いた残り。1以上） */
+  count: number
+  shape: PieceShape
+  sizeLabel: string
+  /** 材料グループの部材なら、その材料グループ */
+  flushId?: string
+  /** 部材の中身の並び（材料グループの部材で、木取りする中身の並び。材料を直接選んだ部材は 0） */
+  faceOrder: number
+}
+
 export interface ExpandResult {
   /** 板の登録順。片も入らない部材もない板は含めない */
   groups: BoardPieces[]
@@ -67,6 +86,8 @@ export interface ExpandResult {
   skipped: PackingResult['skipped']
   /** 木取り済み（checks.cut。フラッシュは表面材ごとの checks.cutByBoard）で除いた部材 */
   done: PackingResult['done']
+  /** 部材・材料ごとの片の並び（第2.6版。部材の並び → 中身の並び。組を作る前の形） */
+  runs: PieceRun[]
 }
 
 function fmt(v: number): string {
@@ -112,6 +133,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
   const byStack = new Map<string, BoardPieces>()
   const skipped: ExpandResult['skipped'] = []
   const done: ExpandResult['done'] = []
+  const runs: PieceRun[] = []
   const frozen = frozenDemand(job)
   const groupOf = new Map<string, StackGroup>()
   for (const g of plan.groups) for (const f of g.flushIds) groupOf.set(f, g)
@@ -186,6 +208,11 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
     const partGrain = part?.grain ?? 'any'
     const shape: PieceShape = { s0, s1, grain: partGrain === a0 ? 0 : partGrain === a1 ? 1 : 'any' }
+    rest.forEach((r, i) => {
+      const run: PieceRun = { partId: d.partId, name: d.name, boardId: r.board.id, start: r.start, count: r.quantity, shape, sizeLabel, faceOrder: i }
+      if (part?.flushId !== undefined) run.flushId = part.flushId
+      runs.push(run)
+    })
     // stock：手持ちで並べる（第2.2版）。向きは手持ちの行ごとに決め直すので、選んだサイズに入らなくても片にする
     const place = (g: BoardPieces, board: Board, from: number, count: number, stock: boolean) => {
       const orientations = orientationsOn(board, shape, job)
@@ -238,7 +265,7 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
       if (x) groups.push(x)
     }
   }
-  return { groups, skipped, done }
+  return { groups, skipped, done, runs }
 }
 
 /**
