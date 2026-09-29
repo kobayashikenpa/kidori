@@ -710,6 +710,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
     stackSheets: stacks.stackSheets,
+    stacking: v.stacking === 'off' ? 'off' : 'on',
     ...(removedBuiltIns ? { removedBuiltIns } : {}),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),

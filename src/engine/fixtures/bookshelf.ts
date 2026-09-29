@@ -78,6 +78,7 @@ export function bookshelfJob(): Job {
     parts,
     frozenSheets: [],
     stackSheets: [],
+    stacking: 'on',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }

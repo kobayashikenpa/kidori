@@ -204,6 +204,7 @@ export function packJob(
       mode: chosen.mode,
       sheets: chosen.sheets,
       sheetCount: chosen.sheets.length,
+      offcutSheetCount: 0,
       yieldRate: combineYield(chosen.sheets.map(areasOf)).yieldRate,
       unplaced: unplacedOf(unplaced, chosen.unplaced, reason),
     }
@@ -212,5 +213,6 @@ export function packJob(
   }
 
   const total = combineYield(materials.flatMap((m) => m.sheets.flatMap((s) => (m.stack ? [areasOf(s), areasOf(s)] : [areasOf(s)]))))
-  return { materials, totalYieldRate: total.yieldRate, skipped, done }
+  const accepted = plan.groups.filter((g) => materials.some((m) => m.boardId === g.key)).map((g) => ({ key: g.key, boardIds: g.boardIds }))
+  return { materials, totalYieldRate: total.yieldRate, skipped, done, stacks: { accepted, rejected: [] } }
 }

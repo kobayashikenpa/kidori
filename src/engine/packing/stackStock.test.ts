@@ -43,9 +43,10 @@ describe('stackChoice は 3×6／4×8 だけ（E-64）', () => {
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
   })
 
-  it('組の行が無ければ 4×8', () => {
+  it('組の行が無く、2つの材料のサイズがそろわなければ 4×8（第2.6版）', () => {
     const job = sampleGroupJob(true)
     job.stackSheets = []
+    job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
 

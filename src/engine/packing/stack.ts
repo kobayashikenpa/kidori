@@ -67,7 +67,7 @@ export function stackPlan(job: Pick<Job, 'boards' | 'flushes'>): StackPlan {
 type Named = Pick<Board, 'material' | 'thickness'>
 
 /**
- * 組の表示名「メラミン1＋ラワン4（重ね切り）」。材料が無ければ fallback（固定した1枚の写しの名前など）、それも無ければ id
+ * 組の表示名「2枚重ね：メラミン1＋ラワン4」（第2.6版）。材料が無ければ fallback（固定した1枚の写しの名前など）、それも無ければ id
  */
 export function stackLabel(
   job: Pick<Job, 'boards'>,
@@ -78,5 +78,5 @@ export function stackLabel(
     const b = job.boards.find((x) => x.id === id) ?? fallback?.[i]
     return b ? boardTokenLabel(b) : id
   })
-  return `${names[0]}＋${names[1]}（重ね切り）`
+  return `2枚重ね：${names[0]}＋${names[1]}`
 }

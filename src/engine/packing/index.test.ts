@@ -221,7 +221,7 @@ describe('packJob（木取り計算の入口）', () => {
   it('部材が1枚もなければ材料なし・全体の歩留まり 0', () => {
     const job = bookshelfJob()
     job.parts = []
-    expect(run(job)).toEqual({ materials: [], totalYieldRate: 0, skipped: [], done: [] })
+    expect(run(job)).toEqual({ materials: [], totalYieldRate: 0, skipped: [], done: [], stacks: { accepted: [], rejected: [] } })
   })
 
   it('部材120枚（10種類）のおまかせが1秒以内に終わり、すべて配置される', () => {

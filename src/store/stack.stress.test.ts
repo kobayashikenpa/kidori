@@ -126,6 +126,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     parts,
     frozenSheets: [],
     stackSheets,
+    stacking: flushes.some((f) => f.stack === true) ? 'on' : 'off',
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
   }

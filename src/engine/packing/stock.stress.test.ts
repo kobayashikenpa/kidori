@@ -125,6 +125,7 @@ function randomJob(r: Rng, pieces: [number, number] = [4, 30]): Job {
     parts,
     frozenSheets: [],
     stackSheets,
+    stacking: stack ? 'on' : 'off',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }

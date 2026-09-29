@@ -26,7 +26,7 @@ describe('stackPlan・stackLabel（どの組を重ねるか）', () => {
       { key: stackKey(MELAMINE_1_ID, LAUAN_4_ID), boardIds: [MELAMINE_1_ID, LAUAN_4_ID], flushIds: [SAMPLE_FLUSH_ID] },
     ])
     expect(stackKey(MELAMINE_1_ID, LAUAN_4_ID)).toBe(`stack:${MELAMINE_1_ID}+${LAUAN_4_ID}`)
-    expect(stackLabel(job, [MELAMINE_1_ID, LAUAN_4_ID])).toBe('メラミン1＋ラワン4（重ね切り）')
+    expect(stackLabel(job, [MELAMINE_1_ID, LAUAN_4_ID])).toBe('2枚重ね：メラミン1＋ラワン4')
   })
 
   it('表面材の並びを逆にしても組は同じ（材料の保存の並びで a・b を決める）', () => {
@@ -75,6 +75,6 @@ describe('stackPlan・stackLabel（どの組を重ねるか）', () => {
         { material: 'メラミン', thickness: 1 },
         { material: 'ラワン', thickness: 4 },
       ]),
-    ).toBe('メラミン1＋ラワン4（重ね切り）')
+    ).toBe('2枚重ね：メラミン1＋ラワン4')
   })
 })

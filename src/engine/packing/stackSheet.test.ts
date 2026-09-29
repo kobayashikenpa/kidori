@@ -29,9 +29,11 @@ describe('stackChoice（組の行の設定）', () => {
     expect(stackChoice(job, PAIR)).toMatchObject({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
     expect(stackChoice(job, [LAUAN_4_ID, MELAMINE_1_ID]).sizeKind).toBe('saburoku')
   })
-  it('行が無ければ 4×8・長手・手持ちなし', () => {
+  it('行が無く、2つの材料のサイズがそろわなければ 4×8・長手・手持ちなし（第2.6版。どちらも 3×6 なら 3×6）', () => {
     const job = sampleGroupJob(true)
     job.stackSheets = []
+    expect(stackChoice(job, PAIR).sizeKind).toBe('saburoku')
+    job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
 })
@@ -55,9 +57,10 @@ describe('組の行のサイズで木取り', () => {
     expect(size(find(r.materials, LAUAN_4_ID)!.sheets[0])).toBe('1220×2440')
   })
 
-  it('組の設定が無ければ組は 4×8 の大きさ（1220×2440）で並び、ラワン 4 は 3×6 のまま', () => {
+  it('組の設定が無く材料のサイズがそろわなければ（メラミン 1 が 4×8）組は 4×8 の大きさ（1220×2440）で並び、ラワン 4 は 3×6 のまま', () => {
     const job = sampleGroupJob(true)
     job.stackSheets = []
+    job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     const r = run(job)
     const g = find(r.materials, KEY)!
     expect(g.sheetCount).toBeGreaterThan(0)

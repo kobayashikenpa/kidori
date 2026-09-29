@@ -68,6 +68,8 @@ export function createJob(name: string, now: Date = new Date(), id: string = new
     parts: [],
     frozenSheets: [],
     stackSheets: [],
+    // 重ね切り（第2.6版）：新しい仕事はオン（architecture.md 18.7）
+    stacking: 'on',
     createdAt: t,
     updatedAt: t,
   }

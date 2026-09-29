@@ -58,6 +58,7 @@ function randomJob(seed: number, furniture: boolean, cutMode: CutMode): Job {
     parts,
     frozenSheets: [],
     stackSheets: [],
+    stacking: 'off',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
