@@ -260,7 +260,7 @@ export function updateSettings(job: Job, patch: Partial<Settings>): OpResult {
 
 // ---------- 板 ----------
 
-/** 板の表示名（例：シナランバー 18mm） */
+/** 板の表示名（例：ラワン 18mm） */
 export function boardLabel(board: Pick<Board, 'material' | 'thickness'>): string {
   return `${board.material} ${board.thickness}mm`
 }

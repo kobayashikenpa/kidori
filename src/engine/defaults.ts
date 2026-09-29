@@ -30,15 +30,36 @@ export function defaultSheet(): BoardSheet {
   return { sizeKind: 'shihachi', width, length, grain: 'long' }
 }
 
-/** 新しい仕事の材料：メラミン1・ラワン2.5・ラワン4・ラワン5.5（4×8・木目は長手方向。仕様書 5.1）。id は newId('board')。印 builtIn: true を付ける */
+/** ラワン・シナの最初から入っている厚み（mm） */
+const PLYWOOD_THICKNESSES = [2.5, 3, 4, 5.5, 9, 12, 15, 18, 21, 24, 30]
+
+/**
+ * 最初から入っている材料（材料名・厚み）の一覧（第2.5版。仕様書 5.1）：メラミン1、ラワン・シナ 2.5・3・4・5.5・9・12・15・18・21・24・30、
+ * ポリ 2.5・4。メラミン1 を先頭に置くのは、以前の版と同じく重ね切りの組が「メラミン1＋ラワン4」の並びになるように
+ * （材料の保存の並びで組の a・b を決めるため）。画面では材料名ごとにまとめて並べる
+ */
+export const DEFAULT_MATERIALS: readonly (readonly [string, number])[] = [
+  ['メラミン', 1],
+  ...PLYWOOD_THICKNESSES.map((t) => ['ラワン', t] as const),
+  ...PLYWOOD_THICKNESSES.map((t) => ['シナ', t] as const),
+  ['ポリ', 2.5],
+  ['ポリ', 4],
+]
+
+/**
+ * 第1.1版〜第2.4版の最初から入っている材料（メラミン1・ラワン2.5・4・5.5）。印（builtIn）の無い以前のデータの
+ * 並び順の判定だけに使う（boards.ts）
+ */
+export const LEGACY_DEFAULT_MATERIALS: readonly (readonly [string, number])[] = [
+  ['メラミン', 1],
+  ['ラワン', 2.5],
+  ['ラワン', 4],
+  ['ラワン', 5.5],
+]
+
+/** 新しい仕事の材料（DEFAULT_MATERIALS。4×8・木目は長手方向。仕様書 5.1）。id は newId('board')。印 builtIn: true を付ける */
 export function defaultBoards(newId: (prefix: string) => string): Board[] {
-  const list: [string, number][] = [
-    ['メラミン', 1],
-    ['ラワン', 2.5],
-    ['ラワン', 4],
-    ['ラワン', 5.5],
-  ]
-  return list.map(([material, thickness]) => ({
+  return DEFAULT_MATERIALS.map(([material, thickness]) => ({
     id: newId('board'),
     material,
     thickness,

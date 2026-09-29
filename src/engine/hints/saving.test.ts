@@ -254,7 +254,7 @@ describe('findSavingHints：切り代はフラッシュの部材だけ（第2.1�
 })
 
 describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変えたとき（不具合の報告の確かめ）', () => {
-  // 新しい仕事と同じ材料（メラミン1・ラワン2.5・ラワン4・ラワン5.5、4×8 1220×2440）
+  // 新しい仕事と同じ材料（最初から入っている材料、4×8 1220×2440）
   // 縦切り優先：妻手方向に使える幅は 1220 - 5 = 1215。
   // W602 を2枚並べると (602 + 切り代) × 2 + 3。切り代5 は 1217 で入らず、4 なら 1215 ぴったり
   let seq = 0
@@ -263,7 +263,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
   function newJobWith(settings: Partial<Settings>, parts: Partial<Part>[]): Job {
     seq = 0
     const boards = defaultBoards(newId)
-    const lauan4 = boards[2].id
+    const lauan4 = boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!.id
     // 切り代を試すのはフラッシュの部材だけ（第2.1版）：表面材 ラワン 4 ×1 のフラッシュ（厚み 6）
     return {
       id: 'job-1',
@@ -331,7 +331,7 @@ describe('findSavingHints：新しい仕事の材料（4×8）で切り代を変
       id: 'p2',
       name: '底板',
       flushId: undefined,
-      boardId: job.boards[3].id,
+      boardId: job.boards.find((b) => b.material === 'ラワン' && b.thickness === 5.5)!.id,
       expr: { W: '1210', H: '2000', D: '5.5' },
       quantity: 2,
     })

@@ -38,16 +38,18 @@ function unwrap(r: OpResult): Job {
 }
 
 describe('createJob', () => {
-  it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は4つ、部材はない', () => {
+  it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は最初から入っている25（第2.5版）、部材はない', () => {
     const job = createJob('食器棚', undefined, new Date('2026-09-01T00:00:00Z'), 'job-1')
     expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
-    expect(job.boards.map(boardLabel)).toEqual(['メラミン 1mm', 'ラワン 2.5mm', 'ラワン 4mm', 'ラワン 5.5mm'])
+    expect(job.boards.map(boardLabel).slice(0, 4)).toEqual(['メラミン 1mm', 'ラワン 2.5mm', 'ラワン 3mm', 'ラワン 4mm'])
+    expect(job.boards.map(boardLabel).slice(-3)).toEqual(['シナ 30mm', 'ポリ 2.5mm', 'ポリ 4mm'])
+    expect(job.boards.every((b) => b.builtIn === true)).toBe(true)
     for (const b of job.boards) {
       expect([b.sizeKind, b.width, b.length, b.grain]).toEqual(['shihachi', 1220, 2440, 'long'])
     }
-    expect(new Set(job.boards.map((b) => b.id)).size).toBe(4)
+    expect(new Set(job.boards.map((b) => b.id)).size).toBe(25)
     expect(job.parts).toEqual([])
     expect(job.name).toBe('食器棚')
     expect(job.createdAt).toBe('2026-09-01T00:00:00.000Z')

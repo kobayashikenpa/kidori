@@ -1,6 +1,6 @@
 // 最後に使った設定（ひな形）。新しい仕事・見本はこれを写して作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.3）
 import { isBuiltInBoard } from '../engine/boards'
-import { defaultSettings } from '../engine/defaults'
+import { DEFAULT_MATERIALS, defaultSettings } from '../engine/defaults'
 import { migrateFlushCores, type SpecGroup, type SpecMaterial } from '../engine/migrate/flushCore'
 import type { Job, Settings } from '../engine/types'
 
@@ -26,17 +26,11 @@ export interface SettingsTemplate {
   flushes: FlushSpec[]
 }
 
-/** 初めて使うときのひな形：設定は初期値、材料は メラミン1・ラワン2.5・4・5.5。呼ぶたびに新しいオブジェクト */
+/** 初めて使うときのひな形：設定は初期値、材料は最初から入っている材料（DEFAULT_MATERIALS。第2.5版で25）。呼ぶたびに新しいオブジェクト */
 export function defaultTemplate(): SettingsTemplate {
-  const list: [string, number][] = [
-    ['メラミン', 1],
-    ['ラワン', 2.5],
-    ['ラワン', 4],
-    ['ラワン', 5.5],
-  ]
   return {
     settings: defaultSettings(),
-    materials: list.map(([material, thickness]) => ({ material, thickness, builtIn: true })),
+    materials: DEFAULT_MATERIALS.map(([material, thickness]) => ({ material, thickness, builtIn: true })),
     flushes: [],
   }
 }

@@ -1,14 +1,14 @@
 // 材料の並び順（仕様書 5.1）：あとから追加した材料を追加した順に上から、最初から入っている材料をその下に並べる
-import { defaultBoards } from './defaults'
+import { LEGACY_DEFAULT_MATERIALS } from './defaults'
 import { eq1 } from './round'
 import type { Board, Job } from './types'
 
-/** 最初から入っている材料（材料名・厚み）。以前のデータの判定用 */
-const DEFAULTS: readonly Board[] = defaultBoards(() => '')
-
-/** 最初からある4つと材料名＋厚みが同じか（サイズ・木目は木取りの画面で変えられるので比べない。第1.3版） */
+/**
+ * 印の無い以前のデータ（第1.1版まで）で、最初からある4つと材料名＋厚みが同じか
+ * （サイズ・木目は木取りの画面で変えられるので比べない。第1.3版）。第2.5版で増えた最初の材料は印があるので使わない
+ */
 function sameAsDefault(b: Board): boolean {
-  return DEFAULTS.some((d) => d.material === b.material.trim() && eq1(d.thickness, b.thickness))
+  return LEGACY_DEFAULT_MATERIALS.some(([material, thickness]) => material === b.material.trim() && eq1(thickness, b.thickness))
 }
 
 /**

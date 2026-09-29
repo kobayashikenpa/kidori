@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { orderedBoards } from '../engine/boards'
+import { defaultBoards } from '../engine/defaults'
 import { computeDimensions } from '../engine/dimensions'
 import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
@@ -37,11 +38,11 @@ const boardOf = (job: Job, material: string, thickness: number) =>
   job.boards.filter((b) => b.material === material && b.thickness === thickness)
 
 describe('sampleFromTemplate（見本をひな形から作る。フラッシュ25 と ラワン4 だけ）', () => {
-  it('初期値のひな形から：材料は初期の4つ＋芯材15（木取りしない）・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
+  it('初期値のひな形から：材料は最初からある材料＋芯材15（木取りしない）・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     expect(job.name).toBe(SAMPLE_NAME)
     // 芯材15（木取りしない。第2.5版）は見本で足した材料なので上に並ぶ
-    expect(orderedBoards(job).map(boardLabel)).toEqual(['芯材 15mm', 'メラミン 1mm', 'ラワン 2.5mm', 'ラワン 4mm', 'ラワン 5.5mm'])
+    expect(orderedBoards(job).map(boardLabel)).toEqual(['芯材 15mm', ...defaultBoards(() => 'x').map(boardLabel)])
     expect(boardOf(job, '芯材', 15)[0].noCut).toBe(true)
     // 見本で使う材料は 3×6、使わない材料は 4×8 のまま
     for (const [m, t] of [['メラミン', 1], ['ラワン', 4]] as const) {
@@ -125,8 +126,8 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     ])
     expect(boardOf(job, 'シナランバー', 18)).toHaveLength(1)
     expect(boardOf(job, 'タモ', 20)).toHaveLength(1)
-    // 初期の4つ・シナランバー・タモ・芯材16（フラッシュ21 の芯材を移したもの）・芯材15（見本のフラッシュ25）
-    expect(job.boards).toHaveLength(8)
+    // 最初からある25・シナランバー・タモ・芯材16（フラッシュ21 の芯材を移したもの）・芯材15（見本のフラッシュ25）
+    expect(job.boards).toHaveLength(29)
     expect(partOf(job, '側板').boardId).toBeNull()
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ21', 'フラッシュ25'])
     expect(dimOf(job, '側板').cutSize).toMatchObject({ H: 1805, D: 405 })
@@ -220,9 +221,10 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     expect(finishedOf(job, '棚板')!.W).toBe(849)
   })
 
-  it('シナランバー・シナベニヤは足さない', () => {
+  it('シナランバー・シナベニヤは足さない（最初から入っている材料のほかに足すのは 芯材15 だけ）', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
-    expect(job.boards.some((b) => b.material.startsWith('シナ'))).toBe(false)
+    expect(job.boards.some((b) => b.material === 'シナランバー' || b.material === 'シナベニヤ')).toBe(false)
+    expect(job.boards.filter((b) => b.builtIn !== true).map((b) => b.material)).toEqual(['芯材'])
   })
 
   it('ひな形を変えない', () => {

@@ -68,7 +68,7 @@ describe('保存と読み込み', () => {
     const job = bookshelfJob()
     job.boards = [...defaultBoards((p) => `${p}-${Math.random()}`), ...job.boards]
     saveSaved(s, { jobs: [job], currentJobId: job.id })
-    expect(loadSaved(s).data.jobs[0].boards.map((b) => b.builtIn)).toEqual([true, true, true, true, undefined, undefined])
+    expect(loadSaved(s).data.jobs[0].boards.map((b) => b.builtIn)).toEqual([...Array(25).fill(true), undefined, undefined])
   })
 
   it('何も保存されていなければ empty', () => {
@@ -544,7 +544,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     const steps = [
       (j: typeof job) => updateSettings(j, { kerf: 2, allowance: 5, cutMode: 'auto' }),
       (j: typeof job) => addNige(j, '逃げ', 2, 'nige-2'),
-      (j: typeof job) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })),
+      (j: typeof job) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })),
     ]
     for (const step of steps) {
       const r = step(job)
@@ -599,8 +599,8 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
       template: {
         settings: { kerf: -1, trim: 5, allowance: 10, cutMode: 'vertical', nige: [{ id: 'nige-1', value: 1 }] },
         materials: [
-          { material: 'シナ', thickness: 18 },
-          { material: ' シナ ', thickness: 18 },
+          { material: 'タモ', thickness: 18 },
+          { material: ' タモ ', thickness: 18 },
           { material: '', thickness: 4 },
           { material: 'ラワン', thickness: 0 },
           { material: 'ラワン', thickness: 4, builtIn: true },
@@ -611,7 +611,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     expect(t.settings.kerf).toBe(3)
     expect(t.settings.nige).toEqual([{ id: 'nige-1', name: '逃げ', value: 1 }])
     expect(t.materials).toEqual([
-      { material: 'シナ', thickness: 18 },
+      { material: 'タモ', thickness: 18 },
       { material: 'ラワン', thickness: 4, builtIn: true },
     ])
   })

@@ -24,11 +24,14 @@ describe('defaultTemplate（初めて使うときの設定）', () => {
         { id: 'nige-1', name: '逃げ', value: 1 },
       ],
     })
+    // 最初から入っている材料（第2.5版。仕様書 5.1）
+    const list = [2.5, 3, 4, 5.5, 9, 12, 15, 18, 21, 24, 30]
     expect(t.materials).toEqual([
       { material: 'メラミン', thickness: 1, builtIn: true },
-      { material: 'ラワン', thickness: 2.5, builtIn: true },
-      { material: 'ラワン', thickness: 4, builtIn: true },
-      { material: 'ラワン', thickness: 5.5, builtIn: true },
+      ...list.map((thickness) => ({ material: 'ラワン', thickness, builtIn: true })),
+      ...list.map((thickness) => ({ material: 'シナ', thickness, builtIn: true })),
+      { material: 'ポリ', thickness: 2.5, builtIn: true },
+      { material: 'ポリ', thickness: 4, builtIn: true },
     ])
     expect(defaultTemplate()).not.toBe(t)
     expect(defaultTemplate().settings.nige).not.toBe(t.settings.nige)
@@ -42,28 +45,28 @@ describe('defaultTemplate（初めて使うときの設定）', () => {
 })
 
 describe('templateOf と createJob（設定の引き継ぎ）', () => {
-  /** 切り代5・逃げ2 を足し・シナ18（3×6）を足した仕事 */
+  /** 切り代5・逃げ2 を足し・タモ18（3×6）を足した仕事 */
   function changedJob(): Job {
     let job = createJob('A', undefined, NOW, 'job-a')
     job = must(updateSettings(job, { allowance: 5 }))
     job = must(addNige(job, '逃げ', 2, 'nige-x'))
-    job = must(addBoard(job, newBoard({ material: 'シナ', thickness: 18, sizeKind: 'saburoku' })))
+    job = must(addBoard(job, newBoard({ material: 'タモ', thickness: 18, sizeKind: 'saburoku' })))
     return job
   }
 
-  it('写した仕事は 切り代5・逃げ0.5・1・2・材料5つ（シナ18 は 4×8、id は新しい）で、並び順も同じ', () => {
+  it('写した仕事は 切り代5・逃げ0.5・1・2・材料26（タモ18 は 4×8、id は新しい）で、並び順も同じ', () => {
     const a = changedJob()
     const b = createJob('B', templateOf(a), NOW, 'job-b')
     expect(b.settings.allowance).toBe(5)
     expect(b.settings.nige).toEqual(a.settings.nige)
     expect(b.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 2])
-    expect(b.boards).toHaveLength(5)
-    const shina = b.boards.find((x) => x.material === 'シナ')!
+    expect(b.boards).toHaveLength(26)
+    const shina = b.boards.find((x) => x.material === 'タモ')!
     expect(shina).toMatchObject({ thickness: 18, sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
     const aIds = new Set(a.boards.map((x) => x.id))
     expect(b.boards.some((x) => aIds.has(x.id))).toBe(false)
     expect(orderedBoards(b).map(boardLabel)).toEqual(orderedBoards(a).map(boardLabel))
-    expect(orderedBoards(b)[0].material).toBe('シナ')
+    expect(orderedBoards(b)[0].material).toBe('タモ')
   })
 
   it('作った仕事の設定を変えても、ひな形と元の仕事は変わらない', () => {
@@ -92,7 +95,7 @@ describe('templateOf と createJob（設定の引き継ぎ）', () => {
 
   it('材料のサイズだけ違う2つの仕事のひな形は同じ', () => {
     const a = changedJob()
-    const shina = a.boards.find((x) => x.material === 'シナ')!
+    const shina = a.boards.find((x) => x.material === 'タモ')!
     const b = must(updateBoard(a, shina.id, { sizeKind: 'custom', width: 1000, length: 2000, grain: 'short' }))
     expect(sameTemplate(templateOf(a), templateOf(b))).toBe(true)
     expect(sameTemplate(templateOf(a), templateOf(must(updateSettings(a, { kerf: 2 }))))).toBe(false)

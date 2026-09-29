@@ -83,7 +83,7 @@ export interface SheetChoice {
 /** 板（材料）。材料名＋厚みで区別する。同じ組み合わせの板は2つ作れない */
 export interface Board extends SheetChoice {
   id: string
-  /** 材料名（例：シナランバー） */
+  /** 材料名（例：ラワン） */
   material: string
   /** 厚み（mm） */
   thickness: number
