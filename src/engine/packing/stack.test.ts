@@ -5,15 +5,16 @@ import { canStack, stackKey, stackLabel, stackPlan } from './stack'
 
 const face = (boardId: string, count: number) => ({ boardId, count })
 const flush = (faces: Flush['faces']): Flush => ({ id: 'f', name: 'f', core: 15, faces })
+const B = sampleFlushJob().boards
 describe('canStack（重ねて切れるフラッシュか）', () => {
   it('メラミン1×2・ラワン4×2 は重ねられる', () => {
-    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(LAUAN_4_ID, 2)]))).toBe(true)
+    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(LAUAN_4_ID, 2)]), B)).toBe(true)
   })
   it('枚数が違う（メラミン1×2・ラワン4×1）、表面材が3種類・1種類、同じ材料が2つは重ねられない', () => {
-    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(LAUAN_4_ID, 1)]))).toBe(false)
-    expect(canStack(flush([face(MELAMINE_1_ID, 1), face(LAUAN_4_ID, 1), face(LAUAN_25_ID, 1)]))).toBe(false)
-    expect(canStack(flush([face(MELAMINE_1_ID, 2)]))).toBe(false)
-    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(MELAMINE_1_ID, 2)]))).toBe(false)
+    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(LAUAN_4_ID, 1)]), B)).toBe(false)
+    expect(canStack(flush([face(MELAMINE_1_ID, 1), face(LAUAN_4_ID, 1), face(LAUAN_25_ID, 1)]), B)).toBe(false)
+    expect(canStack(flush([face(MELAMINE_1_ID, 2)]), B)).toBe(false)
+    expect(canStack(flush([face(MELAMINE_1_ID, 2), face(MELAMINE_1_ID, 2)]), B)).toBe(false)
   })
 })
 

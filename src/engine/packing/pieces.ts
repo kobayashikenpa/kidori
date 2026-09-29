@@ -1,4 +1,5 @@
 // 部材を1枚ずつの「片」に展開し、板ごとに分ける。板の木目に部材の木目を合わせて向き（x・y）を決める
+import { partIsNoCut } from '../flush'
 import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
 import type { Board, BoardGrain, DimensionResult, Job, PackingResult, Part, PartDimensions, UnplacedReason } from '../types'
@@ -84,7 +85,9 @@ function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[
   if (part?.flushId !== undefined) {
     const flush = job.flushes.find((f) => f.id === part.flushId)
     if (!flush) return null
-    return flush.faces.map((f) => ({
+    // 木取りしない中身（第2.5版）は片にしない（片の id の連番にも数えない）。材料が見つからない中身は今までどおり残す（noBoard）
+    const noCut = new Set(job.boards.filter((b) => b.noCut === true).map((b) => b.id))
+    return flush.faces.filter((f) => !noCut.has(f.boardId)).map((f) => ({
       boardId: f.boardId,
       quantity: f.count * d.quantity,
       done: part.checks.cutByBoard?.[f.boardId] === true,
@@ -125,6 +128,8 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
     const part = partById.get(d.partId)
+    // 木取りしない材料だけの部材（第2.5版）：枚数0の行と同じく、片・done・skipped のどれにも入れない
+    if (part && partIsNoCut(job, part)) continue
     const targets = targetsOf(job, part, d)
     if (targets === null && part?.flushId === undefined && part?.checks.cut === true) {
       // 材料が未設定でも、木取り済みなら除いた一覧に出す（第1.3版のまま）

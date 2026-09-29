@@ -59,7 +59,7 @@ export function templateOf(job: Job): SettingsTemplate {
     flushes: job.flushes.map((f) => {
       const spec: FlushSpec = {
         name: f.name,
-        core: f.core,
+        core: f.core ?? 0,
         faces: f.faces.flatMap((x) => {
           const b = job.boards.find((y) => y.id === x.boardId)
           return b ? [{ material: b.material, thickness: b.thickness, count: x.count }] : []

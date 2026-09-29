@@ -58,7 +58,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     const count = int(r, 1, 2)
     const faces = ids.map((boardId) => ({ boardId, count: r() < 0.85 ? count : int(r, 1, 2) }))
     const f: Flush = { id: `f${i}`, name: `フラッシュ${i}`, core: int(r, 10, 20), faces }
-    if (canStack(f) && r() < 0.8) f.stack = true
+    if (canStack(f, boards) && r() < 0.8) f.stack = true
     flushes.push(f)
   }
   const parts: Part[] = []
@@ -83,7 +83,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
   const stackSheets: StackSheet[] = []
   for (const f of legacy ? [] : flushes) {
-    if (!canStack(f) || r() < 0.3) continue
+    if (!canStack(f, boards) || r() < 0.3) continue
     const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
     if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
     const row: StackSheet = { boardIds: ids, ...(r() < 0.6 ? SIZES[0] : pickOne(r, SIZES)) }
@@ -263,7 +263,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
           const i = int(r, 0, job.flushes.length - 1)
           const f = job.flushes[i]
           const { stack: _s, ...rest } = f
-          const next: Flush = f.stack ? rest : canStack(f) ? { ...f, stack: true } : f
+          const next: Flush = f.stack ? rest : canStack(f, job.boards) ? { ...f, stack: true } : f
           job = { ...job, flushes: job.flushes.map((x, j) => (j === i ? next : x)) }
         }
         checkJob(job)

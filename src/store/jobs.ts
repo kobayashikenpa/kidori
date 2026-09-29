@@ -81,7 +81,7 @@ export function createJob(
         return b ? [{ boardId: b.id, count: x.count }] : []
       }),
     }
-    if (f.stack === true && canStack(flush)) flush.stack = true
+    if (f.stack === true && canStack(flush, boards)) flush.stack = true
     return flush
   })
   return {
@@ -352,7 +352,7 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
       if (!f.faces.some((x) => ids.has(x.boardId))) return f
       const { stack, ...rest } = f
       const next: Flush = { ...rest, faces: f.faces.filter((x) => !ids.has(x.boardId)) }
-      if (stack === true && canStack(next)) next.stack = true
+      if (stack === true && canStack(next, job.boards.filter((b) => !ids.has(b.id)))) next.stack = true
       return next
     }),
     parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
@@ -581,7 +581,7 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
   // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
   const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
   if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
-  if (!(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
+  if (f.core === undefined || !(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
   if (f.faces.length === 0) return '表面材を1つ以上選んでください'
   const seen = new Set<string>()
   for (const face of f.faces) {
@@ -591,13 +591,13 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
     seen.add(b.id)
     if (!(Number.isInteger(face.count) && face.count >= 1)) return '表面材の枚数は 1 以上の整数を入れてください'
   }
-  if (f.stack === true && !canStack(f)) return '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
+  if (f.stack === true && !canStack(f, job.boards)) return '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
   return null
 }
 
 /** 前後の空白を外し、重ね切り（第2.0版）は true のときだけ持つ */
 function cleanFlush(f: FlushDraft): FlushDraft {
-  const out: FlushDraft = { name: f.name.trim(), core: f.core, faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+  const out: FlushDraft = { name: f.name.trim(), ...(f.core !== undefined ? { core: f.core } : {}), faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
   if (f.stack === true) out.stack = true
   return out
 }

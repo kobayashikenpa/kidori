@@ -97,14 +97,14 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
   const follow = (c: number | null, fs: FaceRow[]) => {
     if (nameAuto) setName(autoName(c, fs))
   }
-  const [core, setCore] = useState<number | null>(flush ? flush.core : null)
+  const [core, setCore] = useState<number | null>(flush ? (flush.core ?? null) : null)
   const [faces, setFaces] = useState<FaceRow[]>(firstFaces)
   const [nextKey, setNextKey] = useState(100)
   const [error, setError] = useState<string | null>(null)
   /** 表面材の欄 → engine に渡す形（入力途中の枚数は 0 として見る） */
   const toFaces = (fs: FaceRow[]) => fs.map((f) => ({ boardId: f.boardId, count: f.count ?? 0 }))
   // 新しいフラッシュは、重ねられる表面材なら初期オン（defaultFlushStack）。変更のときは保存した値
-  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(faces))))
+  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(faces), job.boards)))
   // 利用者がチェックを押したか（押していない新しいフラッシュは、表面材が重ねられるようになったらオンにする）
   const [stackTouched, setStackTouched] = useState(flush !== null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
@@ -112,11 +112,11 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
   const pre = flush ? `flush-edit-${flush.id}` : 'flush-add'
 
   /** 重ね切りの条件（表面材が2種類で枚数が同じ）。入力途中の枚数は 0 として見る */
-  const stackable = (fs: FaceRow[]) => canStack({ faces: toFaces(fs) })
+  const stackable = (fs: FaceRow[]) => canStack({ faces: toFaces(fs) }, job.boards)
   const changeFaces = (next: FaceRow[]) => {
     setFaces(next)
     if (!stackable(next)) setStack(false)
-    else if (!stackTouched) setStack(defaultFlushStack(toFaces(next)))
+    else if (!stackTouched) setStack(defaultFlushStack(toFaces(next), job.boards))
     follow(core, next)
     setError(null)
   }
@@ -146,7 +146,7 @@ function FlushForm({ flush, done }: { flush: Flush | null; done: () => void }) {
       setCore(null)
       const init = firstFaces()
       setFaces(init)
-      setStack(defaultFlushStack(toFaces(init)))
+      setStack(defaultFlushStack(toFaces(init), job.boards))
       setStackTouched(false)
       setError(null)
       setRound((n) => n + 1)

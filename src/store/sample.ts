@@ -110,7 +110,7 @@ export function sampleFromTemplate(template: SettingsTemplate, now: Date = new D
   // 重ね切りの組（第2.3版）の設定も 3×6（見本の期待値＝組 3×6 で5枚を変えないため。未決事項 24 と同じ考え）。
   // 組の a・b は材料の保存の並び
   const stackSheets: StackSheet[] = []
-  if (canStack(flush)) {
+  if (canStack(flush, boards)) {
     const ids = flush.faces.map((f) => f.boardId)
     const order = (id: string) => boards.findIndex((b) => b.id === id)
     const pair: [string, string] = order(ids[0]) < order(ids[1]) ? [ids[0], ids[1]] : [ids[1], ids[0]]

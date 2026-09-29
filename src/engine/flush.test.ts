@@ -116,8 +116,8 @@ describe('flushBreakdown（厚みの内訳）', () => {
     const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
     expect(b.core).toBe(15)
     expect(b.faces).toEqual([
-      { boardId: MELAMINE_1_ID, label: 'メラミン1', thickness: 1, count: 2 },
-      { boardId: LAUAN_4_ID, label: 'ラワン4', thickness: 4, count: 2 },
+      { boardId: MELAMINE_1_ID, label: 'メラミン1', thickness: 1, count: 2, noCut: false },
+      { boardId: LAUAN_4_ID, label: 'ラワン4', thickness: 4, count: 2, noCut: false },
     ])
     expect(b.total).toBe(25)
     expect(flushBreakdownText(b)).toBe('芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
@@ -206,25 +206,28 @@ describe('autoFlushName（自動の名前）・isAutoFlushName', () => {
   })
 })
 
+const FB = [{ id: 'm1' }, { id: 'l4' }, { id: 'l25' }]
+
 describe('defaultFlushStack（新しいフラッシュの「表面材を重ねて切る」の初期値。第2.1版）', () => {
   it('表面材が2種類で枚数が同じならオン（メラミン1×2・ラワン4×2）', () => {
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 2 }])).toBe(true)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 2 }], FB)).toBe(true)
   })
 
   it('重ねられない表面材ならオフ（枚数が違う・1種類・3種類・表面材なし）', () => {
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 1 }])).toBe(false)
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }])).toBe(false)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 1 }], FB)).toBe(false)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }], FB)).toBe(false)
     expect(
       defaultFlushStack([
         { boardId: 'm1', count: 1 },
         { boardId: 'l4', count: 1 },
         { boardId: 'l25', count: 1 },
-      ]),
+      ], FB),
     ).toBe(false)
-    expect(defaultFlushStack([])).toBe(false)
+    expect(defaultFlushStack([], FB)).toBe(false)
   })
 
   it('初期の材料の表面材の初期値（defaultFlushFaces）ならオン', () => {
-    expect(defaultFlushStack(defaultFlushFaces({ boards: defaultBoards((p) => `${p}-x${Math.random()}`) }))).toBe(true)
+    const boards = defaultBoards((p) => `${p}-x${Math.random()}`)
+    expect(defaultFlushStack(defaultFlushFaces({ boards }), boards)).toBe(true)
   })
 })

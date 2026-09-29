@@ -108,3 +108,18 @@ export function sampleFlushJob(stack = false): Job {
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
 }
+
+export const CORE_15_ID = 'board-core-15'
+
+/**
+ * 第2.5版の見本（材料グループ）：sampleFlushJob の芯材（core 15）を「芯材15（木取りしない）」の材料に移したもの。
+ * 芯材15 は材料の最後、中身の先頭に ×1。form: 'flush'・autoName: true。寸法・木取りの結果は sampleFlushJob と同じ
+ */
+export function sampleGroupJob(stack = false): Job {
+  const job = sampleFlushJob(stack)
+  const sheet = { sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' } as const
+  job.boards.push({ id: CORE_15_ID, material: '芯材', thickness: 15, ...sheet, noCut: true })
+  const { core: _core, ...rest } = job.flushes[0]
+  job.flushes[0] = { ...rest, faces: [{ boardId: CORE_15_ID, count: 1 }, ...rest.faces], form: 'flush', autoName: true }
+  return job
+}

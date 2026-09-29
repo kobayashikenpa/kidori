@@ -354,7 +354,8 @@ const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number
  * id が空・前と同じ、名前が空・前と同じ（全角半角をそろえて比べる）、芯材が 0 以下のフラッシュは外す。
  * 無い材料・前と同じ材料・枚数が1以上の整数でない表面材は外す
  */
-function sanitizeFlushes(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): Flush[] {
+function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): Flush[] {
+  const boardIds = new Set(boards.map((b) => b.id))
   if (v === undefined) return []
   if (!Array.isArray(v)) {
     fx.count++
@@ -390,7 +391,7 @@ function sanitizeFlushes(v: unknown, boardIds: ReadonlySet<string>, fx: Fixes): 
     }
     const flush: Flush = { id: x.id, name, core: x.core, faces }
     // 重ね切り（第2.0版）：true で canStack のときだけ残す。それ以外で stack があれば外して数える
-    if (x.stack === true && canStack(flush)) flush.stack = true
+    if (x.stack === true && canStack(flush, boards)) flush.stack = true
     else if (x.stack !== undefined) fx.count++
     out.push(flush)
   }
@@ -633,7 +634,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える。組は 3×6／4×8 だけ（15.9）
   const stacks = settleStacks(
     boards,
-    sanitizeFlushes(v.flushes, boardIds, fx),
+    sanitizeFlushes(v.flushes, boards, fx),
     v.stackSheets === undefined ? null : sanitizeStackSheets(v.stackSheets, boards, fx),
   )
   const flushes = stacks.flushes
