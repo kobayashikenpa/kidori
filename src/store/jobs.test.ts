@@ -491,6 +491,24 @@ describe('消した最初の材料を覚える（removedBuiltIns。第2.5.1版�
     expect(unwrap(removeBoards(job, ['mine'])).removedBuiltIns).toEqual([builtInKey('シナ', 18)])
   })
 
+  it('最初の材料と同じ材料名＋厚みの材料の名前・厚みを変えたら、前のキーを覚える（進行役の決定）', () => {
+    let job = createJob('A')
+    const r9 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 9)!.id
+    job = unwrap(updateBoard(job, r9, { thickness: 10 }))
+    expect(job.removedBuiltIns).toEqual([builtInKey('ラワン', 9)])
+    const s18 = job.boards.find((b) => b.material === 'シナ' && b.thickness === 18)!.id
+    job = unwrap(updateBoard(job, s18, { material: 'シナランバー' }))
+    expect(job.removedBuiltIns).toEqual([builtInKey('ラワン', 9), builtInKey('シナ', 18)])
+    // サイズ・木取りしないの変更や、最初の材料でない材料の変更では覚えない
+    const m1 = job.boards.find((b) => b.material === 'メラミン')!.id
+    job = unwrap(updateBoard(job, m1, { sizeKind: 'saburoku' }))
+    job = unwrap(updateBoard(job, r9, { thickness: 11 }))
+    expect(job.removedBuiltIns).toEqual([builtInKey('ラワン', 9), builtInKey('シナ', 18)])
+    // 空白・全角の違いだけの変更はキーが同じなので覚えない
+    const p4 = job.boards.find((b) => b.material === 'ポリ' && b.thickness === 4)!.id
+    expect(unwrap(updateBoard(job, p4, { material: ' ポリ ' })).removedBuiltIns).toEqual(job.removedBuiltIns)
+  })
+
   it('最初の材料でないものだけ消したときは removedBuiltIns を付けない', () => {
     const job = unwrap(removeBoards(bookshelfJob(), [VENEER_4_ID]))
     expect('removedBuiltIns' in job).toBe(false)

@@ -88,6 +88,18 @@ function results(job: Job) {
 }
 
 describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え', () => {
+  it('第2.5版の保存データ（v3・重ね切りの見本・固定した1枚）を読むと、足した最初の材料のほかは同じ（第2.5.1版）', () => {
+    const job = checkedSample()
+    expect(job.frozenSheets).toHaveLength(1)
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [job] }) }), NOW)
+    expect(r.status).toBe('ok')
+    expect('message' in r).toBe(false)
+    const got = r.data.jobs[0]
+    expect(got.boards.length).toBe(job.boards.length + 21)
+    expect(dropAddedBuiltIns(got, job)).toEqual(job)
+    expect(JSON.stringify(results(got))).toBe(JSON.stringify(results(job)))
+  })
+
   it('v2 のキーだけにある見本（組の1枚にチェック済み）を読むと 芯材15（木取りしない）が足され、結果は移す前と同じ', () => {
     const legacy = legacyCheckedSample()
     const v2 = JSON.stringify({ version: 2, jobs: [legacy] })

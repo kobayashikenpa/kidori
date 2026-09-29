@@ -302,6 +302,7 @@ export function addBoard(job: Job, board: Board): OpResult {
 
 /**
  * 板を変える。材料名＋厚みがほかの板と同じなら断る。
+ * 最初の材料と同じ材料名＋厚みの材料の名前・厚みを変えたら、前のキーを removedBuiltIns に覚える（第2.5.1版）。
  * 木取りしない（noCut。第2.5版）は true で付け、undefined（や false）で外す。付け外し・厚みの変更のあと、
  * 重ねて切れなくなった材料グループは重ね切りを外し（組の行は残す）、自動の名前の材料グループは名前をつけ直す
  */
@@ -313,7 +314,12 @@ export function updateBoard(job: Job, boardId: string, patch: Partial<Omit<Board
   const err = validateBoard(job, b)
   if (err) return fail(err)
   const boards = job.boards.map((x) => (x.id === boardId ? b : x))
-  return ok(refreshAutoNames({ ...job, boards, flushes: unstackUnfit(job.flushes, boards) }))
+  // 最初の材料と同じ材料名＋厚みの材料の名前・厚みを変えたら、前のキーを覚える（第2.5.1版。読み込みで足し直さないため）
+  const before = builtInKey(cur.material, cur.thickness)
+  const removed = job.removedBuiltIns ?? []
+  const remember = before !== builtInKey(b.material, b.thickness) && isDefaultMaterialKey(before) && !removed.includes(before)
+  const next = remember ? { ...job, boards, removedBuiltIns: [...removed, before] } : { ...job, boards }
+  return ok(refreshAutoNames({ ...next, flushes: unstackUnfit(job.flushes, boards) }))
 }
 
 /** 重ねて切れなくなった材料グループの重ね切りを外す（第2.0版・第2.5版）。組の行（stackSheets）は消さない */
