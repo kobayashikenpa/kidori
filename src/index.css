@@ -1936,3 +1936,18 @@ button.dim-name {
 .swap-note .btn {
   flex: 0 0 auto;
 }
+
+/* ---------- 設定の一覧の見出し（材料名ごと）・木取りしない の印（第2.5版） ---------- */
+.list-group-head {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.list-name .chip {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.chip.nocut {
+  border: 1px dashed var(--muted);
+}

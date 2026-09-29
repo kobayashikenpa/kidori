@@ -1,4 +1,5 @@
-// 設定の画面の材料の一覧：材料名と厚みだけを入れて追加・編集、削除（使っている部材を示して確認）。
+// 設定の画面の材料の一覧：材料名と厚み・木取りしない（第2.5版）を入れて追加・編集、削除（使っている部材を示して確認）。
+// 一覧は材料名ごとの見出しでまとめる（並びは変えない。仕様書 5.1）。
 // 材料のサイズ（3×6・4×8・自由入力）と木目の方向は、木取りの画面で選ぶ（仕様書 5.1・9）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
@@ -7,6 +8,7 @@ import type { Board } from '../../engine/types'
 import { addBoard, boardLabel, boardsUsages, newBoard, partsUsingBoard, removeBoards, updateBoard } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { closeKeyboard } from '../keyboard'
+import { materialName } from '../materials'
 import { NumberField } from './NumberField'
 import { SettingsList } from './SettingsList'
 
@@ -20,6 +22,8 @@ export function BoardEditor() {
         // 並びは あとから足した材料（足した順）→ 最初から入っている材料（仕様書 5.1）
         items={orderedBoards(job)}
         label={boardLabel}
+        badge={(b) => (b.noCut === true ? <span className="chip nocut">木取りしない</span> : null)}
+        groupOf={materialName}
         usage={(b) => {
           const users = partsUsingBoard(job, b.id)
           const flushes = flushesUsingBoards(job, [b.id])
@@ -65,11 +69,15 @@ export function BoardEditor() {
   )
 }
 
-/** 材料の追加（board が null）・編集。材料名と厚みだけ。厚みは空欄から始め、入れないと追加できない */
-function BoardForm({ board, done }: { board: Board | null; done: () => void }) {
+/**
+ * 材料の追加（board が null）・編集。材料名と厚み・木取りしない。厚みは空欄から始め、入れないと追加できない。
+ * 部材の編集の上に重ねて開くとき（MaterialEditSheet）にも使う
+ */
+export function BoardForm({ board, done }: { board: Board | null; done: () => void }) {
   const { run } = useCurrentJob()
   const [material, setMaterial] = useState(board?.material ?? '')
   const [thickness, setThickness] = useState<number | null>(board ? board.thickness : null)
+  const [noCut, setNoCut] = useState(board?.noCut === true)
   const [error, setError] = useState<string | null>(null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
@@ -81,13 +89,16 @@ function BoardForm({ board, done }: { board: Board | null; done: () => void }) {
       return
     }
     const r = run((j) =>
-      board ? updateBoard(j, board.id, { material, thickness }) : addBoard(j, newBoard({ material, thickness })),
+      board
+        ? updateBoard(j, board.id, { material, thickness, noCut: noCut ? true : undefined })
+        : addBoard(j, newBoard({ material, thickness, ...(noCut ? { noCut: true as const } : {}) })),
     )
     if (!r.ok) return setError(r.message)
     closeKeyboard()
     if (!board) {
       setMaterial('')
       setThickness(null)
+      setNoCut(false)
       setError(null)
       setRound((n) => n + 1)
     }
@@ -132,6 +143,21 @@ function BoardForm({ board, done }: { board: Board | null; done: () => void }) {
           />
         </div>
       </div>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={noCut}
+        className={`opt-check${noCut ? ' on' : ''}`}
+        onClick={() => {
+          setNoCut((v) => !v)
+          setError(null)
+        }}
+      >
+        <span className="check-box" aria-hidden="true">
+          {noCut ? '✓' : ''}
+        </span>
+        <span>木取りしない（例：芯材）</span>
+      </button>
       {thickness === null && (
         <span className="msg warn">厚みを入れてください。入れないと{board ? '変えられません' : '追加できません'}</span>
       )}
