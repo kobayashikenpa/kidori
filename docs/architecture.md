@@ -624,46 +624,32 @@ src/ui/
 - サイズを選ぶ操作：`setBoardSize(job, boardId, size: { sizeKind; width; length; grain })`（中身は `updateBoard` と同じ検査。3×6・4×8 は寸法が決まり木目は長手方向）
 - `isBuiltInBoard` の、印の無い以前のデータの判定（7.4）は **材料名＋厚みだけ** で比べる（サイズを木取りの画面で変えても、最初からある材料のまま下に並ぶように）
 
-### 8.3 最後に使った設定（ひな形）— 決定（planner）
+### 8.3 新しい仕事の設定と、最初の材料の自動の追加（第2.5.1版で変更）
 
-仕様書 4「設定の引き継ぎ」。仕事ごとの設定はそのまま持ち、アプリ全体で「最後に使った設定」を1つだけ別に覚える。
+仕様書 4「設定の引き継ぎ（第2.5.1版で変更）」。設定（材料・材料グループ・調整寸法・刃厚・端切り・切り代・切り方）は仕事ごとに持つ。第1.3版〜第2.5版の「最後に使った設定（ひな形）」（`store/template.ts`・`StoreState.template`・`kidori.lastSettings.v1`）は第2.5.1版でなくした。
 
-```ts
-// src/store/template.ts
-export interface MaterialSpec {
-  material: string
-  thickness: number
-  builtIn?: true      // 最初から入っている材料の印（並び順のため。7.4）
-}
-export interface SettingsTemplate {
-  settings: Settings  // 刃厚・端切り・切り代・切り方・逃げ（id ごと）
-  materials: MaterialSpec[] // 保存の並び（job.boards の並び）
-}
-```
+- `createJob(name, now?, id?)`（`store/jobs.ts`）：**いつも初期値から作る**。`defaultSettings()`（刃厚3・端切り5・切り代10・縦切り優先・逃げ0.5・1）、材料は `defaultBoards(newId)`（`DEFAULT_MATERIALS` の25・4×8・`builtIn: true`）、材料グループなし、部材なし。前の仕事の設定は引き継がない
+- `copyJob`：今までどおり元の仕事の設定・材料・材料グループを `rekeyJob` で写す（id は新しく）。`removedBuiltIns` も写す
+- 以前に保存したひな形のキー `kidori.lastSettings.v1` は読まない（消さず、書き換えない）。バックアップのファイルにもひな形を入れず、以前のファイルの `template` は読み飛ばす（`BackupFile.template?` は以前のファイルの形としてだけ残す）
 
-- `defaultTemplate()`：`defaultSettings()`（刃厚3・端切り5・切り代10・縦切り優先・逃げ0.5・1）と、材料 メラミン1・ラワン2.5・4・5.5（すべて `builtIn: true`）。仕様書 4 の「初めて使うとき」
-- `templateOf(job)`：仕事の設定と材料（材料名・厚み・印）を写したもの（深いコピー）。印は `isBuiltInBoard(board, job)` で決めて付ける（印の無い以前の仕事でも並び順が保たれる）。サイズは入れない
-- `sameTemplate(a, b)`：中身が同じか（JSON で比べてよい）
-- `createJob(name, template = defaultTemplate(), now, id)`：設定は `template.settings` の深いコピー（逃げの id もそのまま。`copyJob` と同じ）、材料は `template.materials` を並びのまま、id を `newId('board')`、サイズは `defaultSheet()` にして作る
-- **ひな形を更新するとき**：reducer の `applyOp` で、操作の前後で `templateOf` が変わったら（`!sameTemplate`）、`state.template = templateOf(後の仕事)` にする。操作の種類で分けないので、刃厚・端切り・切り代・切り方・逃げの追加／変更／削除・材料の追加／変更／削除のどれでも漏れない。サイズの選択・部材の変更・仕事の名前の変更では `templateOf` が変わらないので更新しない
-  - 仕事の追加（新しい仕事・見本・コピー）と仕事の削除ではひな形を変えない（見本が足した材料は「設定を変えた」ではないため）
-- 一度写したあとは、仕事とひな形は別のデータ（深いコピー）。ひな形が変わっても、ほかの仕事は変わらない
+**最初の材料を今ある仕事に足す（`engine/boards.ts`）**
+- `builtInKey(material, thickness)`：材料名（前後の空白を外し NFKC）＋厚み（小数第1位）のキー。`isDefaultMaterialKey(key)` は `DEFAULT_MATERIALS` のキーか
+- `addMissingBuiltIns(job, newId)`：`DEFAULT_MATERIALS` のうち、同じキーの材料が仕事に無く、`job.removedBuiltIns` にも無いものを足す（4×8・`builtIn: true`）。足す場所は `DEFAULT_MATERIALS` の並びで1つ前の最初の材料の後ろ（無ければ最初の材料の先頭、それも無ければ最後）。今ある材料どうしの前後・中身、部材・材料グループ・組の設定・計算結果は変えない。印の無い以前の仕事（第1.1版まで）は、最初の4つとみなしている材料（`isBuiltInBoard`）に印を付けてから足す（並び順を保つため）。足すものが無ければ同じオブジェクト
+- 読み込み（`sanitizeJobs`。保存データ・共有・バックアップのファイル）で、移し替えのあとに1回呼ぶ。直した数・知らせには数えない。最初の材料は今後増える前提で、増えたときもこれで今ある仕事に入る
 
-**保存（`storage.ts`）**
-- キー `kidori.lastSettings.v1` に `{ version: 1, template }`。仕事の保存と同じく 300ms まとめて書く（`JobStore` の保存の effect に入れる）。`canSave` が false のときは書かない
-- 読み込み：`loadTemplate(storage, jobs): SettingsTemplate`。例外は投げない
-  1. キーがあり読めれば、それを検査・修復して使う（設定は `sanitizeSettings` と同じ検査、材料は材料名が空・厚みが 0 以下・材料名＋厚みの重複を外す）
-  2. キーが無いとき：仕事が1つもなければ `defaultTemplate()`。仕事があれば（第1.2版から上げたとき）**更新日が一番新しい仕事の `templateOf`**（暫定。未決事項 23）
-  3. 読めない（壊れた JSON など）ときは `defaultTemplate()` にする。退避はしない（仕事のデータではなく、次に設定を変えれば上書きされるため）
+**消した最初の材料を覚える（`Job.removedBuiltIns?: string[]`。キーは `builtInKey`）**
+- `removeBoards`：消した材料のキーが最初の材料のキーなら足す（自分で足した同じ材料名＋厚みの材料でも。読み込みで足し直さないため）
+- `updateBoard`：最初の材料のキーの材料の**材料名・厚みを変えたら、前のキーを足す**（進行役の決定）。サイズ・木取りしないの変更、キーが同じ（空白・全角の違いだけ）の変更では足さない
+- 無い・空なら省略。読み込みでは文字の配列だけ残す（おかしな値・重なりは外して直した数に数える）
 
-### 8.4 見本（本棚 W900）をひな形から作る — 決定（planner。第1.6版で変更）
+### 8.4 見本（本棚 W900）— 決定（planner。第2.5.1版で変更）
 
-`sampleFromTemplate(template, now): Job`（`src/store/sample.ts`）。`bookshelfJob()`（engine の見本。以前のテストで使う）は変えない。
-1. `createJob('本棚 W900', template, now)` で作る。**第1.6版から id は追加するたびに新しくし、見本があっても「見本を追加」を出す**（以前は id を固定して見本が1つあるとボタンを隠していたため、古い設定の見本が残り「今の設定が見本に出ない」ことになっていた）
-2. ひな形の材料・調整寸法・フラッシュ・数値の設定はそのまま使い、見本で使うものが無ければ足す：材料 シナランバー 18・シナベニヤ 4（同じ材料名（NFKC）＋厚み（`eq1`）があればそれを使う）、フラッシュ「フラッシュ25」（同じ名前があればその中身のまま使う。無ければ 芯材15・メラミン1×2・ラワン4×2 で足し、メラミン1・ラワン4 も無ければ足す）、逃げ1（名前「逃げ」寸法 1。無ければ足す）
-3. 部材：全体 900×1800×400（枚数0）／側板 W`{t:ランバー}` H`全体.H` D`全体.D` ×2 木目H／天地板 フラッシュ25 W`全体.W - 側板.W * 2` H`{t:フラッシュ25}` D`全体.D` ×2 木目W／棚板 W`天地板.W - {n:逃げ1}` H`{t:ランバー}` D`全体.D - 20` ×4 木目W／背板 シナベニヤ4 W`全体.W` H`全体.H` D`{t:ベニヤ}` ×1 木目H 切り代0
-4. 見本で使う材料のサイズは **3×6（サブロク）**（未決事項 24）。すでにあった材料を使うときも、この仕事の中ではその材料を 3×6 にする
-- 見本で期待する値（ひな形が初期値のとき）は tasks.md の S-12
+`sampleJob(now?): Job`（`src/store/sample.ts`）。`bookshelfJob()`（engine の見本。以前のテストで使う）は変えない。
+1. `createJob('本棚 W900', now)` で**初期値の設定から**作る。id は追加するたびに新しくする（第1.6版から）
+2. 見本で使うものを足す：材料 芯材15（木取りしない）、材料グループ フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。重ね切りオン・`form: 'flush'`・`autoName`）。メラミン1・ラワン4・逃げ1 は初期値にあるものを使う（同じ材料名（NFKC）＋厚み（`eq1`）。無ければ足す）
+3. 部材：全体 900×1800×400（枚数0）／側板・天地板・棚板 フラッシュ25（厚みは `{t:フラッシュ25}`、棚板 W は `天地板.W - {n:逃げ1}`）／背板 ラワン4 W`全体.W` H`全体.H` D`{t:ラワン4}` ×1 木目H 切り代0
+4. 見本で使う材料と重ね切りの組の設定は **3×6（サブロク）**（未決事項 24）
+- 見本で期待する値は tasks.md の「重ね切りの見本」（組 3×6 で5枚 85.2%・ラワン4 の1枚 97.8%・全体 86.4%）
 
 ### 8.5 木取り済みの部材を除く（`packing/pieces.ts`）— 決定（planner）
 
