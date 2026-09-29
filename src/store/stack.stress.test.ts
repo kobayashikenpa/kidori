@@ -280,7 +280,8 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       expect(packJob(job, computeDimensions(job))).toEqual(first)
     }
     expect(frozenStacks).toBeGreaterThan(20)
-  })
+    // 40件 × 25回 packJob するので、ほかのテストと同時に走って重いときでも止まらないよう 20 秒まで待つ（中身の確かめは同じ）
+  }, 20_000)
 
   it('部材 100 枚超（重ね切りあり）でも 1 件 2 秒以内', () => {
     for (let seed = 1; seed <= 5; seed++) {
