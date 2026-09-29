@@ -6,7 +6,7 @@ export type StockRowKind = 'unused' | 'part' | 'all'
  * - 1枚も使っていない →「不採用」、一部を使う →「◯枚採用」、全部使う →「採用」
  * 画面（StockEditor）はこの text をそのまま出す（文言はここだけで決める）
  */
-export function stockRowStatus(used: number, count: number, _short = false): { kind: StockRowKind; text: string } {
+export function stockRowStatus(used: number, count: number): { kind: StockRowKind; text: string } {
   if (used <= 0) return { kind: 'unused', text: '不採用' }
   if (used >= count) return { kind: 'all', text: '採用' }
   return { kind: 'part', text: `${used}枚採用` }

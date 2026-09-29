@@ -32,11 +32,9 @@ interface Props {
   label: string
   /** その行の stockUsage（手持ちで木取りしていなければ null） */
   usage: StockUsage | null
-  /** 手持ちに入らない部材がある材料か（engine の stockShortage に出ている） */
-  short: boolean
 }
 
-export function StockEditor({ target, choice, label, usage, short }: Props) {
+export function StockEditor({ target, choice, label, usage }: Props) {
   const { run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   const on = choice.stockOn === true
@@ -53,7 +51,6 @@ export function StockEditor({ target, choice, label, usage, short }: Props) {
               label={label}
               sheet={s}
               use={usage?.rows.find((r) => r.stockId === s.id) ?? null}
-              short={short}
               onResult={report}
             />
           ))}
@@ -95,11 +92,10 @@ interface RowProps {
   label: string
   sheet: StockSheet
   use: StockUsage['rows'][number] | null
-  short: boolean
   onResult: (r: { ok: boolean; message?: string }) => void
 }
 
-function StockRow({ target, label, sheet, use, short, onResult }: RowProps) {
+function StockRow({ target, label, sheet, use, onResult }: RowProps) {
   const { run } = useCurrentJob()
   const update = (patch: Partial<Omit<StockSheet, 'id'>>) => onResult(run((j) => updateRowStock(j, target, sheet.id, patch)))
   const name = `${label} の手持ち`
@@ -126,7 +122,7 @@ function StockRow({ target, label, sheet, use, short, onResult }: RowProps) {
           <span className="kd-k">枚数</span>
           <CommitField ariaLabel="手持ちの枚数" value={sheet.count} unit="枚" integer onCommit={(v) => update({ count: v })} />
         </label>
-        <StockRowStatus used={use?.used ?? 0} count={sheet.count} short={short} />
+        <StockRowStatus used={use?.used ?? 0} count={sheet.count} />
         <button
           type="button"
           className="btn danger stk-del"
@@ -141,8 +137,8 @@ function StockRow({ target, label, sheet, use, short, onResult }: RowProps) {
 }
 
 /** 手持ちの行の表示（仕様書 9「手持ちの行の表示」）：不採用／◯枚採用／採用 */
-function StockRowStatus({ used, count, short }: { used: number; count: number; short: boolean }) {
-  const st = stockRowStatus(used, count, short)
+function StockRowStatus({ used, count }: { used: number; count: number }) {
+  const st = stockRowStatus(used, count)
   return (
     <span className={`stk-use num stk-${st.kind}`} role="status">
       {st.text}
