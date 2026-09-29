@@ -29,7 +29,12 @@ interface Props {
 
 export function PartEditor({ part, onClose }: Props) {
   const { job, run } = useCurrentJob()
-  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: orderedBoards(job)[0]?.id ?? null }))
+  // 新しい部材の材料は、並びの最初の木取りする材料（木取りしない材料（芯材など）を初めから選ばないように）
+  const [draft, setDraft] = useState<Part>(() => {
+    if (part) return part
+    const boards = orderedBoards(job)
+    return newPart({ boardId: (boards.find((b) => b.noCut !== true) ?? boards[0])?.id ?? null })
+  })
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const patch = (p: Partial<Part>) => {
