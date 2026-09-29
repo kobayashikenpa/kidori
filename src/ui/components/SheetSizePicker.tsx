@@ -2,6 +2,7 @@
 // 3×6・4×8 の必要な枚数・歩留まり（engine の compareStandardSizes の結果）と 自由入力 を並べ、押して選ぶ。
 // 3×6・4×8 は setRowSize、自由入力は setRowStockMode（＝その行の手持ちで木取り）。自由入力を選んでいる行の下に、その行の手持ちの編集。
 // 重ね切りの組の行は 3×6・4×8 だけ（自由入力・手持ちの編集は出さない。仕様書 4・architecture.md 15.9）
+// 入らない部材がある（unplaced）ときは、サイズのボタンに「部材が収まりません」を出す（仕様書 9「手持ちの行の表示」。手持ちの行には出さない）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { StockUsage } from '../../engine/progress/frozen'
@@ -27,11 +28,9 @@ interface Props {
   current: MaterialResult | null
   /** その行の stockUsage */
   usage: StockUsage | null
-  /** 手持ちに入らない部材がある材料か（手持ちの行の「部材が収まりません」に使う） */
-  short: boolean
 }
 
-export function SheetSizePicker({ target, choice, label, compare, current, usage, short }: Props) {
+export function SheetSizePicker({ target, choice, label, compare, current, usage }: Props) {
   const { run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   // 自由入力：手持ちで木取り中（stockOn）か、以前の版の自由入力（大きさだけ）。組の行には自由入力が無い
@@ -69,7 +68,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
                   <span className="sz-n num">{o.sheetCount}枚</span>
                   <span className="sz-y num">{o.sheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
                   <span className="sz-tags">
-                    {o.unplacedCount > 0 && <span className="sz-tag err">入らない {o.unplacedCount}</span>}
+                    {o.unplacedCount > 0 && <span className="sz-tag err">部材が収まりません</span>}
                     {compare.fewer === kind && <span className="sz-tag ok">枚数が少ない</span>}
                     {compare.higher === kind && <span className="sz-tag ok">歩留まりが高い</span>}
                   </span>
@@ -86,7 +85,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
                 <span className="sz-n num">{current.sheetCount}枚</span>
                 <span className="sz-y num">{current.sheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
                 <span className="sz-tags">
-                  {current.unplaced.length > 0 && <span className="sz-tag err">入らない {current.unplaced.length}</span>}
+                  {current.unplaced.length > 0 && <span className="sz-tag err">部材が収まりません</span>}
                 </span>
               </>
             ) : (
@@ -96,7 +95,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         )}
       </div>
       {error && <p className="msg err">{error}</p>}
-      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} short={short} />}
+      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} />}
     </div>
   )
 }

@@ -2,7 +2,7 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Job } from '../../engine/types'
 import { copyJob, createJob, renameJob } from '../../store/jobs'
-import { sampleFromTemplate } from '../../store/sample'
+import { sampleJob } from '../../store/sample'
 import { backupFileName, buildBackup, importBackup } from '../../store/transfer/backup'
 import { MAX_TRANSFER_SIZE, READ_FAILED } from '../../store/transfer/envelope'
 import { readTransferFile, type TransferRead } from '../../store/transfer/read'
@@ -30,7 +30,7 @@ function byUpdatedDesc(a: Job, b: Job): number {
 type Mode = { kind: 'rename'; jobId: string } | { kind: 'delete'; jobId: string } | null
 
 export function JobsScreen({ onOpened }: { onOpened: () => void }) {
-  const { state, addJob, addJobs, setTemplate, openJob, removeJob, runOn } = useJobStore()
+  const { state, addJob, addJobs, openJob, removeJob, runOn } = useJobStore()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [mode, setMode] = useState<Mode>(null)
@@ -62,8 +62,8 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
 
   const create = (e: FormEvent) => {
     e.preventDefault()
-    // 最後に使った設定（ひな形）を引き継ぐ
-    const job = createJob(newName, state.template)
+    // いつも初期値の設定から始める（第2.5.1版。前の仕事の設定は引き継がない）
+    const job = createJob(newName)
     addJob(job, true)
     setCreating(false)
     setNewName('')
@@ -71,7 +71,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
   }
 
   const addSample = () => {
-    addJob(sampleFromTemplate(state.template), true)
+    addJob(sampleJob(), true)
     onOpened()
   }
 
@@ -174,10 +174,9 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
       onOpened()
       return
     }
-    // バックアップ：1回で足す。開いている仕事は変えない。今の仕事が0件のときだけひな形もファイルのものにする
+    // バックアップ：1回で足す。開いている仕事は変えない
     const out = importBackup(state, r, new Date())
     addJobs(out.jobs, false)
-    if (out.template !== null) setTemplate(out.template)
     setImportMsg({ ok: true, text: out.message })
   }
 

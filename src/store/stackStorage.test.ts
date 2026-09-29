@@ -8,6 +8,7 @@ import { packJob } from '../engine/packing'
 import { stackKey } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
 import { loadSaved, sanitizeJobs, saveSaved, type KeyValueStorage } from './storage'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const S36 = { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
@@ -264,6 +265,6 @@ describe('stackSheets の検査・修復', () => {
     expect(saveSaved(s, { jobs: [job], currentJobId: job.id })).toEqual({ ok: true })
     const r = loadSaved(s, new Date('2026-09-28T00:00:00Z'))
     expect(r.status).toBe('ok')
-    expect(r.data.jobs[0]).toEqual(job)
+    expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual(job)
   })
 })

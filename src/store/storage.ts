@@ -1,8 +1,9 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
+import { addMissingBuiltIns } from '../engine/boards'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
-import { boardIdsInUse, migrateFlushCores, migrateFlushSpecCores, type LegacyFlush, type LegacySpecGroup } from '../engine/migrate/flushCore'
+import { boardIdsInUse, migrateFlushCores, type LegacyFlush } from '../engine/migrate/flushCore'
 import { canStack, stackPlan } from '../engine/packing/stack'
 import { samePair, sameStockSize, usesStock } from '../engine/packing/stock'
 import { eq1 } from '../engine/round'
@@ -28,15 +29,6 @@ import {
   type StockSheet,
 } from '../engine/types'
 import { newId } from './jobs'
-import { defaultTemplate, templateOf, type FlushSpec, type MaterialSpec, type SettingsTemplate } from './template'
-
-/**
- * 最後に使った設定（ひな形）のキー。中身は { version: 2, template }（第2.5版。材料グループの形）。
- * version 1（芯材 core のあるフラッシュ）も読んで移す
- */
-export const TEMPLATE_KEY = 'kidori.lastSettings.v1'
-/** ひな形の中身の版 */
-const TEMPLATE_VERSION = 2
 
 /** 保存データ第3版のキー（{ version: 3, jobs }。第2.5版の材料グループの形） */
 export const JOBS_KEY = 'kidori.jobs.v3'
@@ -642,6 +634,24 @@ function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): Froz
   return out
 }
 
+/**
+ * 消した最初の材料のキー（第2.5.1版）。無ければ undefined。配列でなければ直した数に数えて無しに、
+ * 文字でないもの・空・重なりは外して直した数に数える
+ */
+function sanitizeRemovedBuiltIns(v: unknown, fx: Fixes): string[] | undefined {
+  if (v === undefined) return undefined
+  if (!Array.isArray(v)) {
+    fx.count++
+    return undefined
+  }
+  const out: string[] = []
+  for (const k of v) {
+    if (typeof k !== 'string' || k === '' || out.includes(k)) fx.count++
+    else out.push(k)
+  }
+  return out.length > 0 ? out : undefined
+}
+
 /** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
 function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
@@ -690,6 +700,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
 
   const isDate = (x: unknown): x is string => typeof x === 'string' && !Number.isNaN(Date.parse(x))
   const fallbackDate = isDate(v.updatedAt) ? v.updatedAt : isDate(v.createdAt) ? v.createdAt : new Date(0).toISOString()
+  const removedBuiltIns = sanitizeRemovedBuiltIns(v.removedBuiltIns, fx)
   return {
     id: v.id,
     name,
@@ -699,6 +710,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
     stackSheets: stacks.stackSheets,
+    ...(removedBuiltIns ? { removedBuiltIns } : {}),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }
@@ -722,7 +734,8 @@ export function sanitizeJobs(
       continue
     }
     const m = migrateClearanceChecked(legacy, () => newId('nige'))
-    jobs.push(m.job)
+    // 最初から入っている材料で、この仕事に無いもの（消したものは除く）を足す（第2.5.1版）。直した数には数えない
+    jobs.push(addMissingBuiltIns(m.job, newId))
     if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
   return { jobs, fixes: fx.count, changed, unstacked: [...new Set(fx.unstacked)] }
@@ -863,119 +876,6 @@ export function saveSaved(storage: KeyValueStorage | null, data: SavedData): Sav
   try {
     storage.setItem(JOBS_KEY, JSON.stringify({ version: DATA_VERSION, jobs: data.jobs }))
     storage.setItem(CURRENT_JOB_KEY, data.currentJobId ?? '')
-    return { ok: true }
-  } catch {
-    return { ok: false, message: '保存できませんでした（端末の空き容量などを確かめてください）' }
-  }
-}
-
-// ---------- 最後に使った設定（ひな形） ----------
-
-/** ひな形の材料。材料名が空・厚みが 0 以下・材料名＋厚みの重複は外す */
-function sanitizeMaterials(v: unknown): MaterialSpec[] {
-  if (!Array.isArray(v)) return defaultTemplate().materials
-  const out: MaterialSpec[] = []
-  for (const m of v) {
-    if (!isRecord(m) || typeof m.material !== 'string' || !isPositive(m.thickness)) continue
-    const material = m.material.trim()
-    if (!material) continue
-    const thickness = m.thickness
-    const key = material.normalize('NFKC')
-    if (out.some((x) => x.material.normalize('NFKC') === key && eq1(x.thickness, thickness))) continue
-    const spec: MaterialSpec = { material, thickness }
-    if (m.builtIn === true) spec.builtIn = true
-    if (m.noCut === true) spec.noCut = true
-    out.push(spec)
-  }
-  return out
-}
-
-/**
- * ひな形の材料グループ（第1.5版のフラッシュ）。無ければ []。名前が空・重なる、以前の芯材（core）があって 0 以下のものは外し、
- * 読めない中身は外す。芯材（core）はそのまま返す（sanitizeTemplate で migrateFlushSpecCores に渡す）
- */
-function sanitizeFlushSpecs(v: unknown): LegacySpecGroup[] {
-  if (!Array.isArray(v)) return []
-  const out: LegacySpecGroup[] = []
-  for (const f of v) {
-    if (!isRecord(f) || typeof f.name !== 'string' || (f.core !== undefined && !isPositive(f.core))) continue
-    const name = f.name.trim()
-    if (!name || out.some((x) => x.name.normalize('NFKC') === name.normalize('NFKC'))) continue
-    const faces: FlushSpec['faces'] = []
-    for (const x of Array.isArray(f.faces) ? f.faces : []) {
-      if (!isRecord(x) || typeof x.material !== 'string' || !x.material.trim() || !isPositive(x.thickness) || !isCount(x.count)) continue
-      faces.push({ material: x.material.trim(), thickness: x.thickness, count: x.count })
-    }
-    const spec: LegacySpecGroup = { name, faces }
-    if (isPositive(f.core)) spec.core = f.core
-    // 重ね切りは、木取りする中身が2種類で枚数が同じときだけ（材料の noCut は sanitizeTemplate で見る）
-    if (f.stack === true) spec.stack = true
-    if (GROUP_FORMS.includes(f.form as GroupForm)) spec.form = f.form as GroupForm
-    if (f.autoName === true) spec.autoName = true
-    out.push(spec)
-  }
-  return out
-}
-
-/**
- * 最後に使った設定を読む。例外は投げない。
- * キーが無ければ：仕事が無ければ初期値、仕事があれば更新日が一番新しい仕事の設定。読めなければ初期値
- */
-export function loadTemplate(storage: KeyValueStorage | null, jobs: readonly Job[]): SettingsTemplate {
-  let raw: string | null = null
-  try {
-    raw = storage ? storage.getItem(TEMPLATE_KEY) : null
-  } catch {
-    return defaultTemplate()
-  }
-  if (raw === null) {
-    if (jobs.length === 0) return defaultTemplate()
-    const newest = jobs.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a))
-    return templateOf(newest)
-  }
-  try {
-    const data: unknown = JSON.parse(raw)
-    if (!isRecord(data) || (data.version !== 1 && data.version !== TEMPLATE_VERSION)) return defaultTemplate()
-    return sanitizeTemplate(data.template) ?? defaultTemplate()
-  } catch {
-    return defaultTemplate()
-  }
-}
-
-/**
- * ひな形（最後に使った設定）の中身を検査して直す（loadTemplate と同じ検査。バックアップのファイルでも使う。第2.4版）。
- * オブジェクトでなければ null。例外は投げない
- */
-export function sanitizeTemplate(v: unknown): SettingsTemplate | null {
-  try {
-    if (!isRecord(v)) return null
-    const fx: Fixes = { count: 0, version: DATA_VERSION, unstacked: [] }
-    const settings = sanitizeSettings(v.settings, fx)
-    // 以前の版の芯材（core）を「芯材◯（木取りしない）」の材料と中身に移す（第2.5版。形で見分ける）
-    const moved = migrateFlushSpecCores(sanitizeMaterials(v.materials), sanitizeFlushSpecs(v.flushes))
-    const noCut = (x: { material: string; thickness: number }) =>
-      moved.materials.some((m) => m.noCut === true && m.material.normalize('NFKC') === x.material.normalize('NFKC') && eq1(m.thickness, x.thickness))
-    const flushes = moved.flushes.map((f) => {
-      const cut = f.faces.filter((x) => !noCut(x))
-      if (f.stack !== true || (cut.length === 2 && cut[0].count === cut[1].count)) return f
-      const { stack: _s, ...rest } = f
-      return rest
-    })
-    return {
-      settings: { ...settings, nige: settings.nige ?? defaultNige() },
-      materials: moved.materials,
-      flushes,
-    }
-  } catch {
-    return null
-  }
-}
-
-/** 最後に使った設定を書く。例外は投げない */
-export function saveTemplate(storage: KeyValueStorage | null, template: SettingsTemplate): SaveResult {
-  if (!storage) return { ok: false, message: 'この端末では保存が使えません' }
-  try {
-    storage.setItem(TEMPLATE_KEY, JSON.stringify({ version: TEMPLATE_VERSION, template }))
     return { ok: true }
   } catch {
     return { ok: false, message: '保存できませんでした（端末の空き容量などを確かめてください）' }

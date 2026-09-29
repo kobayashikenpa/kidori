@@ -6,8 +6,7 @@ import { frozenSheetViews } from '../../engine/progress/frozen'
 import type { Job } from '../../engine/types'
 import { setPieceCheck, type OpResult } from '../jobs'
 import { initialState, storeReducer, type StoreState } from '../reducer'
-import { sampleFromTemplate } from '../sample'
-import { defaultTemplate, templateOf } from '../template'
+import { sampleJob } from '../sample'
 import { bigJob } from './fixtures/bigJob'
 import { readTransferFile } from './read'
 import { backupFileName, buildBackup, importBackup } from './backup'
@@ -40,7 +39,7 @@ const frozenOf = (job: Job) =>
 
 /** 見本：重ね切りの組の1枚にチェック（片1つ）と、ラワン 4 の1枚（片1つ＝切り終わり） */
 function checkedSample(): Job {
-  let job = sampleFromTemplate(defaultTemplate(), NOW)
+  let job = sampleJob(NOW)
   const res = packJob(job, computeDimensions(job))
   const st = res.materials.find((m) => m.stack)!
   const t1 = { kind: 'computed', boardId: st.stack!.boardIds[0], stackWith: st.stack!.boardIds[1], mode: st.mode, layout: st.sheets[0] } as const
@@ -52,8 +51,8 @@ function checkedSample(): Job {
   return job
 }
 
-function stateOf(jobs: Job[], template = defaultTemplate()): StoreState {
-  return { ...initialState({ status: 'ok', data: { jobs, currentJobId: jobs[0]?.id ?? null } }), template }
+function stateOf(jobs: Job[]): StoreState {
+  return initialState({ status: 'ok', data: { jobs, currentJobId: jobs[0]?.id ?? null } })
 }
 
 /** 読み込んで、reducer に当てる（UI と同じ流れ） */
@@ -62,21 +61,19 @@ function apply(state: StoreState, text: string): { state: StoreState; message: s
   if (!r.ok || r.kind !== 'backup') throw new Error('バックアップとして読めない')
   const imp = importBackup(state, r, LATER)
   let s = storeReducer(state, { type: 'addJobs', jobs: imp.jobs, open: false })
-  if (imp.template) s = storeReducer(s, { type: 'setTemplate', template: imp.template })
   return { state: s, message: imp.message }
 }
 
 describe('buildBackup', () => {
-  it('外側は kind: backup・version 1・dataVersion 3。仕事はそのまま、ひな形あり', () => {
+  it('外側は kind: backup・version 1・dataVersion 3。仕事はそのまま、ひな形は入れない（第2.5.1版）', () => {
     const a = checkedSample()
-    const t = templateOf(a)
-    const data = JSON.parse(buildBackup(stateOf([a], t), NOW))
+    const data = JSON.parse(buildBackup(stateOf([a]), NOW))
     expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'backup', 1, 3, NOW.toISOString()])
     expect(data.jobs).toEqual([a])
-    expect(data.template).toEqual(t)
+    expect('template' in data).toBe(false)
   })
 
-  it('仕事が0件でも書き出せる（空の一覧とひな形）。ただし読むと「読み込めませんでした」', () => {
+  it('仕事が0件でも書き出せる（空の一覧）。ただし読むと「読み込めませんでした」', () => {
     const text = buildBackup(stateOf([]), NOW)
     expect(JSON.parse(text).jobs).toEqual([])
     expect(readTransferFile(text).ok).toBe(false)
@@ -91,11 +88,10 @@ describe('backupFileName', () => {
 })
 
 describe('バックアップの行って戻る（buildBackup → readTransferFile → importBackup）', () => {
-  it('空の state に読み込むと、2件の寸法表・木取り・固定した1枚が元と同じ。ひな形もファイルのもの。日付はファイルのまま', () => {
+  it('空の state に読み込むと、2件の寸法表・木取り・固定した1枚が元と同じ。日付はファイルのまま', () => {
     const a = checkedSample()
     const b = bigJob(50, NOW)
-    const t = { ...templateOf(a), settings: { ...templateOf(a).settings, kerf: 4 } }
-    const text = buildBackup(stateOf([a, b], t), NOW)
+    const text = buildBackup(stateOf([a, b]), NOW)
     const empty = stateOf([])
     const { state, message } = apply(empty, text)
     expect(message).toBe('2件の仕事を追加しました')
@@ -110,14 +106,13 @@ describe('バックアップの行って戻る（buildBackup → readTransferFil
     expect(packOf(y)).toEqual(packOf(b))
     expect(frozenOf(x)).toBe(frozenOf(a))
     expect(x.frozenSheets).toHaveLength(2)
-    expect(state.template).toEqual(t)
     expect(state.currentJobId).toBe(null)
   })
 
-  it('仕事のある state に同じファイルを2回読むと「のコピー」「のコピー 2」で4件増え、ひな形・開いている仕事・今の仕事は変わらない', () => {
+  it('仕事のある state に同じファイルを2回読むと「のコピー」「のコピー 2」で4件増え、開いている仕事・今の仕事は変わらない', () => {
     const a = checkedSample()
     const b = bigJob(50, NOW)
-    const text = buildBackup(stateOf([a, b], { ...templateOf(a), flushes: [] }), NOW)
+    const text = buildBackup(stateOf([a, b]), NOW)
     const s0 = stateOf([a, b])
     const before = JSON.stringify(s0.jobs)
     const s1 = apply(s0, text).state
@@ -131,30 +126,30 @@ describe('バックアップの行って戻る（buildBackup → readTransferFil
       '部材50の仕事 のコピー 2',
     ])
     expect(new Set(s2.jobs.map((j) => j.id)).size).toBe(6)
-    expect(s2.template).toBe(s0.template)
     expect(s2.currentJobId).toBe(s0.currentJobId)
     expect(JSON.stringify(s2.jobs.slice(0, 2))).toBe(before)
     expect(frozenOf(s2.jobs[4])).toBe(frozenOf(a))
   })
 
   it('足す仕事どうしで名前が重なっても重ならないようにする', () => {
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
-    const b = sampleFromTemplate(defaultTemplate(), NOW)
+    const a = sampleJob(NOW)
+    const b = sampleJob(NOW)
     const { state } = apply(stateOf([]), buildBackup(stateOf([a, b]), NOW))
     expect(state.jobs.map((j) => j.name)).toEqual(['本棚 W900', '本棚 W900 のコピー'])
   })
 
-  it('ひな形が null なら、空の state でもひな形は変わらない', () => {
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
-    const text = JSON.stringify({ ...JSON.parse(buildBackup(stateOf([a]), NOW)), template: null })
-    const s0 = stateOf([])
-    expect(apply(s0, text).state.template).toBe(s0.template)
+  it('以前のファイルのひな形（最後に使った設定）は読み飛ばし、仕事だけ足す', () => {
+    const a = sampleJob(NOW)
+    const text = JSON.stringify({ ...JSON.parse(buildBackup(stateOf([a]), NOW)), template: { settings: { kerf: 2 } } })
+    const { state } = apply(stateOf([]), text)
+    expect(state.jobs).toHaveLength(1)
+    expect('template' in state).toBe(false)
   })
 
   it('共有のファイルは kind: share になり、バックアップとしては足されない', () => {
-    const r = readTransferFile(buildShareFile(sampleFromTemplate(defaultTemplate(), NOW), NOW))
+    const r = readTransferFile(buildShareFile(sampleJob(NOW), NOW))
     expect(r.ok && r.kind).toBe('share')
-    expect(() => apply(stateOf([]), buildShareFile(sampleFromTemplate(defaultTemplate(), NOW), NOW))).toThrow()
+    expect(() => apply(stateOf([]), buildShareFile(sampleJob(NOW), NOW))).toThrow()
   })
 
   it('部材 150 の仕事を含むバックアップも数秒以内に読み込める', () => {

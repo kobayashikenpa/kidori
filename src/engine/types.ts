@@ -216,6 +216,11 @@ export interface Job {
    * 以前のデータは読み込むときに作る（architecture.md 15.6）
    */
   stackSheets: StackSheet[]
+  /**
+   * この仕事でユーザーが削除した最初から入っている材料（第2.5.1版）。キーは builtInKey（材料名＋厚み）。
+   * 読み込むときに最初の材料を自動で足すが、ここにあるものは足し直さない。無い・空なら省略
+   */
+  removedBuiltIns?: string[]
   /** ISO 文字列 */
   createdAt: string
   updatedAt: string

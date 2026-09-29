@@ -1,13 +1,12 @@
 // ファイルから取り込む：1つの入口（第2.4版。architecture.md 16.2）。例外を投げない
 import type { Job } from '../../engine/types'
-import { changedMessage, sanitizeJobs, sanitizeTemplate } from '../storage'
-import type { SettingsTemplate } from '../template'
+import { changedMessage, sanitizeJobs } from '../storage'
 import { checkEnvelope, MAX_TRANSFER_SIZE, PARTIAL_NOTICE, READ_FAILED } from './envelope'
 import { shareSummary } from './share'
 
 export type TransferRead =
   | { ok: true; kind: 'share'; job: Job; summary: { rows: number; count: number }; notice?: string }
-  | { ok: true; kind: 'backup'; jobs: Job[]; template: SettingsTemplate | null; notice?: string }
+  | { ok: true; kind: 'backup'; jobs: Job[]; notice?: string }
   | { ok: false; message: string }
 
 const failed: TransferRead = { ok: false, message: READ_FAILED }
@@ -47,7 +46,8 @@ export function readTransferFile(text: string): TransferRead {
     const r = sanitizeJobs(list, env.dataVersion)
     if (r.jobs.length === 0) return failed
     const notice = noticeOf(r.fixes, r.changed)
-    return { ok: true, kind: 'backup', jobs: r.jobs, template: sanitizeTemplate(env.data.template), ...(notice ? { notice } : {}) }
+    // 以前のファイルのひな形（template）は読まない（第2.5.1版で最後に使った設定をなくした）
+    return { ok: true, kind: 'backup', jobs: r.jobs, ...(notice ? { notice } : {}) }
   } catch {
     return failed
   }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isBuiltInBoard, orderedBoards } from './boards'
+import { addMissingBuiltIns, builtInKey, isBuiltInBoard, orderedBoards } from './boards'
 import { defaultBoards } from './defaults'
 import { bookshelfJob } from './fixtures/bookshelf'
-import type { Board } from './types'
+import { computeDimensions } from './dimensions'
+import { sampleGroupJob } from './fixtures/flush'
+import { packJob } from './packing'
+import type { Board, Job } from './types'
 
 let n = 0
 const newId = (prefix: string) => `${prefix}-${++n}`
@@ -100,5 +103,84 @@ describe('orderedBoards（材料の並び順）', () => {
       // 印がひとつも無い仕事（以前のデータ）では、内容が同じなら最初からある材料
       expect(isBuiltInBoard(copy, { boards: [copy] })).toBe(true)
     })
+  })
+})
+
+describe('addMissingBuiltIns（最初から入っている材料を今ある仕事に足す。第2.5.1版）', () => {
+  /** 寸法表と木取りの結果（比べる用） */
+  const results = (job: Job) => {
+    const dims = computeDimensions(job)
+    return JSON.stringify([dims, packJob(job, dims)])
+  }
+
+  it('builtInKey は材料名の前後の空白・全角半角と、厚みの小数第1位をそろえる', () => {
+    expect(builtInKey('ラワン', 9)).toBe(builtInKey(' ラワン ', 9.0))
+    expect(builtInKey('ラワン', 2.5)).toBe(builtInKey('ラワン', 2.5000001))
+    expect(builtInKey('ラワン', 2.5)).not.toBe(builtInKey('ラワン', 25))
+  })
+
+  it('以前の4つ（印あり）の見本に足りない21を足して25に。今ある材料・部材・寸法表・木取りの結果は同じ', () => {
+    const job = sampleGroupJob(true)
+    const before = results(job)
+    const out = addMissingBuiltIns(job, newId)
+    expect(out.boards).toHaveLength(job.boards.length + 21)
+    // 今ある材料は1つも変わらない（同じ id・同じ中身・同じ前後の並び）
+    const kept = out.boards.filter((b) => job.boards.some((x) => x.id === b.id))
+    expect(kept).toEqual(job.boards)
+    expect(out.parts).toBe(job.parts)
+    expect(out.flushes).toBe(job.flushes)
+    expect(out.stackSheets).toBe(job.stackSheets)
+    expect(results(out)).toBe(before)
+    // 足した材料は 4×8・印あり
+    const fresh = out.boards.filter((b) => !job.boards.some((x) => x.id === b.id))
+    expect(fresh.every((b) => b.builtIn === true && b.sizeKind === 'shihachi' && b.width === 1220 && b.length === 2440)).toBe(true)
+    // 画面の並び：足した材料（芯材15）→ 最初から入っている材料（DEFAULT_MATERIALS の並び）
+    expect(names(orderedBoards(out))).toEqual(['芯材15', ...DEFAULT_NAMES])
+    // 元の仕事は変えない
+    expect(job.boards).toHaveLength(5)
+  })
+
+  it('印の無い以前の仕事（第1.1版まで）は、最初からある4つに印を付けてから足す（並び順は変わらない）', () => {
+    const boards = [added('タモ', 18), ...oldFour()]
+    const job = { ...bookshelfJob(), boards }
+    const out = addMissingBuiltIns(job, newId)
+    expect(names(orderedBoards(out))).toEqual(['タモ18', ...DEFAULT_NAMES])
+    // 今ある材料の前後は同じ。印は最初からある4つにだけ付く（ほかは変わらない）
+    const kept = out.boards.filter((b) => boards.some((x) => x.id === b.id))
+    expect(kept.map((b) => b.id)).toEqual(boards.map((b) => b.id))
+    expect(kept[0]).toEqual(boards[0])
+    expect(kept.slice(1)).toEqual(boards.slice(1).map((b) => ({ ...b, builtIn: true })))
+  })
+
+  it('本棚（シナランバー18・シナベニヤ4、印なし）には25を足し、寸法表・木取りは同じ', () => {
+    const job = bookshelfJob()
+    const out = addMissingBuiltIns(job, newId)
+    expect(names(orderedBoards(out))).toEqual(['シナランバー18', 'シナベニヤ4', ...DEFAULT_NAMES])
+    expect(out.boards.slice(0, 2)).toEqual(job.boards)
+    expect(results(out)).toBe(results(job))
+  })
+
+  it('消した最初の材料（removedBuiltIns）は足さない', () => {
+    const job = { ...sampleGroupJob(), removedBuiltIns: [builtInKey('ラワン', 9), builtInKey('ポリ', 4)] }
+    const out = addMissingBuiltIns(job, newId)
+    expect(out.boards).toHaveLength(job.boards.length + 19)
+    expect(names(out.boards)).not.toContain('ラワン9')
+    expect(names(out.boards)).not.toContain('ポリ4')
+    expect(out.removedBuiltIns).toEqual(job.removedBuiltIns)
+  })
+
+  it('自分で足した同じ材料名＋厚みの材料（シナ 18・木取りしない芯材ではないもの）があれば足さない。空白・全角の違いも同じ', () => {
+    const mine = added(' シナ ', 18)
+    const job = { ...sampleGroupJob(), boards: [...sampleGroupJob().boards, mine] }
+    const out = addMissingBuiltIns(job, newId)
+    expect(out.boards.filter((b) => b.material.trim() === 'シナ' && b.thickness === 18)).toEqual([mine])
+    expect(out.boards).toHaveLength(job.boards.length + 20)
+  })
+
+  it('全部あれば同じオブジェクトを返す', () => {
+    const job = { ...bookshelfJob(), boards: defaultBoards(newId) }
+    expect(addMissingBuiltIns(job, newId)).toBe(job)
+    const removedAll = { ...sampleGroupJob(), removedBuiltIns: defaultBoards(newId).map((b) => builtInKey(b.material, b.thickness)) }
+    expect(addMissingBuiltIns(removedAll, newId)).toBe(removedAll)
   })
 })

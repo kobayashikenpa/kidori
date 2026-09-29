@@ -4,11 +4,11 @@ import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import type { Job } from '../../engine/types'
 import { setPartChecks, setPieceCheck, type OpResult } from '../jobs'
-import { sampleFromTemplate } from '../sample'
-import { defaultTemplate } from '../template'
+import { sampleJob } from '../sample'
 import { bigJob } from './fixtures/bigJob'
 import { readTransferFile } from './read'
 import { buildShareFile, importShared, shareFileName } from './share'
+
 
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 const LATER = new Date('2026-10-01T08:00:00.000Z')
@@ -36,7 +36,7 @@ const idsOf = (job: Job) => [
 
 /** 見本に、切り出しチェック（重ね切りの組の1枚）・完了のチェック・以前の木取り済みを付けたもの */
 function usedSample(): Job {
-  let job = sampleFromTemplate(defaultTemplate(), NOW)
+  let job = sampleJob(NOW)
   const res = packJob(job, computeDimensions(job))
   const st = res.materials.find((m) => m.stack)!
   const t = { kind: 'computed', boardId: st.stack!.boardIds[0], stackWith: st.stack!.boardIds[1], mode: st.mode, layout: st.sheets[0] } as const
@@ -55,7 +55,7 @@ function roundTrip(job: Job, names: string[] = []): Job {
 
 describe('buildShareFile', () => {
   it('外側は app・kind: share・version 1・dataVersion 3・exportedAt。空白なしの JSON', () => {
-    const text = buildShareFile(sampleFromTemplate(defaultTemplate(), NOW), NOW)
+    const text = buildShareFile(sampleJob(NOW), NOW)
     const data = JSON.parse(text)
     expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'share', 1, 3, NOW.toISOString()])
     expect(text).toBe(JSON.stringify(data))
@@ -77,7 +77,7 @@ describe('buildShareFile', () => {
   })
 
   it('材料を片方でも外した組の行は入れない。手持ちの行はそのまま', () => {
-    const src = sampleFromTemplate(defaultTemplate(), NOW)
+    const src = sampleJob(NOW)
     const lauan25 = src.boards.find((b) => b.thickness === 2.5)!
     const lauan4 = src.boards.find((b) => b.thickness === 4)!
     src.stackSheets.push({ boardIds: [lauan25.id, lauan4.id], sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
@@ -95,7 +95,7 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
     const src = usedSample()
     const out = roundTrip(src)
     // 元（チェックを外したもの）と同じ木取り
-    const clean = sampleFromTemplate(defaultTemplate(), NOW)
+    const clean = sampleJob(NOW)
     expect(dimsOf(out)).toEqual(dimsOf(src))
     expect(packOf(out)).toEqual(packOf(clean))
     const stack = packJob(out, computeDimensions(out)).materials.find((m) => m.stack)!
@@ -104,8 +104,10 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
     for (const id of idsOf(out)) expect(old.has(id)).toBe(false)
     expect(out.frozenSheets).toEqual([])
     for (const p of out.parts) expect(p.checks).toEqual({ finished: false, cut: false })
-    // 初期の ラワン2.5・5.5・逃げ0.5 は入らない
-    expect(out.boards.map((b) => b.thickness)).toEqual([1, 4, 15])
+    // ファイルには初期の ラワン2.5・5.5・逃げ0.5 は入らない。取り込むと最初から入っている材料は足される（第2.5.1版）
+    expect(JSON.parse(buildShareFile(src, NOW)).job.boards.map((b: { thickness: number }) => b.thickness)).toEqual([1, 4, 15])
+    expect(out.boards.filter((b) => b.builtIn !== true).map((b) => b.material)).toEqual(['芯材'])
+    expect(out.boards).toHaveLength(26)
     expect(out.settings.nige.map((n) => n.value)).toEqual([1])
     expect(out.name).toBe('本棚 W900')
     expect(out.createdAt).toBe(LATER.toISOString())
@@ -113,7 +115,7 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
   })
 
   it('同じ名前の仕事があると「本棚 W900 のコピー」、さらにあれば「のコピー 2」', () => {
-    const src = sampleFromTemplate(defaultTemplate(), NOW)
+    const src = sampleJob(NOW)
     expect(roundTrip(src, ['本棚 W900']).name).toBe('本棚 W900 のコピー')
     expect(roundTrip(src, ['本棚 W900', '本棚 W900 のコピー']).name).toBe('本棚 W900 のコピー 2')
     expect(roundTrip(src, ['食器棚']).name).toBe('本棚 W900')
@@ -133,7 +135,7 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
 
   it('ファイルの大きさ（architecture.md 16.4 の目安）：見本 約 2KB、部材 50 約 11KB', () => {
     const size = (job: Job) => new TextEncoder().encode(buildShareFile(job, NOW)).length
-    const sample = size(sampleFromTemplate(defaultTemplate(), NOW))
+    const sample = size(sampleJob(NOW))
     const fifty = size(bigJob(50, NOW))
     console.log(`共有のファイルの大きさ：見本 ${sample} バイト、部材 50 ${fifty} バイト`)
     expect(sample).toBeLessThan(4 * 1024)

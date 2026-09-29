@@ -1,14 +1,13 @@
 // 見本（本棚 W900）で、式の逃げの id のつけ替えと、仕事で使っている材料・フラッシュ・逃げ（第2.4版 E-65）
 import { describe, expect, it } from 'vitest'
 import { jobRefIds, remapBoardIds, remapRefIds } from '../engine/formula/usages'
-import { SAMPLE_FLUSH_NAME, sampleFromTemplate } from './sample'
-import { defaultTemplate } from './template'
+import { SAMPLE_FLUSH_NAME, sampleJob } from './sample'
 
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 
 describe('見本の式の逃げのつけ替え（remapRefIds）', () => {
   it('棚板の W 天地板.W - {n:A} が {n:B} になり、部材の参照と {t:} は変わらない', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const tana = job.parts.find((p) => p.name === '棚板')!
     const nige1 = job.settings.nige.find((n) => n.value === 1)!
     expect(tana.expr.W).toBe(`天地板.W - {n:${nige1.id}}`)
@@ -28,7 +27,7 @@ describe('見本の式の逃げのつけ替え（remapRefIds）', () => {
 
 describe('見本の jobRefIds', () => {
   it('材料 芯材15・メラミン1・ラワン4、フラッシュ25、逃げ1 だけ（ラワン2.5・5.5・逃げ0.5 は入らない）', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const r = jobRefIds(job)
     const boards = job.boards.filter((b) => r.boardIds.has(b.id)).map((b) => `${b.material}${b.thickness}`)
     expect(boards.sort()).toEqual(['メラミン1', 'ラワン4', '芯材15'])

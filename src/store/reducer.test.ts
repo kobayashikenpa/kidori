@@ -4,19 +4,15 @@ import { findSavingHints } from '../engine/hints/saving'
 import {
   addBoard,
   addNige,
-  addPart,
   createJob,
   newBoard,
   newPart,
   removeBoards,
   removeNiges,
-  renameJob,
-  updateBoard,
   updatePart,
   updateSettings,
   type JobOp,
 } from './jobs'
-import { defaultTemplate, templateOf } from './template'
 import { applyOp, currentJob, initialState, storeReducer, type StoreState } from './reducer'
 import { loadSaved, saveSaved, type KeyValueStorage } from './storage'
 
@@ -108,7 +104,7 @@ describe('storeReducer', () => {
 describe('removeJob', () => {
   it('開いていた仕事を消すと、何も開いていない状態になる', () => {
     const s0 = stateWithSample()
-    const other = createJob('食器棚', undefined, NOW, 'job-other')
+    const other = createJob('食器棚', NOW, 'job-other')
     const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
     const s2 = storeReducer(s1, { type: 'removeJob', id: s0.currentJobId! })
     expect(s2.jobs.map((j) => j.id)).toEqual(['job-other'])
@@ -117,7 +113,7 @@ describe('removeJob', () => {
 
   it('開いていない仕事を消しても、開いている仕事はそのまま', () => {
     const s0 = stateWithSample()
-    const other = createJob('食器棚', undefined, NOW, 'job-other')
+    const other = createJob('食器棚', NOW, 'job-other')
     const s1 = storeReducer(s0, { type: 'addJob', job: other, open: false })
     const s2 = storeReducer(s1, { type: 'removeJob', id: 'job-other' })
     expect(s2.currentJobId).toBe(s0.currentJobId)
@@ -131,7 +127,7 @@ describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
    * 設定の切り代はフラッシュの部材だけに足す（第2.1版）ので、中身が 芯材2（木取りしない）×1・ラワン4 ×1 のフラッシュにする
    */
   function stateWithRawan(): StoreState {
-    const r = updateSettings(createJob('お知らせ', undefined, NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
+    const r = updateSettings(createJob('お知らせ', NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
     if (!r.ok) throw new Error(r.message)
     let job = r.job
     const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
@@ -231,45 +227,17 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
   })
 })
 
-describe('最後に使った設定（ひな形）の更新（第1.3版 S-08）', () => {
-  /** 仕事 A・B（どちらも初期値）がある状態。A を開いている */
-  function twoJobs(): StoreState {
-    const a = createJob('A', undefined, NOW, 'job-a')
-    const b = createJob('B', undefined, NOW, 'job-b')
-    return initialState({ status: 'ok', data: { jobs: [a, b], currentJobId: 'job-a' } })
-  }
-  const t = NOW.toISOString()
-
-  it('仕事 A で刃厚を 2 にするとひな形の刃厚が 2、そのあと B で逃げ3 を足すとひな形は B の設定', () => {
-    const s0 = twoJobs()
-    expect(s0.template).toEqual(defaultTemplate())
-    const s1 = runOp(s0, 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
-    expect(s1.template.settings.kerf).toBe(2)
-    const s2 = runOp(s1, 'job-b', (j) => addNige(j, '逃げ', 3, 'nige-3'), t)
-    expect(s2.template.settings.kerf).toBe(3)
-    expect(s2.template.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 3])
-    expect(s2.template).toEqual(templateOf(s2.jobs.find((j) => j.id === 'job-b')!))
-  })
-
-  it('材料の追加・削除でもひな形が変わる', () => {
-    const s0 = twoJobs()
-    const s1 = runOp(s0, 'job-a', (j) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })), t)
-    expect(s1.template.materials.map((m) => m.material)).toContain('タモ')
-    const id = currentJob(s1)!.boards.find((b) => b.material === 'タモ')!.id
-    const s2 = runOp(s1, 'job-a', (j) => removeBoards(j, [id]), t)
-    expect(s2.template.materials.map((m) => m.material)).not.toContain('タモ')
-  })
-
-  it('部材の変更・材料のサイズの選択・名前の変更・仕事の追加や削除ではひな形が変わらない', () => {
-    let s = runOp(twoJobs(), 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
-    const tpl = s.template
-    s = runOp(s, 'job-a', (j) => addPart(j, newPart({ name: '天板', expr: { W: '900', H: '18', D: '600' } })), t)
-    const rawan = currentJob(s)!.boards[1].id
-    s = runOp(s, 'job-a', (j) => updateBoard(j, rawan, { sizeKind: 'saburoku' }), t)
-    expect(currentJob(s)!.boards[1].sizeKind).toBe('saburoku')
-    s = runOp(s, 'job-a', (j) => renameJob(j, '別の名前'), t)
-    s = storeReducer(s, { type: 'addJob', job: createJob('C', undefined, NOW, 'job-c'), open: false })
-    s = storeReducer(s, { type: 'removeJob', id: 'job-b' })
-    expect(s.template).toBe(tpl)
+describe('ひな形はない（第2.5.1版）：設定を変えても新しい仕事は初期値', () => {
+  it('仕事 A で刃厚・材料を変えても、状態にひな形は無く、新しい仕事は初期値', () => {
+    const a = createJob('A', NOW, 'job-a')
+    let s = initialState({ status: 'ok', data: { jobs: [a], currentJobId: 'job-a' } })
+    const t = NOW.toISOString()
+    s = runOp(s, 'job-a', (j) => updateSettings(j, { kerf: 2 }), t)
+    s = runOp(s, 'job-a', (j) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })), t)
+    expect('template' in s).toBe(false)
+    const b = createJob('B', NOW, 'job-b')
+    expect(b.settings.kerf).toBe(3)
+    expect(b.boards.some((x) => x.material === 'タモ')).toBe(false)
+    expect(b.boards).toHaveLength(25)
   })
 })

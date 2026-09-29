@@ -30,7 +30,8 @@ export interface ShareFile extends Envelope {
 export interface BackupFile extends Envelope {
   kind: 'backup'
   jobs: Job[]
-  template: unknown
+  /** 第2.4版〜第2.5版のファイルにある「最後に使った設定（ひな形）」。第2.5.1版からは書かず、読んでも使わない */
+  template?: unknown
 }
 
 /** 書き出すときの外側（exportedAt は now の ISO） */

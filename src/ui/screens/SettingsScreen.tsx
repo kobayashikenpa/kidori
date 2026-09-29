@@ -29,7 +29,7 @@ export function SettingsScreen() {
   return (
     <section>
       <h2>
-        <Help title="設定">この仕事だけに効く設定です。新しい仕事には、最後に変えた設定が引き継がれます。</Help>
+        <Help title="設定">この仕事だけに効く設定です。新しい仕事は、いつも初めの設定から始まります（仕事をコピーしたときは、元の仕事の設定のまま）。</Help>
       </h2>
       {error && <p className="msg err">{error}</p>}
 

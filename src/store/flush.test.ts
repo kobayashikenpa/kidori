@@ -4,9 +4,8 @@ import { CORE_15_ID, FLUSH_25_ID, flushJob, LAUAN_4_ID, MELAMINE_1_ID } from '..
 import { flushThickness } from '../engine/flush'
 import { expandPieces } from '../engine/packing/pieces'
 import type { Job } from '../engine/types'
-import { sampleFromTemplate } from './sample'
-import { JOBS_KEY, loadSaved, loadTemplate, saveSaved, saveTemplate, type KeyValueStorage } from './storage'
-import { defaultTemplate, sameTemplate, templateOf } from './template'
+import { sampleJob } from './sample'
+import { JOBS_KEY, loadSaved, saveSaved, type KeyValueStorage } from './storage'
 import {
   addBoard,
   addFlush,
@@ -25,6 +24,7 @@ import {
   updatePart,
   type OpResult,
 } from './jobs'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 /** 以前の版で付けた、フラッシュの部材の表面材ごとの木取り済み（cutByBoard）を付ける */
 function withCutByBoard(job: Job, partId: string, boardId: string): Job {
@@ -227,62 +227,19 @@ describe('仕事のコピー', () => {
   })
 })
 
-describe('最後に使った設定（ひな形）', () => {
-  it('ひな形のフラッシュは表面材を材料名＋厚みで持ち、新しい仕事では新しい材料の id を指す', () => {
-    const t = templateOf(flushJob())
-    // 芯材15（木取りしない）の材料も写す（第2.5版）
-    expect(t.materials.at(-1)).toEqual({ material: '芯材', thickness: 15, noCut: true })
-    expect(t.flushes).toEqual([
-      {
-        name: 'フラッシュ25',
-        faces: [
-          { material: '芯材', thickness: 15, count: 1 },
-          { material: 'メラミン', thickness: 1, count: 2 },
-          { material: 'ラワン', thickness: 4, count: 2 },
-        ],
-        form: 'flush',
-        autoName: true,
-      },
-    ])
-    const job = createJob('新しい机', t)
-    expect(job.flushes).toHaveLength(1)
-    expect(job.flushes[0].faces.map((f) => f.boardId)).toEqual([job.boards[2].id, job.boards[0].id, job.boards[1].id])
-    expect(job.boards.map((b) => b.id)).not.toContain(MELAMINE_1_ID)
-  })
-
-  it('フラッシュを変えるとひな形も変わる（sameTemplate が違いを見る）', () => {
-    const a = templateOf(flushJob())
-    const b = templateOf(unwrap(updateFlush(flushJob(), FLUSH_25_ID, draft({ name: 'フラッシュ25' }))))
-    expect(sameTemplate(a, b)).toBe(false)
-    expect(sameTemplate(a, templateOf(flushJob()))).toBe(true)
-  })
-
-  it('見本にもフラッシュが入る', () => {
-    const job = sampleFromTemplate(templateOf(flushJob()))
+describe('新しい仕事・見本（第2.5.1版：いつも初期値から）', () => {
+  it('新しい仕事はフラッシュなし。見本はフラッシュ25 を1つ足す', () => {
+    expect(createJob('新しい机').flushes).toEqual([])
+    const job = sampleJob()
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ25'])
     const ids = new Set(job.boards.map((b) => b.id))
     expect(job.flushes[0].faces.every((f) => ids.has(f.boardId))).toBe(true)
-  })
-
-  it('初期値のひな形・フラッシュの無い以前のひな形はフラッシュなし', () => {
-    expect(defaultTemplate().flushes).toEqual([])
-    const st = memoryStorage()
-    const { flushes: _f, ...old } = defaultTemplate()
-    st.setItem('kidori.lastSettings.v1', JSON.stringify({ version: 1, template: old }))
-    expect(loadTemplate(st, [])).toEqual(defaultTemplate())
-  })
-
-  it('保存したひな形を読み直せる', () => {
-    const st = memoryStorage()
-    const t = templateOf(flushJob())
-    saveTemplate(st, t)
-    expect(loadTemplate(st, [])).toEqual(t)
   })
 })
 
 describe('保存と読み込み', () => {
   it('第1.4版の形（flushes が無い）の保存データは、フラッシュ [] を足すだけでそのまま読める', () => {
-    const { flushes: _f, ...old } = createJob('棚', defaultTemplate(), new Date('2026-01-01'), 'job-old')
+    const { flushes: _f, ...old } = createJob('棚', new Date('2026-01-01'), 'job-old')
     const oldJob = { ...old, parts: [newPart({ id: 'p1', name: '天板', boardId: old.boards[0].id, expr: { W: '900', H: '1', D: '600' } })] }
     const st = memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [oldJob] }) })
     const r = loadSaved(st)
@@ -296,7 +253,7 @@ describe('保存と読み込み', () => {
     saveSaved(st, { jobs: [job], currentJobId: job.id })
     const r = loadSaved(st)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs).toEqual([job])
+    expect(r.data.jobs.map((j) => dropAddedBuiltIns(j, job))).toEqual([job])
   })
 
   it('無い材料の表面材・無いフラッシュを指す部材・読めないフラッシュは直して読む', () => {
