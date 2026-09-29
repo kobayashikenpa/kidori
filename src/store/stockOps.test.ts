@@ -7,7 +7,6 @@ import { freezeSheet } from '../engine/progress/frozen'
 import type { Job } from '../engine/types'
 import { addRowStock, copyJob, removeRowStock, setRowSize, setRowStockMode, updateRowStock, type OpResult } from './jobs'
 import { JOBS_KEY, loadSaved, saveSaved, sanitizeJobs, type KeyValueStorage } from './storage'
-import { sameTemplate, templateOf } from './template'
 
 const T1 = new Date('2026-09-27T01:00:00.000Z')
 
@@ -98,13 +97,6 @@ describe('手持ちの操作', () => {
     expect(setRowStockMode(base, 'nai', true).ok).toBe(false)
     must(setRowStockMode(base, LUMBER_18_ID, true))
     expect(JSON.stringify(base)).toBe(snapshot)
-  })
-
-  it('手持ちの操作ではひな形が変わらない', () => {
-    const base = job48()
-    const on = must(setRowStockMode(base, LUMBER_18_ID, true))
-    const more = must(addRowStock(on, LUMBER_18_ID, { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: 4 }))
-    expect(sameTemplate(templateOf(base), templateOf(more))).toBe(true)
   })
 
   it('仕事をコピーすると手持ちが残る（別のオブジェクト）', () => {

@@ -15,26 +15,6 @@ export const CORE_NO_CUT_MATERIAL = '芯材（木取りしない）'
 /** 以前の版のフラッシュ：芯材の厚み（core）を持つ。今の形のもそのまま渡せる */
 export type LegacyFlush = Flush & { core?: unknown }
 
-/** ひな形の材料（store/template.ts の MaterialSpec と同じ形） */
-export interface SpecMaterial {
-  material: string
-  thickness: number
-  builtIn?: true
-  noCut?: true
-}
-
-/** ひな形の材料グループ（store/template.ts の FlushSpec と同じ形）：中身は材料名＋厚みで持つ */
-export interface SpecGroup {
-  name: string
-  faces: { material: string; thickness: number; count: number }[]
-  stack?: true
-  form?: GroupForm
-  autoName?: true
-}
-
-/** 以前の版のひな形のフラッシュ：芯材の厚み（core）を持つ */
-export type LegacySpecGroup = SpecGroup & { core?: unknown }
-
 const key = (s: string) => s.trim().normalize('NFKC')
 
 /** 移す対象の芯材の厚み（0 より大きい数）。無ければ null */
@@ -57,7 +37,7 @@ function groupMarks(f: { name: string; form?: GroupForm; autoName?: true }, tota
 }
 
 /**
- * 芯材の材料を選ぶ（仕事・ひな形で共通）。材料名は「芯材」→「芯材（木取りしない）」の順に見て、同じ厚み（小数第1位）の材料が
+ * 芯材の材料を選ぶ。材料名は「芯材」→「芯材（木取りしない）」の順に見て、同じ厚み（小数第1位）の材料が
  * - 無ければ、その名前で木取りしない材料を足す
  * - 木取りしない材料なら、それを使う
  * - 木取りする材料で、どこにも使われていなければ、木取りしないにして使う
@@ -135,28 +115,4 @@ export function migrateFlushCores(
     return { ...rest, faces, ...groupMarks(rest, flushThickness({ faces }, out)) }
   })
   return { boards: out, flushes: next }
-}
-
-/** ひな形：migrateFlushCores と同じことを材料名＋厚みで行う（使っているかは、材料グループの中身で見る） */
-export function migrateFlushSpecCores(
-  materials: readonly SpecMaterial[],
-  flushes: readonly LegacySpecGroup[],
-): { materials: SpecMaterial[]; flushes: SpecGroup[] } {
-  const out = [...materials]
-  const same = (a: { material: string; thickness: number }, b: { material: string; thickness: number }) =>
-    key(a.material) === key(b.material) && eq1(a.thickness, b.thickness)
-  const used = (m: SpecMaterial) => flushes.some((f) => f.faces.some((x) => same(x, m)))
-  const next = flushes.map((f): SpecGroup => {
-    const { core: _core, ...rest } = f
-    const t = coreOf(f)
-    if (t === null) return rest
-    const m = pickCore(out, t, used, (material) => ({ material, thickness: t, noCut: true }))
-    const hit = rest.faces.find((x) => same(x, m))
-    const faces = hit
-      ? rest.faces.map((x) => (x === hit ? { ...x, count: x.count + 1 } : x))
-      : [{ material: m.material, thickness: m.thickness, count: 1 }, ...rest.faces]
-    const total = faces.reduce((s, x) => s + x.thickness * x.count, 0)
-    return { ...rest, faces, ...groupMarks(rest, total) }
-  })
-  return { materials: out, flushes: next }
 }

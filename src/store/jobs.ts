@@ -1,5 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
-import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
+import { boardTokenLabel, defaultBoards, defaultSettings, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { canStack } from '../engine/packing/stack'
 import { findStackSheet } from '../engine/packing/stock'
 import { autoGroupName, flushesUsingBoards, flushThickness, partsUsingFlushes } from '../engine/flush'
@@ -33,7 +33,6 @@ import {
   type StackSheet,
   type StockSheet,
 } from '../engine/types'
-import { defaultTemplate, type SettingsTemplate } from './template'
 
 /** 操作の結果。失敗したときは画面にそのまま出せる日本語の理由 */
 export type OpResult = { ok: true; job: Job } | { ok: false; message: string }
@@ -54,48 +53,19 @@ const fail = (message: string): OpResult => ({ ok: false, message })
 // ---------- 仕事 ----------
 
 /**
- * 新しい仕事：設定と材料はひな形（最後に使った設定）を写す。初期値のひな形なら 逃げ0.5・1、材料 メラミン1・ラワン2.5・4・5.5。
- * 設定は深いコピー（逃げの id もそのまま）。材料は並びのまま、id は新しく、サイズは 4×8。フラッシュは id を新しくし、表面材は新しい材料を指す。部材なし
+ * 新しい仕事：いつも初期値の設定から始める（第2.5.1版。仕様書 4「設定の引き継ぎ」。前の仕事の設定は引き継がない）。
+ * 刃厚3・端切り5・切り代10・縦切り優先・逃げ0.5・逃げ1、材料は最初から入っている材料（DEFAULT_MATERIALS・4×8）、材料グループなし、部材なし
  */
-export function createJob(
-  name: string,
-  template: SettingsTemplate = defaultTemplate(),
-  now: Date = new Date(),
-  id: string = newId('job'),
-): Job {
+export function createJob(name: string, now: Date = new Date(), id: string = newId('job')): Job {
   const t = now.toISOString()
-  const s = template.settings
-  const boards = template.materials.map((m) => {
-    const b: Board = { id: newId('board'), material: m.material, thickness: m.thickness, ...defaultSheet() }
-    if (m.builtIn) b.builtIn = true
-    if (m.noCut) b.noCut = true
-    return b
-  })
-  // フラッシュの表面材は、材料名＋厚みが同じ材料の id に直す（見つからない表面材は外す）
-  // 重ね切り（第2.0版）は、直した表面材で canStack のときだけ引き継ぐ
-  const flushes: Flush[] = template.flushes.map((f) => {
-    const flush: Flush = {
-      id: newId('flush'),
-      name: f.name,
-      faces: f.faces.flatMap((x) => {
-        const b = boards.find((y) => sameMaterial(y.material, x.material) && eq1(y.thickness, x.thickness))
-        return b ? [{ boardId: b.id, count: x.count }] : []
-      }),
-    }
-    if (f.stack === true && canStack(flush, boards)) flush.stack = true
-    if (f.form !== undefined) flush.form = f.form
-    if (f.autoName === true) flush.autoName = true
-    return flush
-  })
   return {
     id,
     name: name.trim() || '名前のない仕事',
-    settings: { ...s, nige: s.nige.map((n) => ({ ...n })) },
-    boards,
-    flushes,
+    settings: defaultSettings(),
+    boards: defaultBoards(newId),
+    flushes: [],
     parts: [],
     frozenSheets: [],
-    // 重ね切りの組の設定はひな形に入れない（組は 4×8 から始まる。第2.3版）
     stackSheets: [],
     createdAt: t,
     updatedAt: t,

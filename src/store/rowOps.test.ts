@@ -15,8 +15,7 @@ import {
   updateRowStock,
   type OpResult,
 } from './jobs'
-import { sampleFromTemplate } from './sample'
-import { defaultTemplate, sameTemplate, templateOf } from './template'
+import { sampleJob } from './sample'
 
 const NOW = new Date('2026-09-28T09:00:00.000Z')
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
@@ -30,8 +29,8 @@ const must = (r: OpResult): Job => {
 const board = (job: Job, id: string) => job.boards.find((b) => b.id === id)!
 
 describe('見本の組の設定', () => {
-  it('見本（ひな形から）の組（メラミン 1＋ラワン 4）の設定は 3×6。ラワン 4 の行を 4×8 にしてもメラミン 1 は 3×6 のまま', () => {
-    const sample = sampleFromTemplate(defaultTemplate(), NOW)
+  it('見本の組（メラミン 1＋ラワン 4）の設定は 3×6。ラワン 4 の行を 4×8 にしてもメラミン 1 は 3×6 のまま', () => {
+    const sample = sampleJob(NOW)
     const [f] = sample.flushes.filter((x) => x.name === 'フラッシュ25')
     const ids = cutFaces(f, sample.boards).map((x) => x.boardId)
     expect(sample.stackSheets).toEqual([{ boardIds: ids, ...S36 }])
@@ -42,8 +41,8 @@ describe('見本の組の設定', () => {
     expect(j.stackSheets[0]).toMatchObject(S36)
   })
 
-  it('新しい仕事の組の設定は空（ひな形に入れない）', () => {
-    expect(createJob('x', defaultTemplate(), NOW).stackSheets).toEqual([])
+  it('新しい仕事の組の設定は空', () => {
+    expect(createJob('x', NOW).stackSheets).toEqual([])
   })
 })
 
@@ -132,12 +131,6 @@ describe('setRowSize・setRowStockMode（行のサイズと自由入力）', () 
     const j = must(setRowSize(sampleGroupJob(true), LAUAN_4_ID, { sizeKind: 'custom', width: 1820, length: 910, grain: 'short' }))
     expect(board(j, LAUAN_4_ID)).toMatchObject({ sizeKind: 'custom', width: 910, length: 1820, grain: 'short' })
     expect(setRowSize(j, LAUAN_4_ID, { sizeKind: 'custom', width: 0, length: 910, grain: 'long' }).ok).toBe(false)
-  })
-
-  it('組の操作ではひな形が変わらない', () => {
-    const base = sampleGroupJob(true)
-    const j = must(setRowSize(must(setRowSize(base, PAIR, S48)), PAIR, S36))
-    expect(sameTemplate(templateOf(base), templateOf(j))).toBe(true)
   })
 })
 

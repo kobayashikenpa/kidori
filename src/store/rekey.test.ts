@@ -6,8 +6,7 @@ import { frozenDemand, frozenSheetViews } from '../engine/progress/frozen'
 import type { Job } from '../engine/types'
 import { copyJob, rekeyJob, setPieceCheck, type OpResult } from './jobs'
 import { initialState, storeReducer } from './reducer'
-import { sampleFromTemplate } from './sample'
-import { defaultTemplate } from './template'
+import { sampleJob } from './sample'
 
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 const unwrap = (r: OpResult): Job => {
@@ -32,7 +31,7 @@ const packOf = (job: Job) => {
 
 /** 見本に、重ね切りの組の1枚（片1つ）と ラワン 4 の1枚（全部＝切り終わり）のチェックを付けたもの */
 function checkedSample(): Job {
-  let job = sampleFromTemplate(defaultTemplate(), NOW)
+  let job = sampleJob(NOW)
   const res = packJob(job, computeDimensions(job))
   const stack = res.materials.find((m) => m.stack)!
   const t1 = { kind: 'computed', boardId: stack.stack!.boardIds[0], stackWith: stack.stack!.boardIds[1], mode: stack.mode, layout: stack.sheets[0] } as const
@@ -46,7 +45,7 @@ function checkedSample(): Job {
 
 describe('rekeyJob', () => {
   it('frozen: false：材料・フラッシュ・部材・逃げの id が全部新しく、寸法表・木取りは同じ。固定した1枚は無い', () => {
-    const src = sampleFromTemplate(defaultTemplate(), NOW)
+    const src = sampleJob(NOW)
     const out = rekeyJob(src, { job: 'job-x', next: counter() }, { frozen: false })
     expect(out.id).toBe('job-x')
     expect(out.name).toBe(src.name)
@@ -109,7 +108,7 @@ describe('rekeyJob', () => {
   })
 
   it('cutByBoard のキーも新しい材料の id につけ替える', () => {
-    const src = sampleFromTemplate(defaultTemplate(), NOW)
+    const src = sampleJob(NOW)
     const side = src.parts.find((p) => p.name === '側板')!
     const face = src.flushes[src.flushes.length - 1].faces[0].boardId
     side.checks = { ...side.checks, cutByBoard: { [face]: true } }
@@ -121,7 +120,7 @@ describe('rekeyJob', () => {
 
 describe('copyJob（rekeyJob を使う）', () => {
   it('見本のコピーで逃げの id も新しくなり、寸法表・木取りの結果が同じ', () => {
-    const src = sampleFromTemplate(defaultTemplate(), NOW)
+    const src = sampleJob(NOW)
     const copy = copyJob(src, [src.name], NOW, 'job-copy')
     expect(copy.name).toBe('本棚 W900 のコピー')
     expect(copy.frozenSheets).toEqual([])
@@ -136,25 +135,17 @@ describe('copyJob（rekeyJob を使う）', () => {
 describe('addJobs', () => {
   it('2つ足すと state の変更は1回で、open なら最後の1つを開く', () => {
     const s0 = initialState({ status: 'empty', data: { jobs: [], currentJobId: null } })
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
+    const a = sampleJob(NOW)
     const b = copyJob(a, [a.name], NOW)
     const s1 = storeReducer(s0, { type: 'addJobs', jobs: [a, b], open: true })
     expect(s1.jobs.map((j) => j.id)).toEqual([a.id, b.id])
     expect(s1.currentJobId).toBe(b.id)
     const s2 = storeReducer(s0, { type: 'addJobs', jobs: [a, b], open: false })
     expect(s2.currentJobId).toBe(null)
-    expect(s2.template).toBe(s0.template)
   })
 
   it('空の一覧なら state はそのまま', () => {
     const s0 = initialState({ status: 'empty', data: { jobs: [], currentJobId: null } })
     expect(storeReducer(s0, { type: 'addJobs', jobs: [], open: true })).toBe(s0)
-  })
-
-  it('setTemplate でひな形を置き換える', () => {
-    const s0 = initialState({ status: 'empty', data: { jobs: [], currentJobId: null } })
-    const t = { ...defaultTemplate(), flushes: [] }
-    t.settings.kerf = 4
-    expect(storeReducer(s0, { type: 'setTemplate', template: t }).template.settings.kerf).toBe(4)
   })
 })

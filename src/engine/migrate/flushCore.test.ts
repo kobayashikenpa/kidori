@@ -6,7 +6,7 @@ import { legacySampleFlushJob } from '../fixtures/legacyFlush'
 import { flushThickness } from '../flush'
 import { packJob } from '../packing'
 import type { Board } from '../types'
-import { boardIdsInUse, migrateFlushCores, migrateFlushSpecCores } from './flushCore'
+import { boardIdsInUse, migrateFlushCores } from './flushCore'
 
 const none: ReadonlySet<string> = new Set()
 
@@ -213,79 +213,5 @@ describe('migrateFlushCores：自動の名前（autoName）は、名前が移し
       ['フラッシュ25-2', true],
       ['フラッシュ2', undefined],
     ])
-  })
-
-  it('ひな形でも同じ', () => {
-    const materials = [{ material: 'ラワン', thickness: 4 }]
-    const r = migrateFlushSpecCores(materials, [
-      { name: 'フラッシュ30', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] },
-      { name: 'フラッシュ23-3', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] },
-    ])
-    expect(r.flushes.map((x) => [x.name, x.autoName])).toEqual([
-      ['フラッシュ30', undefined],
-      ['フラッシュ23-3', true],
-    ])
-  })
-})
-
-describe('migrateFlushSpecCores（ひな形）', () => {
-  it('芯材15（木取りしない）を材料の最後に足し、中身の先頭に ×1', () => {
-    const materials = [
-      { material: 'メラミン', thickness: 1, builtIn: true as const },
-      { material: 'ラワン', thickness: 4, builtIn: true as const },
-    ]
-    const flushes = [
-      {
-        name: 'フラッシュ25',
-        core: 15,
-        faces: [
-          { material: 'メラミン', thickness: 1, count: 2 },
-          { material: 'ラワン', thickness: 4, count: 2 },
-        ],
-        stack: true as const,
-      },
-      { name: 'フラッシュ23', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] },
-    ]
-    const r = migrateFlushSpecCores(materials, flushes)
-    expect(r.materials).toEqual([...materials, { material: '芯材', thickness: 15, noCut: true }])
-    expect(r.flushes).toEqual([
-      {
-        name: 'フラッシュ25',
-        faces: [
-          { material: '芯材', thickness: 15, count: 1 },
-          { material: 'メラミン', thickness: 1, count: 2 },
-          { material: 'ラワン', thickness: 4, count: 2 },
-        ],
-        stack: true,
-        form: 'flush',
-        autoName: true,
-      },
-      {
-        name: 'フラッシュ23',
-        faces: [
-          { material: '芯材', thickness: 15, count: 1 },
-          { material: 'ラワン', thickness: 4, count: 2 },
-        ],
-        form: 'flush',
-        autoName: true,
-      },
-    ])
-  })
-
-  it('木取りする芯材15 があれば noCut を付ける。core の無いものは変わらない', () => {
-    const materials = [{ material: '芯材', thickness: 15 }]
-    const plain = { name: 'ベタ20', faces: [{ material: 'ラワン', thickness: 18, count: 1 }], form: 'beta' as const }
-    const r = migrateFlushSpecCores(materials, [plain, { name: '本棚用', core: 15, faces: [] }])
-    expect(r.materials).toEqual([{ material: '芯材', thickness: 15, noCut: true }])
-    expect(r.flushes).toEqual([plain, { name: '本棚用', faces: [{ material: '芯材', thickness: 15, count: 1 }], form: 'flush' }])
-  })
-
-  it('ほかのグループの中身で使っている木取りする芯材15 は変えず、芯材（木取りしない）15 を足す', () => {
-    const materials = [{ material: '芯材', thickness: 15 }, { material: 'ラワン', thickness: 4 }]
-    const beta = { name: '芯材の板', faces: [{ material: '芯材', thickness: 15, count: 1 }], form: 'beta' as const }
-    const r = migrateFlushSpecCores(materials, [beta, { name: 'フラッシュ23', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] }])
-    expect(r.materials).toEqual([...materials, { material: '芯材（木取りしない）', thickness: 15, noCut: true }])
-    expect(r.flushes[0]).toEqual(beta)
-    expect(r.flushes[1].faces[0]).toEqual({ material: '芯材（木取りしない）', thickness: 15, count: 1 })
   })
 })

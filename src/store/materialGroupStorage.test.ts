@@ -1,4 +1,4 @@
-// S-28：保存データ第3版と、以前の芯材（core）の移し替え（読み込み・ひな形・見本・共有／バックアップのファイル）
+// S-28：保存データ第3版と、以前の芯材（core）の移し替え（読み込み・見本・共有／バックアップのファイル）
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleGroupJob } from '../engine/fixtures/flush'
@@ -7,20 +7,16 @@ import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
 import { frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import type { Job } from '../engine/types'
-import { copyJob, createJob, setPieceCheck, type OpResult } from './jobs'
-import { sampleFromTemplate } from './sample'
+import { copyJob, setPieceCheck, type OpResult } from './jobs'
+import { sampleJob } from './sample'
 import {
   CURRENT_JOB_KEY,
   JOBS_KEY,
   JOBS_V2_KEY,
   loadSaved,
-  loadTemplate,
   saveSaved,
-  saveTemplate,
-  TEMPLATE_KEY,
   type KeyValueStorage,
 } from './storage'
-import { defaultTemplate, templateOf } from './template'
 import { buildBackup } from './transfer/backup'
 import { NEWER_VERSION } from './transfer/envelope'
 import { readTransferFile } from './transfer/read'
@@ -177,7 +173,7 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
   })
 
   it('noCut・form・autoName を保存して読み直せる。おかしな値は外して直した数に数える', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const st = memoryStorage()
     saveSaved(st, { jobs: [job], currentJobId: null })
     expect(loadSaved(st, NOW).data.jobs).toEqual([job])
@@ -201,46 +197,9 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
   })
 })
 
-describe('ひな形 version 2 と version 1 の移し替え', () => {
-  const legacyTemplate = () => {
-    const t = templateOf(sampleGroupJob(true)) as unknown as Record<string, unknown>
-    // 第2.4版のひな形：芯材は core、材料に芯材は無い
-    const flushes = (t.flushes as Record<string, unknown>[]).map(({ form: _f, autoName: _a, ...f }) => ({
-      ...f,
-      core: 15,
-      faces: (f.faces as { material: string }[]).filter((x) => x.material !== '芯材'),
-    }))
-    return { ...t, flushes, materials: (t.materials as { material: string }[]).filter((m) => m.material !== '芯材') }
-  }
-
-  it('version 1 のひな形（core 15 のフラッシュ25）から作った新しい仕事に 芯材15（木取りしない）とフラッシュ25（芯材15×1…）', () => {
-    const st = memoryStorage({ [TEMPLATE_KEY]: JSON.stringify({ version: 1, template: legacyTemplate() }) })
-    const t = loadTemplate(st, [])
-    expect(t.materials.at(-1)).toEqual({ material: '芯材', thickness: 15, noCut: true })
-    expect(t.flushes[0].faces[0]).toEqual({ material: '芯材', thickness: 15, count: 1 })
-    expect(t.flushes[0]).toMatchObject({ name: 'フラッシュ25', stack: true, form: 'flush', autoName: true })
-    const job = createJob('棚', t, NOW)
-    const core = job.boards.find((b) => b.material === '芯材')!
-    expect(core.noCut).toBe(true)
-    const f = job.flushes[0]
-    expect(f.faces[0]).toEqual({ boardId: core.id, count: 1 })
-    expect(f).toMatchObject({ stack: true, form: 'flush', autoName: true })
-    expect('core' in f).toBe(false)
-    expect(flushThickness(f, job.boards)).toBe(25)
-  })
-
-  it('ひな形は version 2 で書き、読み直すと同じ', () => {
-    const st = memoryStorage()
-    const t = templateOf(sampleFromTemplate(defaultTemplate(), NOW))
-    saveTemplate(st, t)
-    expect(JSON.parse(st.map.get(TEMPLATE_KEY)!).version).toBe(2)
-    expect(loadTemplate(st, [])).toEqual(t)
-  })
-})
-
 describe('見本（芯材15 は木取りしない材料）', () => {
   it('芯材15（木取りしない）を使い、厚み 25・組 3×6 で5枚 85.2%・ラワン4 の1枚 97.8%・全体 86.4%', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const core = job.boards.find((b) => b.material === '芯材')!
     expect([core.thickness, core.noCut]).toEqual([15, true])
     const f = job.flushes[0]
@@ -260,7 +219,7 @@ describe('見本（芯材15 は木取りしない材料）', () => {
   })
 
   it('仕事のコピーで noCut・form・autoName が残る', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const c = copyJob(job, [job.name], NOW)
     expect(c.boards.find((b) => b.material === '芯材')!.noCut).toBe(true)
     expect(c.flushes[0]).toMatchObject({ form: 'flush', autoName: true })
@@ -318,15 +277,13 @@ describe('共有・バックアップのファイル（dataVersion 3）', () => 
       // 固定した1枚は「部材が変わっています」にならない
       expect(res.views.every((v) => v.drift.length === 0)).toBe(true)
     })
-    expect(bk.template!.materials.some((m) => m.material === '芯材' && m.noCut === true)).toBe(true)
-    expect(bk.template!.flushes[0].faces[0]).toEqual({ material: '芯材', thickness: 15, count: 1 })
   })
 
   it('書き出したファイルは dataVersion 3。dataVersion 4 は「新しい版」', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const share = JSON.parse(buildShareFile(job, NOW))
     expect(share.dataVersion).toBe(3)
-    const backup = JSON.parse(buildBackup({ jobs: [job], template: defaultTemplate() }, NOW))
+    const backup = JSON.parse(buildBackup({ jobs: [job] }, NOW))
     expect(backup.dataVersion).toBe(3)
     expect(readTransferFile(JSON.stringify({ ...share, dataVersion: 4 }))).toEqual({ ok: false, message: NEWER_VERSION })
   })

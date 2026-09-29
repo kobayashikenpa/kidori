@@ -1,10 +1,9 @@
-// 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、最後に使った設定（ひな形）から作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.4）
+// 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、初期値の設定から作る（仕様書 4「設定の引き継ぎ（第2.5.1版）」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { eq1 } from '../engine/round'
 import { canStack, cutFaces } from '../engine/packing/stack'
 import { BOARD_SIZES, type Board, type Flush, type Job, type Part, type StackSheet } from '../engine/types'
 import { createJob, newId } from './jobs'
-import type { SettingsTemplate } from './template'
 
 /** 見本の仕事の名前 */
 export const SAMPLE_NAME = '本棚 W900'
@@ -29,60 +28,48 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
 }
 
 /**
- * ひな形から見本を作る。追加するたびに新しい仕事（id は新しく）。
- * - 設定の数値・調整寸法・材料・フラッシュはひな形のまま（createJob）
- * - 見本で使うものが無ければ足す：材料 ラワン4（フラッシュ25 を足すときは 芯材15（木取りしない）・メラミン1 も）、
- *   フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版、form: flush・自動の名前＝第2.5版）、逃げ1。あるもの（材料は材料名＋厚み、フラッシュは名前、逃げは名前「逃げ」寸法 1）はそれを使う
+ * 見本を作る。追加するたびに新しい仕事（id は新しく）。
+ * - いつも初期値の設定から（createJob。第2.5.1版：最後に使った設定は引き継がない）
+ * - 見本で使うものを足す：材料 芯材15（木取りしない）、フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版、
+ *   form: flush・自動の名前＝第2.5版）。メラミン1・ラワン4・逃げ1 は初期値にあるものを使う（念のため、無ければ足す）
  * - 見本で使う材料は 3×6（未決事項 24）。フラッシュ25 の重ね切りの組の設定も 3×6（第2.3版）
  * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。ラワン・シナベニヤは使わない＝仕様書 4 の文言。以前の見本のランバー 18mm・ベニヤ 4mm の板を使わない意味）。
  *   芯材15 は木取りしない材料なので、木取りの画面には出ない（第2.5版）。厚みは式の厚み（{t:…}）で書く
  */
-export function sampleFromTemplate(template: SettingsTemplate, now: Date = new Date()): Job {
-  const job = createJob(SAMPLE_NAME, template, now)
+export function sampleJob(now: Date = new Date()): Job {
+  const job = createJob(SAMPLE_NAME, now)
   const [width, length] = BOARD_SIZES.saburoku
   const sheet = { sizeKind: 'saburoku', width, length, grain: 'long' } as const
 
   const boards: Board[] = [...job.boards]
   /** 材料名＋厚みの材料を使う（無ければ最後に足す）。見本で使うので 3×6 にする */
-  const boardFor = (material: string, thickness: number): string => {
+  const boardFor = (material: string, thickness: number, extra: Partial<Board> = {}): string => {
     const i = boards.findIndex((b) => key(b.material) === key(material) && eq1(b.thickness, thickness))
     if (i >= 0) {
-      boards[i] = { ...boards[i], ...sheet }
+      boards[i] = { ...boards[i], ...sheet, ...extra }
       return boards[i].id
     }
     const id = newId('board')
-    boards.push({ id, material, thickness, ...sheet })
+    boards.push({ id, material, thickness, ...sheet, ...extra })
     return id
   }
 
-  // フラッシュ25：同じ名前があればそれを使う（表面材の材料も 3×6 にする。重ね切りの設定はひな形のまま）。無ければ重ね切りオンで足す
-  let flushes: Flush[] = job.flushes
-  let flush = flushes.find((f) => key(f.name) === key(SAMPLE_FLUSH_NAME))
-  if (flush) {
-    for (const face of flush.faces) {
-      const i = boards.findIndex((b) => b.id === face.boardId)
-      if (i >= 0) boards[i] = { ...boards[i], ...sheet }
-    }
-  } else {
-    // 芯材15：木取りしない材料（第2.5版）。同じ材料名＋厚みがあれば木取りしないにして使う
-    const core = boardFor('芯材', 15)
-    const i = boards.findIndex((b) => b.id === core)
-    boards[i] = { ...boards[i], noCut: true }
-    flush = {
-      id: newId('flush'),
-      name: SAMPLE_FLUSH_NAME,
-      faces: [
-        { boardId: core, count: 1 },
-        { boardId: boardFor('メラミン', 1), count: 2 },
-        { boardId: boardFor('ラワン', 4), count: 2 },
-      ],
-      // 重ね切りは初期オン（第2.1版。仕様書 4）
-      stack: true,
-      form: 'flush',
-      autoName: true,
-    }
-    flushes = [...flushes, flush]
+  // 芯材15：木取りしない材料（第2.5版）
+  const core = boardFor('芯材', 15, { noCut: true })
+  const flush: Flush = {
+    id: newId('flush'),
+    name: SAMPLE_FLUSH_NAME,
+    faces: [
+      { boardId: core, count: 1 },
+      { boardId: boardFor('メラミン', 1), count: 2 },
+      { boardId: boardFor('ラワン', 4), count: 2 },
+    ],
+    // 重ね切りは初期オン（第2.1版。仕様書 4）
+    stack: true,
+    form: 'flush',
+    autoName: true,
   }
+  const flushes: Flush[] = [...job.flushes, flush]
   const lauan4 = boardFor('ラワン', 4)
 
   // 逃げ1：あればその id、無ければ足す

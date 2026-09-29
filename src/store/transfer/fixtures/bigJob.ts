@@ -1,11 +1,10 @@
 // テスト用：見本（本棚 W900）に部材を足して、部材 n 行の仕事を作る（ファイルの大きさ・負荷の確かめ用）
 import type { Job, Part } from '../../../engine/types'
 import { newPart } from '../../jobs'
-import { sampleFromTemplate } from '../../sample'
-import { defaultTemplate } from '../../template'
+import { sampleJob } from '../../sample'
 
 export function bigJob(rows: number, now: Date, name = `部材${rows}の仕事`): Job {
-  const job = sampleFromTemplate(defaultTemplate(), now)
+  const job = sampleJob(now)
   const flush = job.flushes.find((f) => f.name === 'フラッシュ25')!
   const lauan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
   const nige1 = job.settings.nige.find((n) => n.value === 1)!

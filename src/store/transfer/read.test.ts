@@ -5,9 +5,8 @@ import { bookshelfJob } from '../../engine/fixtures/bookshelf'
 import { sampleGroupJob } from '../../engine/fixtures/flush'
 import { packJob } from '../../engine/packing'
 import type { Job } from '../../engine/types'
-import { sampleFromTemplate } from '../sample'
+import { sampleJob } from '../sample'
 import { sanitizeJobs } from '../storage'
-import { defaultTemplate, templateOf } from '../template'
 import { MAX_TRANSFER_SIZE, NEWER_VERSION, PARTIAL_NOTICE, READ_FAILED } from './envelope'
 import { readTransferFile } from './read'
 import shareV1 from './fixtures/share-v1.kidori.json?raw'
@@ -16,7 +15,7 @@ import backupV1 from './fixtures/backup-v1.json?raw'
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 const env = { app: 'kidori', version: 1, dataVersion: 2, exportedAt: NOW.toISOString() }
 const shareText = (job: unknown, extra: Record<string, unknown> = {}) => JSON.stringify({ ...env, kind: 'share', job, ...extra })
-const backupText = (jobs: unknown, template: unknown = defaultTemplate(), extra: Record<string, unknown> = {}) =>
+const backupText = (jobs: unknown, template: unknown = null, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ ...env, kind: 'backup', jobs, template, ...extra })
 const packOf = (job: Job) => {
   const r = packJob(job, computeDimensions(job))
@@ -25,7 +24,7 @@ const packOf = (job: Job) => {
 
 describe('readTransferFile：共有のファイル', () => {
   it('見本を入れた共有のファイルの summary は 部材 5種類・9枚。寸法・木取りは元と同じ', () => {
-    const job = sampleFromTemplate(defaultTemplate(), NOW)
+    const job = sampleJob(NOW)
     const r = readTransferFile(shareText(job))
     if (!r.ok || r.kind !== 'share') throw new Error('読めない')
     expect(r.summary).toEqual({ rows: 5, count: 9 })
@@ -63,7 +62,7 @@ describe('readTransferFile：共有のファイル', () => {
   })
 
   it('一部直したときは notice がつく', () => {
-    const raw = JSON.parse(JSON.stringify(sampleFromTemplate(defaultTemplate(), NOW)))
+    const raw = JSON.parse(JSON.stringify(sampleJob(NOW)))
     raw.parts.push({ bad: true })
     const r = readTransferFile(shareText(raw))
     if (!r.ok || r.kind !== 'share') throw new Error('読めない')
@@ -73,31 +72,20 @@ describe('readTransferFile：共有のファイル', () => {
 })
 
 describe('readTransferFile：バックアップのファイル', () => {
-  it('仕事の一覧とひな形を読む', () => {
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
+  it('仕事の一覧を読む。以前のファイルのひな形（最後に使った設定）は使わない（第2.5.1版）', () => {
+    const a = sampleJob(NOW)
     const b = { ...bookshelfJob() }
-    const t = templateOf(a)
-    const r = readTransferFile(backupText([a, b], t))
+    const r = readTransferFile(backupText([a, b], { settings: { kerf: 2 }, materials: [], flushes: [] }))
     if (!r.ok || r.kind !== 'backup') throw new Error('読めない')
     expect(r.jobs).toEqual([a, b])
-    expect(r.template).toEqual(t)
+    expect('template' in r).toBe(false)
     expect(r.notice).toBeUndefined()
-  })
-
-  it('ひな形が読めなければ null（仕事は読む）。一部直ったひな形は直したもの', () => {
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
-    const r1 = readTransferFile(backupText([a], 'x'))
-    expect(r1.ok && r1.kind === 'backup' && r1.template).toBe(null)
     const r2 = readTransferFile(JSON.stringify({ ...env, kind: 'backup', jobs: [a] }))
-    expect(r2.ok && r2.kind === 'backup' && r2.template).toBe(null)
-    const r3 = readTransferFile(backupText([a], { settings: { kerf: -1 }, materials: 'x' }))
-    if (!r3.ok || r3.kind !== 'backup') throw new Error('読めない')
-    expect(r3.template!.settings.kerf).toBe(3)
-    expect(r3.template!.materials).toEqual(defaultTemplate().materials)
+    expect(r2.ok && r2.kind === 'backup' && r2.jobs).toEqual([a])
   })
 
   it('読めない仕事が混ざっていれば外して notice。同じ id の仕事も外す', () => {
-    const a = sampleFromTemplate(defaultTemplate(), NOW)
+    const a = sampleJob(NOW)
     const r = readTransferFile(backupText([a, 'x', a]))
     if (!r.ok || r.kind !== 'backup') throw new Error('読めない')
     expect(r.jobs).toHaveLength(1)
@@ -106,7 +94,7 @@ describe('readTransferFile：バックアップのファイル', () => {
 })
 
 describe('readTransferFile：読めないファイル', () => {
-  const job = sampleFromTemplate(defaultTemplate(), NOW)
+  const job = sampleJob(NOW)
   const good = shareText(job)
   const cases: [string, string][] = [
     ['空の文字列', ''],
@@ -161,12 +149,12 @@ describe('fixtures（version: 1 のファイル。あとの版でも読めるこ
     expect(r.job.name).toBe('本棚 W900')
     expect(r.summary).toEqual({ rows: 5, count: 9 })
     expect(r.notice).toBeUndefined()
-    expect(packOf(r.job)).toEqual(packOf(sampleFromTemplate(defaultTemplate(), NOW)))
+    expect(packOf(r.job)).toEqual(packOf(sampleJob(NOW)))
     const m = packJob(r.job, computeDimensions(r.job)).materials.find((x) => x.stack)!
     expect([m.sheetCount, Math.round(m.yieldRate * 1000) / 10]).toEqual([5, 85.2])
   })
 
-  it('バックアップのファイル：2件（本棚 W900・食器棚）、固定した1枚とひな形あり。stackSheets の無い仕事も組の行ができる', () => {
+  it('バックアップのファイル：2件（本棚 W900・食器棚）、固定した1枚あり（ひな形は使わない）。stackSheets の無い仕事も組の行ができる', () => {
     const r = readTransferFile(backupV1)
     if (!r.ok || r.kind !== 'backup') throw new Error('読めない')
     expect(r.jobs.map((j) => j.name)).toEqual(['本棚 W900', '食器棚'])
@@ -175,7 +163,5 @@ describe('fixtures（version: 1 のファイル。あとの版でも読めるこ
     expect(r.jobs[0].frozenSheets[0].stackWith).toBeDefined()
     expect(r.jobs[0].frozenSheets[0].checked).toHaveLength(1)
     expect(r.jobs[1].stackSheets).toHaveLength(1)
-    expect(r.template).not.toBeNull()
-    expect(r.template!.flushes.map((f) => f.name)).toEqual(['フラッシュ25'])
   })
 })

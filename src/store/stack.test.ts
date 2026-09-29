@@ -7,16 +7,14 @@ import type { Job } from '../engine/types'
 import {
   addFlush,
   copyJob,
-  createJob,
   removeBoards,
   setRowSize,
   setPieceCheck,
   updateFlush,
   type OpResult,
 } from './jobs'
-import { sampleFromTemplate } from './sample'
+import { sampleJob } from './sample'
 import { JOBS_KEY, loadSaved, sanitizeJobs, saveSaved, type KeyValueStorage } from './storage'
-import { defaultTemplate, sameTemplate, templateOf } from './template'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
@@ -130,21 +128,10 @@ describe('保存・引き継ぎ・コピー', () => {
     expect(r.data.jobs[0]).toEqual(job)
   })
 
-  it('ひな形から新しい仕事を作ると stack が残る（材料が見つからず条件から外れると外す）', () => {
-    const tpl = templateOf(sampleGroupJob(true))
-    expect(tpl.flushes[0].stack).toBe(true)
-    expect(sameTemplate(tpl, templateOf(sampleGroupJob(false)))).toBe(false)
-    const job = createJob('新しい仕事', tpl, NOW)
-    expect(job.flushes[0].stack).toBe(true)
-    expect(stackPlan(job).groups).toHaveLength(1)
-    const missing = { ...tpl, materials: tpl.materials.filter((m) => m.thickness !== 4) }
-    expect('stack' in createJob('x', missing, NOW).flushes[0]).toBe(false)
-    // 見本：ひな形のフラッシュ25 を使うので stack も残る。重ね切りの見本の値になる
-    const sample = sampleFromTemplate(tpl, NOW)
+  it('見本は見本がフラッシュ25 を足すので重ね切りオン（第2.1版）で、重ね切りの見本の値になる', () => {
+    const sample = sampleJob(NOW)
     expect(sample.flushes[0].stack).toBe(true)
     expect(pack(sample).materials.map((x) => x.sheetCount)).toEqual([5, 1])
-    // 初期のひな形の見本は、見本がフラッシュ25 を足すので重ね切りオン（第2.1版）
-    expect(sampleFromTemplate(defaultTemplate(), NOW).flushes[0].stack).toBe(true)
   })
 
   it('仕事をコピーすると stack が残る（表面材は新しい材料を指す）', () => {

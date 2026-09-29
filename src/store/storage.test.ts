@@ -10,15 +10,11 @@ import {
   JOBS_V2_KEY,
   LEGACY_JOBS_KEY,
   MAX_BACKUPS,
-  TEMPLATE_KEY,
   loadSaved,
-  loadTemplate,
   saveSaved,
-  saveTemplate,
   type KeyValueStorage,
 } from './storage'
-import { addBoard, addNige, createJob, newBoard, updateSettings } from './jobs'
-import { defaultTemplate, templateOf } from './template'
+import { createJob } from './jobs'
 
 function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { map: Map<string, string> } {
   const map = new Map(Object.entries(init))
@@ -538,81 +534,15 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
 })
 
 
-describe('最後に使った設定（ひな形）の保存と読み込み（第1.3版 S-08）', () => {
-  function changedTemplate() {
-    let job = createJob('A', undefined, new Date('2026-09-26T00:00:00Z'), 'job-a')
-    const steps = [
-      (j: typeof job) => updateSettings(j, { kerf: 2, allowance: 5, cutMode: 'auto' }),
-      (j: typeof job) => addNige(j, '逃げ', 2, 'nige-2'),
-      (j: typeof job) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })),
-    ]
-    for (const step of steps) {
-      const r = step(job)
-      if (!r.ok) throw new Error(r.message)
-      job = r.job
-    }
-    return templateOf(job)
-  }
-
-  it('保存して読み込むと同じ内容に戻り、仕事の保存データ（kidori.jobs.v3）には触らない', () => {
-    const st = memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[]}' })
-    const t = changedTemplate()
-    expect(saveTemplate(st, t).ok).toBe(true)
-    expect(st.map.get(JOBS_KEY)).toBe('{"version":3,"jobs":[]}')
-    expect(JSON.parse(st.map.get(TEMPLATE_KEY)!).version).toBe(2)
-    expect(loadTemplate(st, [])).toEqual(t)
-  })
-
-  it('キーが無く仕事も無ければ初期値', () => {
-    expect(loadTemplate(memoryStorage(), [])).toEqual(defaultTemplate())
-    expect(loadTemplate(null, [])).toEqual(defaultTemplate())
-  })
-
-  it('キーが無く仕事があれば、更新日が一番新しい仕事の設定', () => {
-    const old = createJob('古い', undefined, new Date('2026-01-01T00:00:00Z'), 'job-old')
-    const r = updateSettings(createJob('新しい', undefined, new Date('2026-09-01T00:00:00Z'), 'job-new'), { kerf: 4 })
-    if (!r.ok) throw new Error(r.message)
-    const t = loadTemplate(memoryStorage(), [r.job, old])
-    expect(t.settings.kerf).toBe(4)
-    expect(loadTemplate(memoryStorage(), [old, r.job]).settings.kerf).toBe(4)
-  })
-
-  it('壊れた JSON・違う版なら初期値。例外を投げない', () => {
-    expect(loadTemplate(memoryStorage({ [TEMPLATE_KEY]: '{"version":1,' }), [])).toEqual(defaultTemplate())
-    expect(loadTemplate(memoryStorage({ [TEMPLATE_KEY]: '{"version":9,"template":{}}' }), [])).toEqual(defaultTemplate())
-    const throwing: KeyValueStorage = {
-      getItem: () => {
-        throw new Error('x')
-      },
-      setItem: () => {
-        throw new Error('x')
-      },
-      removeItem: () => {},
-    }
-    expect(loadTemplate(throwing, [])).toEqual(defaultTemplate())
-    expect(saveTemplate(throwing, defaultTemplate()).ok).toBe(false)
-  })
-
-  it('おかしな値は直す（材料名が空・厚み 0 以下・重複は外す）', () => {
-    const raw = JSON.stringify({
-      version: 1,
-      template: {
-        settings: { kerf: -1, trim: 5, allowance: 10, cutMode: 'vertical', nige: [{ id: 'nige-1', value: 1 }] },
-        materials: [
-          { material: 'タモ', thickness: 18 },
-          { material: ' タモ ', thickness: 18 },
-          { material: '', thickness: 4 },
-          { material: 'ラワン', thickness: 0 },
-          { material: 'ラワン', thickness: 4, builtIn: true },
-        ],
-      },
-    })
-    const t = loadTemplate(memoryStorage({ [TEMPLATE_KEY]: raw }), [])
-    expect(t.settings.kerf).toBe(3)
-    expect(t.settings.nige).toEqual([{ id: 'nige-1', name: '逃げ', value: 1 }])
-    expect(t.materials).toEqual([
-      { material: 'タモ', thickness: 18 },
-      { material: 'ラワン', thickness: 4, builtIn: true },
-    ])
+describe('以前のひな形（最後に使った設定）のキー（第2.5.1版でなくした）', () => {
+  it('kidori.lastSettings.v1 があっても読み込み・保存は変わらず、キーは消さず書き換えない', () => {
+    const old = JSON.stringify({ version: 2, template: { settings: { kerf: 2 }, materials: [], flushes: [] } })
+    const st = memoryStorage({ 'kidori.lastSettings.v1': old })
+    expect(loadSaved(st).status).toBe('empty')
+    const job = createJob('A', new Date('2026-09-26T00:00:00Z'), 'job-a')
+    expect(saveSaved(st, { jobs: [job], currentJobId: job.id }).ok).toBe(true)
+    expect(st.map.get('kidori.lastSettings.v1')).toBe(old)
+    const r = loadSaved(st)
+    expect(r.data.jobs[0].settings.kerf).toBe(3)
   })
 })

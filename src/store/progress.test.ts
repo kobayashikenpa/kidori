@@ -1,4 +1,4 @@
-// 第1.8版（切りながら進める木取り）：見本（第1.7版の見本。ひな形は初期値、材料は 3×6）で確かめる
+// 第1.8版（切りながら進める木取り）：見本（第1.7版の見本。設定は初期値、材料は 3×6）で確かめる
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
@@ -8,14 +8,13 @@ import { sheetChecklist } from '../engine/progress/sheetChecklist'
 import { sheetProgress } from '../engine/progress/sheetProgress'
 import type { Job, MaterialResult } from '../engine/types'
 import { removePart, setPieceCheck, updatePart, type OpResult } from './jobs'
-import { sampleFromTemplate } from './sample'
-import { defaultTemplate } from './template'
+import { sampleJob } from './sample'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 
 /** 見本（第1.7版と同じ、重ね切りオフ）。第2.1版から見本のフラッシュ25 は重ね切りオンなので外す（ここはふつうの1枚の確かめ） */
 function sample(): Job {
-  const job = sampleFromTemplate(defaultTemplate(), NOW)
+  const job = sampleJob(NOW)
   return { ...job, flushes: job.flushes.map(({ stack: _s, ...f }) => f) }
 }
 const boardId = (job: Job, material: string, thickness: number) =>

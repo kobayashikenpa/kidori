@@ -39,7 +39,7 @@ function unwrap(r: OpResult): Job {
 
 describe('createJob', () => {
   it('新しい仕事の設定は初期値（逃げ0.5mm・逃げ1mm）で、材料は最初から入っている25（第2.5版）、部材はない', () => {
-    const job = createJob('食器棚', undefined, new Date('2026-09-01T00:00:00Z'), 'job-1')
+    const job = createJob('食器棚', new Date('2026-09-01T00:00:00Z'), 'job-1')
     expect(job.settings).toEqual(defaultSettings())
     expect(job.settings).not.toBe(DEFAULT_SETTINGS)
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
@@ -53,6 +53,20 @@ describe('createJob', () => {
     expect(job.parts).toEqual([])
     expect(job.name).toBe('食器棚')
     expect(job.createdAt).toBe('2026-09-01T00:00:00.000Z')
+  })
+
+  it('設定・材料を変えた仕事があっても新しい仕事は初期値から。コピーは元の設定のまま（第2.5.1版）', () => {
+    let src = unwrap(updateSettings(createJob('A'), { kerf: 4, trim: 8, allowance: 5, cutMode: 'auto' }))
+    src = unwrap(addNige(src, 'ほぞ', 15, 'hozo-15'))
+    src = unwrap(addBoard(src, newBoard({ material: 'タモ', thickness: 20 })))
+    const fresh = createJob('B')
+    expect(fresh.settings).toEqual(defaultSettings())
+    expect(fresh.boards).toHaveLength(25)
+    expect(fresh.flushes).toEqual([])
+    const copy = copyJob(src, [src.name])
+    expect(copy.settings).toMatchObject({ kerf: 4, trim: 8, allowance: 5, cutMode: 'auto' })
+    expect(copy.settings.nige.map((n) => n.value)).toEqual([0.5, 1, 15])
+    expect(copy.boards.map(boardLabel)).toEqual(src.boards.map(boardLabel))
   })
 
   it('id を指定しなければ別々の id になる', () => {
@@ -265,8 +279,8 @@ describe('仕事の名前・コピー・削除', () => {
   })
 
   it('仕事を消す。開いていた仕事を消すと、何も開いていない状態になる', () => {
-    const a = createJob('a', undefined, new Date(), 'a')
-    const b = createJob('b', undefined, new Date(), 'b')
+    const a = createJob('a', new Date(), 'a')
+    const b = createJob('b', new Date(), 'b')
     expect(deleteJob([a, b], 'a', 'a')).toEqual({ jobs: [b], currentJobId: null })
     expect(deleteJob([a, b], 'b', 'a')).toEqual({ jobs: [b], currentJobId: 'b' })
     expect(deleteJob([a, b], null, 'x')).toEqual({ jobs: [a, b], currentJobId: null })
