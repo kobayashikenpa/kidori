@@ -131,6 +131,24 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
     expect(b.summary).toEqual(a.summary)
   })
 
+  it('部材（桟）が使っている木取りする芯材15 は木取りしないにせず、芯材（木取りしない）15 を足す。桟の片は木取りされたまま', () => {
+    const legacy = legacySampleFlushJob(true)
+    const cutCore = { id: 'my-core', material: '芯材', thickness: 15, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
+    const san = { ...legacy.parts[0], id: 'part-san', name: '桟', boardId: 'my-core', expr: { W: '300', H: '600', D: '15' }, quantity: 2 }
+    const before = { ...legacy, boards: [...legacy.boards, cutCore], parts: [...legacy.parts, san] }
+    const r = loadSaved(memoryStorage({ [JOBS_V2_KEY]: JSON.stringify({ version: 2, jobs: [before] }) }), NOW)
+    expect(r.status).toBe('ok')
+    const job = r.data.jobs[0]
+    expect(job.boards.slice(0, -1)).toEqual(before.boards)
+    const core = job.boards.at(-1)!
+    expect([core.material, core.thickness, core.noCut]).toEqual(['芯材（木取りしない）', 15, true])
+    expect(job.flushes[0].faces[0]).toEqual({ boardId: core.id, count: 1 })
+    const pack = packJob(job, computeDimensions(job))
+    const m = pack.materials.find((x) => x.boardId === 'my-core')!
+    expect(m.sheets.flatMap((x) => x.placements).filter((x) => x.partId === 'part-san').length).toBe(2)
+    expect(pct(pack.materials.find((x) => x.stack)!.yieldRate)).toBe(85.2)
+  })
+
   it('保存すると v3 に version 3 で書かれ、v2 は1文字も変わらない。読み直しても同じ', () => {
     const v2 = JSON.stringify({ version: 2, jobs: [legacyCheckedSample()] })
     const st = memoryStorage({ [JOBS_V2_KEY]: v2 })

@@ -1777,21 +1777,25 @@ autoGroupName(form, total, taken): string      // フラッシュ25・ベタ20�
 ### 17.6 以前のデータの移し替え（`engine/migrate/flushCore.ts`）— 決定（planner）
 
 ```ts
-/** 仕事：芯材（core）のあるフラッシュを、芯材の材料＋中身の1行に移す。材料は足すだけ（今ある材料は noCut を付けるほかは変えない） */
-migrateFlushCores(boards: Board[], flushes: LegacyFlush[], newBoardId: () => string):
+/** 仕事：芯材（core）のあるフラッシュを、芯材の材料＋中身の1行に移す。材料は足すだけ（どこにも使われていない「芯材」に noCut を付けるほかは変えない） */
+migrateFlushCores(boards: Board[], flushes: LegacyFlush[], newBoardId: () => string, inUse: ReadonlySet<string>):
   { boards: Board[]; flushes: Flush[] }
 /** ひな形：同じことを「材料名＋厚み」で行う */
 migrateFlushSpecCores(materials: MaterialSpec[], flushes: LegacyFlushSpec[]): { materials; flushes }
+/** 部材の boardId・固定した1枚（boardId・stackWith.boardId）・組の設定（boardIds）で使っている材料の id（読み込む前の値をそのまま渡せる） */
+boardIdsInUse(job: { parts?; frozenSheets?; stackSheets? }): Set<string>
 ```
 
 - 対象：`core` が 0 より大きい数のフラッシュ（`core` を持たないものは今の形としてそのまま）。版の数ではなく **形で見分ける**（v2 の保存データにも、以前の版で書き出したファイルにも同じように効く）
 - 芯材の材料：材料名「芯材」・厚み＝`core` の材料（材料名は NFKC・前後の空白をそろえ、厚みは小数第1位で比べる。今の材料の重なりの決まりと同じ）
   - 無ければ、`{ material: '芯材', thickness: core, noCut: true, 4×8 }` を **材料の最後に足す**（あとから足した材料として上に並ぶ）。同じ厚みの芯材のフラッシュがいくつあっても1つだけ足す
-  - あれば **それを使い、`noCut` を付ける**（仕様書「同じ厚みの芯材があればそれを使う」）。その材料を部材が直接選んでいたら、その部材は木取りしなくなる（芯材は木取りしないもの、とみなす。まれなので知らせは出さない）
+  - あり、**木取りしない**材料なら、それを使う（仕様書「同じ厚みの芯材があればそれを使う」）
+  - あり、**木取りする**材料で、**どこにも使われていない**（部材の `boardId`・ほかの材料グループの中身・固定した1枚・手持ちの行 `stock`・組の設定 `stackSheets` のどれにも無い）なら、`noCut` を付けて使う
+  - あり、**木取りする**材料で、**使われている**なら、変えない（`noCut` を付けると部材の片が消えて結果が変わるため。仕様書 4「結果は変わらない」。進行役の決定）。かわりに材料名「芯材（木取りしない）」・同じ厚みの材料を同じ決まりで探し、無ければ足す（それも木取りするもので使われていれば「芯材（木取りしない）2」…）。ひな形は部材が無いので、材料グループの中身で使っているかを見る
 - 中身：**芯材の行を先頭に** `{ boardId: 芯材, count: 1 }`、そのあとに今の表面材を同じ並びで。`form: 'flush'`。名前が今の自動の名前の形（`isAutoFlushName`）なら `autoName: true`
 - **変わらないもの**：フラッシュの id（式の `{t:id}`・部材の `flushId`・`cutByBoard`）、名前、厚み（芯材＋表面材＝中身の合計）、重ね切り（`canStack` の答えが同じ）、`stackSheets`、片の id（17.4）、固定した1枚。したがって寸法・計算結果は変わらない（仕様書 4）
 - 壊れていたわけではないので、直した数に数えず、知らせも出さない
-- `storage.ts` の `sanitizeJob` では、材料を読んだあと・`settleStacks` の前に行う（足した芯材の材料も `boardIds` に入れてから部材を読む）
+- `storage.ts` の `sanitizeJob` では、材料を読んだあと・`settleStacks` の前に行う（足した芯材の材料も `boardIds` に入れてから部材を読む）。`inUse` は読み込む前の仕事の値から `boardIdsInUse(v)` で作る
 - `migrate/v1Dimensions.ts`（第1版の逃げの移し替え）より後に呼んでも前に呼んでも結果は同じ（逃げは式、芯材は材料とグループ。触る所が重ならない）
 
 ### 17.7 保存の版 — 決定（planner）

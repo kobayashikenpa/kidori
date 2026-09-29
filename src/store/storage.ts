@@ -2,7 +2,7 @@
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
-import { migrateFlushCores, migrateFlushSpecCores, type LegacyFlush, type LegacySpecGroup } from '../engine/migrate/flushCore'
+import { boardIdsInUse, migrateFlushCores, migrateFlushSpecCores, type LegacyFlush, type LegacySpecGroup } from '../engine/migrate/flushCore'
 import { canStack, stackPlan } from '../engine/packing/stack'
 import { samePair, sameStockSize, usesStock } from '../engine/packing/stock'
 import { eq1 } from '../engine/round'
@@ -658,8 +658,9 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   }
 
   // 以前の版のフラッシュの芯材（core）を「芯材◯（木取りしない）」の材料と中身に移す（第2.5版。17.6）。
-  // 壊れていたわけではないので直した数に数えない。足した芯材の材料も boardIds に入れてから部材を読む
-  const moved = migrateFlushCores(boards, sanitizeFlushes(v.flushes, boards, fx), () => newId('board'))
+  // 壊れていたわけではないので直した数に数えない。足した芯材の材料も boardIds に入れてから部材を読む。
+  // 部材などが使っている木取りする「芯材」は木取りしないにしない（結果が変わらないように。別の芯材を足す）
+  const moved = migrateFlushCores(boards, sanitizeFlushes(v.flushes, boards, fx), () => newId('board'), boardIdsInUse(v))
   boards.splice(0, boards.length, ...moved.boards)
   const boardIds = new Set(boards.map((b) => b.id))
   // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える。組は 3×6／4×8 だけ（15.9）
