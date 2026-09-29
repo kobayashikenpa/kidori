@@ -1,6 +1,7 @@
 // 部材の画面：部材カードの一覧。押すと編集シート
 import { useMemo, useState } from 'react'
 import { computeDimensions } from '../../engine/dimensions'
+import { partIsNoCut } from '../../engine/flush'
 import { AXES, type Board, type Part, type PartDimensions } from '../../engine/types'
 import { boardLabel } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -30,6 +31,7 @@ export function PartsScreen() {
             part={p}
             board={job.boards.find((b) => b.id === p.boardId) ?? null}
             flushName={job.flushes.find((f) => f.id === p.flushId)?.name ?? null}
+            noCut={p.quantity > 0 && partIsNoCut(job, p)}
             dims={byId.get(p.id)!}
             onOpen={() => setEditing(p)}
           />
@@ -52,13 +54,15 @@ export function PartsScreen() {
 interface CardProps {
   part: Part
   board: Board | null
-  /** フラッシュを選んだ部材ならその名前 */
+  /** 材料グループを選んだ部材ならその名前 */
   flushName: string | null
+  /** 木取りしない材料（または中身がすべて木取りしない材料グループ）の部材（第2.5版） */
+  noCut: boolean
   dims: PartDimensions
   onOpen: () => void
 }
 
-function PartCard({ part, board, flushName, dims: d, onOpen }: CardProps) {
+function PartCard({ part, board, flushName, noCut, dims: d, onOpen }: CardProps) {
   const noBoard = part.quantity >= 1 && !board && !flushName
   // 厚みの寸法の不一致（第1.2版からエラー）と、式のエラーを分けて出す
   const thickErr = d.errors.some((e) => e.kind === 'thicknessMismatch')
@@ -72,6 +76,7 @@ function PartCard({ part, board, flushName, dims: d, onOpen }: CardProps) {
       <span className="tags">
         {part.quantity > 0 && board && <span className="chip">{boardLabel(board)}</span>}
         {part.quantity > 0 && flushName && <span className="chip">{flushName}</span>}
+        {noCut && <span className="chip nocut">木取りしない</span>}
         {noBoard && <span className="chip warn">材料が未設定</span>}
         {thickErr && <span className="chip err">厚みが合わない</span>}
         {exprErr && <span className="chip err">式のエラー</span>}
