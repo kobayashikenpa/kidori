@@ -156,7 +156,8 @@ describe('buildCuts（切る順番）', () => {
   })
 
   it('横切り優先で帯より細い片は、縦に切って長さを切り揃える（右端から）', () => {
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], usableRect(BOARD, 5, 'horizontal'), 3, 'horizontal')
+    // 帯の中に幅の違う片が並ぶ配置を作るため、第2.4版までの並べ方（sameWidthFirst: false）で並べる
+    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], usableRect(BOARD, 5, 'horizontal'), 3, 'horizontal', false)
     const cuts = buildCuts(r.sheets[0], r.frame, BOARD, 5)
     expect(cuts.at(-1)).toMatchObject({ kind: 'rip', direction: 'vertical', at: 1015, label: '右端から 800mm で縦に切る' })
     expectGuillotine(cuts, r.sheets[0].strips[0].items.map((i) => i.placement), LANDSCAPE, 3)
@@ -183,7 +184,7 @@ describe('buildCuts（切る順番）', () => {
 
   it('帯より細い片は、切り分けたあとに幅を切り揃える', () => {
     const usable = { x: 0, y: 0, w: 905, h: 1820 }
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], usable, 3, 'vertical')
+    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], usable, 3, 'vertical', false)
     const cuts = buildCuts(r.sheets[0], r.frame, BOARD, 5)
     expect(cuts.map((c) => [c.kind, c.direction, c.at, c.label])).toEqual([
       ['trim', 'vertical', 905, '端切り：右の長手を 5mm 落とす（縦に切る）'],

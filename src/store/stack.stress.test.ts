@@ -342,7 +342,9 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         customCommon++
       } else {
         // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
-        expect(digest(r), `seed ${seed}`).toEqual(table[`s${seed}`])
+        // 第2.5版（E-68）で帯の並べ方（同じ幅を優先）を変えたので、第2.2版と比べるのは第2.4版までの並べ方で並べた結果
+        const old = packJob(job, computeDimensions(job), undefined, { sameWidthFirst: false })
+        expect(digest(old), `seed ${seed}`).toEqual(table[`s${seed}`])
         unchanged++
       }
     }
