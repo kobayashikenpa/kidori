@@ -30,7 +30,7 @@ function memoryStorage(): KeyValueStorage {
   const map = new Map<string, string>()
   return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) }
 }
-const MSG = '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
+const MSG = '重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです'
 
 describe('フラッシュの重ね切りの設定（validateFlush・cleanFlush）', () => {
   it('表面材 メラミン1×2・ラワン4×1 で stack: true は断られる（足す・変える）', () => {

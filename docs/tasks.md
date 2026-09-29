@@ -1081,7 +1081,7 @@
 - やること：`storage.ts`：`kidori.jobs.v3`（`version: 3`）に書き、v3 → v2 → v1 の順に読む（v2・v1 は書き換えない）。`sanitizeBoard` に `noCut`、`sanitizeFlushes` に `form`・`autoName`、core のあるフラッシュは `migrateFlushCores`（`settleStacks` の前。直した数に数えない）。ひな形は `{ version: 2 }` で書き、version 1 は `migrateFlushSpecCores`。`template.ts` の `MaterialSpec.noCut`・`FlushSpec`（core なし・`form`・`autoName`）と `templateOf`・`sameTemplate`・`createJob`。`sample.ts` は芯材15（木取りしない）を使う。`transfer/envelope.ts` の dataVersion 3。`transfer/fixtures/` に dataVersion 3 の見本のファイルを足す（17.6・17.7・17.9）
 - 完了の条件：v2 のキーだけにある見本（重ね切りの組の1枚にチェック済み）を読むと、芯材15（木取りしない）が足され、寸法表・木取り（見本で期待する値）・チェック・「部材が変わっています」なしが移し替える前と同じで、知らせ・直した数なし。保存すると v3 に書かれ v2 は1文字も変わらない。v3 があれば v2 は読まない。version 1 のひな形（core 15 のフラッシュ25）から作った新しい仕事に芯材15（木取りしない）とフラッシュ25（芯材15×1…）が入る。見本の厚みは 25 で期待する値が同じ。version 1 の共有・バックアップのファイル（fixtures）が同じ結果で取り込め、書き出したファイルは dataVersion 3、dataVersion 4 は「新しい版」の文言。仕事のコピーで `noCut`・`form`・`autoName` が残る
 
-### [~] S-29 材料・材料グループの操作（木取りしない・中身の検査・自動の名前）
+### [x] S-29 材料・材料グループの操作（木取りしない・中身の検査・自動の名前）
 - 担当：engine-dev ／ 依存：S-28 ／ 仕様書：4（材料と材料グループ）
 - やること：`updateBoard` で `noCut` の付け外しと、`canStack` でなくなったグループの `stack` を外す。`refreshAutoNames` を `updateBoard`・`removeBoards`・`updateFlush` で呼ぶ。`validateFlush` から芯材の検査を外し、中身1つ以上・空欄の行・重なり・`canStack(f, boards)` の文言に（17.8）。`cleanFlush` で `form`・`autoName`。文言の「フラッシュ」「表面材」を「材料グループ」「中身」に（`validateBoard` を含む）
 - 完了の条件：重ね切りの見本でメラミン1 を木取りしないにすると フラッシュ25 の `stack` が外れ、組の行は残る。ラワン4 の厚みを 5 にすると 自動の名前の フラッシュ25 が フラッシュ27 になり（式の表示名もついてくる）、手で名前を付けたグループは変わらない。フラッシュ27 がすでにあれば フラッシュ27-2。中身が0・空欄の行・同じ材料の2行・枚数 0 はそれぞれの文言で断られる。core の無い下書きで `addFlush` できる。メラミン1 を削除すると中身から外れ、名前がついてくる

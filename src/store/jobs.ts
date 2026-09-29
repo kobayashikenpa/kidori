@@ -2,7 +2,7 @@
 import { boardTokenLabel, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { canStack } from '../engine/packing/stack'
 import { findStackSheet } from '../engine/packing/stock'
-import { flushesUsingBoards, partsUsingFlushes } from '../engine/flush'
+import { autoGroupName, flushesUsingBoards, flushThickness, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
 import { refsOf } from '../engine/formula/evaluate'
 import { parse } from '../engine/formula/parse'
@@ -22,6 +22,7 @@ import {
   type BoardSizeKind,
   type Flush,
   type FrozenSheet,
+  type GroupForm,
   type Job,
   type Nige,
   type Part,
@@ -311,10 +312,10 @@ function validateBoard(job: Job, board: Board): string | null {
     (b) => b.id !== board.id && sameMaterial(b.material, board.material) && eq1(b.thickness, board.thickness),
   )
   if (dup) return `「${boardLabel(dup)}」はすでにあります（材料と厚みが同じものは2つ作れません）`
-  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）と材料グループの名前が同じだと見分けられない
   const key = boardTokenLabel(board).normalize('NFKC')
   const flush = job.flushes.find((f) => f.name.trim().normalize('NFKC') === key)
-  if (flush) return `「${boardTokenLabel(board)}」はフラッシュと同じ名前です。材料名か厚みを変えてください`
+  if (flush) return `「${boardTokenLabel(board)}」は材料グループと同じ名前です。材料名か厚みを変えてください`
   return null
 }
 
@@ -326,14 +327,53 @@ export function addBoard(job: Job, board: Board): OpResult {
   return ok({ ...job, boards: [...job.boards, b] })
 }
 
-/** 板を変える。材料名＋厚みがほかの板と同じなら断る */
+/**
+ * 板を変える。材料名＋厚みがほかの板と同じなら断る。
+ * 木取りしない（noCut。第2.5版）は true で付け、undefined（や false）で外す。付け外し・厚みの変更のあと、
+ * 重ねて切れなくなった材料グループは重ね切りを外し（組の行は残す）、自動の名前の材料グループは名前をつけ直す
+ */
 export function updateBoard(job: Job, boardId: string, patch: Partial<Omit<Board, 'id'>>): OpResult {
   const cur = job.boards.find((b) => b.id === boardId)
   if (!cur) return fail('材料が見つかりません')
-  const b = normalizeBoard({ ...cur, ...patch, id: boardId })
+  const { noCut, ...merged } = { ...cur, ...patch, id: boardId }
+  const b = normalizeBoard(noCut === true ? { ...merged, noCut: true } : merged)
   const err = validateBoard(job, b)
   if (err) return fail(err)
-  return ok({ ...job, boards: job.boards.map((x) => (x.id === boardId ? b : x)) })
+  const boards = job.boards.map((x) => (x.id === boardId ? b : x))
+  return ok(refreshAutoNames({ ...job, boards, flushes: unstackUnfit(job.flushes, boards) }))
+}
+
+/** 重ねて切れなくなった材料グループの重ね切りを外す（第2.0版・第2.5版）。組の行（stackSheets）は消さない */
+function unstackUnfit(flushes: readonly Flush[], boards: readonly Board[]): Flush[] {
+  return flushes.map((f) => {
+    if (f.stack !== true || canStack(f, boards)) return f
+    const { stack: _stack, ...rest } = f
+    return rest
+  })
+}
+
+/**
+ * 自動の名前（autoName）の材料グループの名前をつけ直す（第2.5版。仕様書 4「中身を変えると名前もついてくる」）。
+ * 名前＝autoGroupName(初めの形, 中身の合計の厚み, ほかの名前)。登録順に決め、今の名前が正しい形（フラッシュ25・フラッシュ25-2）で
+ * ほかと重ならなければそのまま残す（ほかの材料グループの名前が勝手に -2 に変わらないように）。変わらなければ同じオブジェクト
+ */
+export function refreshAutoNames(job: Job): Job {
+  if (!job.flushes.some((f) => f.autoName === true)) return job
+  const key = (n: string) => n.trim().normalize('NFKC')
+  const taken = new Set(job.flushes.filter((f) => f.autoName !== true).map((f) => key(f.name)))
+  let changed = false
+  const flushes = job.flushes.map((f) => {
+    if (f.autoName !== true) return f
+    const base = autoGroupName(f.form ?? 'flush', flushThickness(f, job.boards))
+    const cur = key(f.name)
+    const fits = (cur === base || (cur.startsWith(`${base}-`) && /^\d+$/.test(cur.slice(base.length + 1)))) && !taken.has(cur)
+    const name = fits ? f.name : autoGroupName(f.form ?? 'flush', flushThickness(f, job.boards), [...taken])
+    taken.add(key(name))
+    if (name === f.name) return f
+    changed = true
+    return { ...f, name }
+  })
+  return changed ? { ...job, flushes } : job
 }
 
 /** その板を使っている部材の名前（部材の並び順） */
@@ -345,7 +385,7 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
 export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   const ids = new Set(boardIds.filter((id) => job.boards.some((b) => b.id === id)))
   if (ids.size === 0) return fail('材料が見つかりません')
-  return ok({
+  return ok(refreshAutoNames({
     ...job,
     boards: job.boards.filter((b) => !ids.has(b.id)),
     // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）。
@@ -360,7 +400,7 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
     parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
     // 消した材料の入る重ね切りの組の設定も消す（第2.3版）
     stackSheets: job.stackSheets.filter((s) => !s.boardIds.some((id) => ids.has(id))),
-  })
+  }))
 }
 
 /**
@@ -566,45 +606,53 @@ export function nigesUsages(job: Job, nigeIds: readonly string[]): string[] {
   return partsUsingNiges(job, nigeIds)
 }
 
-// ---------- フラッシュ（第1.5版） ----------
+// ---------- 材料グループ（第1.5版のフラッシュ。第2.5版で材料グループ） ----------
 
-/** フラッシュの入力（id 以外） */
+/** 材料グループの入力（id 以外） */
 export type FlushDraft = Omit<Flush, 'id'>
 
+const GROUP_FORMS: readonly GroupForm[] = ['flush', 'beta', 'empty']
+
 /**
- * フラッシュの検査。名前が空でなく、ほかのフラッシュと重ならない（前後の空白・全角半角をそろえて比べる）、
- * 芯材が 0 より大きい、表面材が1つ以上で、どれも登録済みの材料・枚数は1以上の整数・同じ材料を重ねない
+ * 材料グループの検査（第2.5版。architecture.md 17.8）。名前が空でなく、ほかの材料グループ・材料の表示名と重ならない
+ * （前後の空白・全角半角をそろえて比べる）、中身が1つ以上で、どの行も登録済みの材料（空欄の行は断る）・
+ * 同じ材料を重ねない・枚数は1以上の整数、重ね切りは木取りする中身が2種類で枚数が同じときだけ
  */
 function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string | null {
   if (!f.name) return '名前を入れてください'
   const key = f.name.normalize('NFKC')
   const same = job.flushes.find((x) => x.id !== selfId && x.name.trim().normalize('NFKC') === key)
   if (same) return `「${same.name}」はすでにあります`
-  // 式の厚みボタン・材料の選択で、材料（ラワン4）とフラッシュの名前が同じだと見分けられない
+  // 式の厚みボタン・材料の選択で、材料（ラワン4）と材料グループの名前が同じだと見分けられない
   const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
   if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
+  // 以前の版の芯材（作業中だけ。S-30 で消す）
   if (f.core !== undefined && !(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
-  if (f.faces.length === 0) return '表面材を1つ以上選んでください'
+  if (f.faces.length === 0) return '中身を1つ以上入れてください'
   const seen = new Set<string>()
   for (const face of f.faces) {
+    if (face.boardId === '') return '中身の材料を選んでください'
     const b = job.boards.find((x) => x.id === face.boardId)
-    if (!b) return '表面材の材料が見つかりません'
-    if (seen.has(b.id)) return `表面材の「${boardLabel(b)}」が重なっています（枚数でまとめてください）`
+    if (!b) return '中身の材料が見つかりません'
+    if (seen.has(b.id)) return `「${boardLabel(b)}」が重なっています（枚数でまとめてください）`
     seen.add(b.id)
-    if (!(Number.isInteger(face.count) && face.count >= 1)) return '表面材の枚数は 1 以上の整数を入れてください'
+    if (!(Number.isInteger(face.count) && face.count >= 1)) return '中身の枚数は 1 以上の整数を入れてください'
   }
-  if (f.stack === true && !canStack(f, job.boards)) return '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
+  if (f.stack === true && !canStack(f, job.boards)) return '重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです'
   return null
 }
 
-/** 前後の空白を外し、重ね切り（第2.0版）は true のときだけ持つ */
+/** 前後の空白を外す。重ね切り・自動の名前は true のときだけ、初めの形は3つのどれかのときだけ持つ */
 function cleanFlush(f: FlushDraft): FlushDraft {
-  const out: FlushDraft = { name: f.name.trim(), ...(f.core !== undefined ? { core: f.core } : {}), faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+  const out: FlushDraft = { name: f.name.trim(), faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
+  if (f.core !== undefined) out.core = f.core
   if (f.stack === true) out.stack = true
+  if (f.form !== undefined && GROUP_FORMS.includes(f.form)) out.form = f.form
+  if (f.autoName === true) out.autoName = true
   return out
 }
 
-/** フラッシュを足す（一覧の最後）。名前が重なる・値がおかしければ断る */
+/** 材料グループを足す（一覧の最後）。名前が重なる・値がおかしければ断る */
 export function addFlush(job: Job, draft: FlushDraft, id: string = newId('flush')): OpResult {
   const f = cleanFlush(draft)
   const err = validateFlush(job, f, null)
@@ -612,13 +660,13 @@ export function addFlush(job: Job, draft: FlushDraft, id: string = newId('flush'
   return ok({ ...job, flushes: [...job.flushes, { id, ...f }] })
 }
 
-/** フラッシュを変える。部材・式は id で参照しているので、厚みがついてくる */
+/** 材料グループを変える。部材・式は id で参照しているので、厚みがついてくる。自動の名前はつけ直す */
 export function updateFlush(job: Job, flushId: string, draft: FlushDraft): OpResult {
-  if (!job.flushes.some((f) => f.id === flushId)) return fail('フラッシュが見つかりません')
+  if (!job.flushes.some((f) => f.id === flushId)) return fail('材料グループが見つかりません')
   const f = cleanFlush(draft)
   const err = validateFlush(job, f, flushId)
   if (err) return fail(err)
-  return ok({ ...job, flushes: job.flushes.map((x) => (x.id === flushId ? { id: flushId, ...f } : x)) })
+  return ok(refreshAutoNames({ ...job, flushes: job.flushes.map((x) => (x.id === flushId ? { id: flushId, ...f } : x)) }))
 }
 
 /** 部材からフラッシュの選択と表面材ごとの完了を外す（材料は未設定になる） */
@@ -631,7 +679,7 @@ function withoutFlush(p: Part): Part {
 /** フラッシュをまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材は材料が未設定になる */
 export function removeFlushes(job: Job, flushIds: readonly string[]): OpResult {
   const ids = new Set(flushIds.filter((id) => job.flushes.some((f) => f.id === id)))
-  if (ids.size === 0) return fail('フラッシュが見つかりません')
+  if (ids.size === 0) return fail('材料グループが見つかりません')
   return ok({
     ...job,
     flushes: job.flushes.filter((f) => !ids.has(f.id)),
@@ -681,11 +729,11 @@ function normalizeMaterial(part: Part): Part {
 }
 
 function validatePartFields(job: Job, part: Part): string | null {
-  if (part.flushId !== undefined && !job.flushes.some((f) => f.id === part.flushId)) return 'フラッシュが見つかりません'
+  if (part.flushId !== undefined && !job.flushes.some((f) => f.id === part.flushId)) return '材料グループが見つかりません'
 
   if (!(Number.isInteger(part.quantity) && part.quantity >= 0)) return '枚数は 0 以上の整数を入れてください'
   if (part.allowance !== null && !(Number.isFinite(part.allowance) && part.allowance >= 0)) {
-    return '切り代は 0 以上の数を入れてください（空欄ならフラッシュは初期値、ほかの部材は 0）'
+    return '切り代は 0 以上の数を入れてください（空欄なら材料グループの部材は初期値、ほかの部材は 0）'
   }
   return null
 }
