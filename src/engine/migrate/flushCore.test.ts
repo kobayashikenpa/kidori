@@ -196,6 +196,38 @@ describe('migrateFlushCores：使っている木取りする芯材は木取り�
   })
 })
 
+describe('migrateFlushCores：自動の名前（autoName）は、名前が移したあとの厚みの自動の名前のときだけ', () => {
+  it('厚み 25 の「フラッシュ30」は autoName なしで名前もそのまま。「フラッシュ25」「フラッシュ25-2」は autoName', () => {
+    const legacy = legacySampleFlushJob()
+    const f = legacy.flushes[0]
+    const flushes = [
+      { ...f, name: 'フラッシュ30' },
+      { ...f, id: 'f2', name: 'フラッシュ25' },
+      { ...f, id: 'f3', name: 'フラッシュ25-2' },
+      { ...f, id: 'f4', name: 'フラッシュ2' },
+    ]
+    const r = migrateFlushCores(legacy.boards, flushes, counter(), none)
+    expect(r.flushes.map((x) => [x.name, x.autoName])).toEqual([
+      ['フラッシュ30', undefined],
+      ['フラッシュ25', true],
+      ['フラッシュ25-2', true],
+      ['フラッシュ2', undefined],
+    ])
+  })
+
+  it('ひな形でも同じ', () => {
+    const materials = [{ material: 'ラワン', thickness: 4 }]
+    const r = migrateFlushSpecCores(materials, [
+      { name: 'フラッシュ30', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] },
+      { name: 'フラッシュ23-3', core: 15, faces: [{ material: 'ラワン', thickness: 4, count: 2 }] },
+    ])
+    expect(r.flushes.map((x) => [x.name, x.autoName])).toEqual([
+      ['フラッシュ30', undefined],
+      ['フラッシュ23-3', true],
+    ])
+  })
+})
+
 describe('migrateFlushSpecCores（ひな形）', () => {
   it('芯材15（木取りしない）を材料の最後に足し、中身の先頭に ×1', () => {
     const materials = [

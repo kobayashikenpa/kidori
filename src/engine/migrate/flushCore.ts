@@ -2,7 +2,7 @@
 // （第2.5版。仕様書 4「今のフラッシュは、材料グループに移す」、architecture.md 17.6）。
 // 名前・厚み・式・寸法・計算結果は変わらない（id・stack はそのまま。片の id は木取りする中身だけで数えるので同じ）
 import { defaultSheet } from '../defaults'
-import { flushThickness, isAutoFlushName } from '../flush'
+import { autoGroupName, flushThickness } from '../flush'
 import { eq1 } from '../round'
 import type { Board, Flush, GroupForm } from '../types'
 
@@ -42,10 +42,17 @@ function coreOf(f: { core?: unknown }): number | null {
   return typeof f.core === 'number' && Number.isFinite(f.core) && f.core > 0 ? f.core : null
 }
 
+/** name が、合計の厚み total の「フラッシュ」の自動の名前（フラッシュ25・フラッシュ25-2 など）か */
+function isAutoNameFor(name: string, total: number): boolean {
+  const base = autoGroupName('flush', total)
+  const k = key(name)
+  return k === base || (k.startsWith(`${base}-`) && /^[1-9]\d*$/.test(k.slice(base.length + 1)))
+}
+
 /** 芯材を移したあとの form・autoName（今あるものは残す）。total は移したあとの合計の厚み */
-function groupMarks(f: { name: string; form?: GroupForm; autoName?: true }, _total: number): { form: GroupForm; autoName?: true } {
+function groupMarks(f: { name: string; form?: GroupForm; autoName?: true }, total: number): { form: GroupForm; autoName?: true } {
   const out: { form: GroupForm; autoName?: true } = { form: f.form ?? 'flush' }
-  if (f.autoName === true || isAutoFlushName(f.name)) out.autoName = true
+  if (f.autoName === true || isAutoNameFor(f.name, total)) out.autoName = true
   return out
 }
 
