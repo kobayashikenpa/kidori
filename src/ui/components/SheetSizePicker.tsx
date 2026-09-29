@@ -27,9 +27,11 @@ interface Props {
   current: MaterialResult | null
   /** その行の stockUsage */
   usage: StockUsage | null
+  /** 手持ちに入らない部材がある材料か（手持ちの行の「部材が収まりません」に使う） */
+  short: boolean
 }
 
-export function SheetSizePicker({ target, choice, label, compare, current, usage }: Props) {
+export function SheetSizePicker({ target, choice, label, compare, current, usage, short }: Props) {
   const { run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   // 自由入力：手持ちで木取り中（stockOn）か、以前の版の自由入力（大きさだけ）。組の行には自由入力が無い
@@ -94,7 +96,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         )}
       </div>
       {error && <p className="msg err">{error}</p>}
-      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} />}
+      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} short={short} />}
     </div>
   )
 }

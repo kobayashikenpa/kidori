@@ -1951,3 +1951,15 @@ button.dim-name {
 .chip.nocut {
   border: 1px dashed var(--muted);
 }
+
+/* 手持ちの行の表示（第2.5版） */
+.stk-use.stk-noFit {
+  color: var(--err);
+  font-weight: 700;
+}
+.stk-use.stk-unused {
+  color: var(--muted);
+}
+.stk-use.stk-all {
+  font-weight: 700;
+}

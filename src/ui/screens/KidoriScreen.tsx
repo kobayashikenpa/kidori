@@ -272,6 +272,7 @@ export function KidoriScreen() {
                 target={sec.stack ?? sec.boardId}
                 choice={sec.choice}
                 usage={usage.find((u) => u.boardId === sec.boardId) ?? null}
+                short={shortages.some((x) => x.boardId === sec.boardId)}
                 comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
                 bySize={sec.stocked ? (sizeCounts.find((c) => c.boardId === sec.boardId)?.bySize ?? []) : null}
               />
@@ -414,12 +415,14 @@ interface MaterialRowProps {
   /** その行のサイズの設定（材料が仕事に無ければ null。サイズの選択を出さない） */
   choice: SheetChoice | null
   usage: StockUsage | null
+  /** 手持ちに入らない部材がある（engine の stockShortage に出ている）材料か */
+  short: boolean
   comparison: MaterialSizeComparison | null
   /** 手持ちで木取りする材料（組）なら、サイズ別の枚数（サイズの選択のかわりに出す） */
   bySize: SizeCount[] | null
 }
 
-function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usage, comparison, bySize }: MaterialRowProps) {
+function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usage, short, comparison, bySize }: MaterialRowProps) {
   const n = summary.sheetCount
   return (
     <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
@@ -446,7 +449,15 @@ function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usa
         </div>
       )}
       {choice && (
-        <SheetSizePicker target={target} choice={choice} label={label} compare={comparison} current={m} usage={usage} />
+        <SheetSizePicker
+          target={target}
+          choice={choice}
+          label={label}
+          compare={comparison}
+          current={m}
+          usage={usage}
+          short={short}
+        />
       )}
     </li>
   )
