@@ -9,6 +9,7 @@ import { bigJob } from './fixtures/bigJob'
 import { readTransferFile } from './read'
 import { buildShareFile, importShared, shareFileName } from './share'
 
+
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 const LATER = new Date('2026-10-01T08:00:00.000Z')
 const unwrap = (r: OpResult): Job => {
@@ -103,8 +104,10 @@ describe('共有の行って戻る（buildShareFile → readTransferFile → imp
     for (const id of idsOf(out)) expect(old.has(id)).toBe(false)
     expect(out.frozenSheets).toEqual([])
     for (const p of out.parts) expect(p.checks).toEqual({ finished: false, cut: false })
-    // 初期の ラワン2.5・5.5・逃げ0.5 は入らない
-    expect(out.boards.map((b) => b.thickness)).toEqual([1, 4, 15])
+    // ファイルには初期の ラワン2.5・5.5・逃げ0.5 は入らない。取り込むと最初から入っている材料は足される（第2.5.1版）
+    expect(JSON.parse(buildShareFile(src, NOW)).job.boards.map((b: { thickness: number }) => b.thickness)).toEqual([1, 4, 15])
+    expect(out.boards.filter((b) => b.builtIn !== true).map((b) => b.material)).toEqual(['芯材'])
+    expect(out.boards).toHaveLength(26)
     expect(out.settings.nige.map((n) => n.value)).toEqual([1])
     expect(out.name).toBe('本棚 W900')
     expect(out.createdAt).toBe(LATER.toISOString())

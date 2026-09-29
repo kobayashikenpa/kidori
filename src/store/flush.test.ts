@@ -24,6 +24,7 @@ import {
   updatePart,
   type OpResult,
 } from './jobs'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 /** 以前の版で付けた、フラッシュの部材の表面材ごとの木取り済み（cutByBoard）を付ける */
 function withCutByBoard(job: Job, partId: string, boardId: string): Job {
@@ -252,7 +253,7 @@ describe('保存と読み込み', () => {
     saveSaved(st, { jobs: [job], currentJobId: job.id })
     const r = loadSaved(st)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs).toEqual([job])
+    expect(r.data.jobs.map((j) => dropAddedBuiltIns(j, job))).toEqual([job])
   })
 
   it('無い材料の表面材・無いフラッシュを指す部材・読めないフラッシュは直して読む', () => {

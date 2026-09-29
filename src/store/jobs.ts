@@ -1,4 +1,5 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
+import { builtInKey, isDefaultMaterialKey } from '../engine/boards'
 import { boardTokenLabel, defaultBoards, defaultSettings, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
 import { canStack } from '../engine/packing/stack'
 import { findStackSheet } from '../engine/packing/stock'
@@ -174,6 +175,8 @@ export function rekeyJob(job: Job, ids: RekeyIds, opts: { frozen: boolean }): Jo
     ...job,
     id: ids.job,
     settings: { ...job.settings, nige },
+    // 消した最初の材料（第2.5.1版）は材料名＋厚みで持つので、つけ替えずに写す
+    ...(job.removedBuiltIns ? { removedBuiltIns: [...job.removedBuiltIns] } : {}),
     boards,
     flushes,
     parts,
@@ -351,12 +354,21 @@ export function partsUsingBoard(job: Job, boardId: string): string[] {
   return job.parts.filter((p) => p.boardId === boardId).map((p) => p.name)
 }
 
-/** 板をまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材の板は未設定（null）になる */
+/**
+ * 板をまとめて消す（1回の操作）。無い id は飛ばす。1つも無ければ断る。使っていた部材の板は未設定（null）になる。
+ * 最初から入っている材料と材料名＋厚みが同じ材料を消したら removedBuiltIns に覚える（第2.5.1版。読み込みで足し直さないため）
+ */
 export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
   const ids = new Set(boardIds.filter((id) => job.boards.some((b) => b.id === id)))
   if (ids.size === 0) return fail('材料が見つかりません')
+  const removed = [...(job.removedBuiltIns ?? [])]
+  for (const b of job.boards) {
+    const k = builtInKey(b.material, b.thickness)
+    if (ids.has(b.id) && isDefaultMaterialKey(k) && !removed.includes(k)) removed.push(k)
+  }
   return ok(refreshAutoNames({
     ...job,
+    ...(removed.length > 0 ? { removedBuiltIns: removed } : {}),
     boards: job.boards.filter((b) => !ids.has(b.id)),
     // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）。
     // 重ねて切れなくなったフラッシュは重ね切りを外す（第2.0版）

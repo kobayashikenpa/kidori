@@ -11,6 +11,7 @@ import { MAX_TRANSFER_SIZE, NEWER_VERSION, PARTIAL_NOTICE, READ_FAILED } from '.
 import { readTransferFile } from './read'
 import shareV1 from './fixtures/share-v1.kidori.json?raw'
 import backupV1 from './fixtures/backup-v1.json?raw'
+import { dropAddedBuiltIns } from '../fixtures/builtIns'
 
 const NOW = new Date('2026-09-28T10:00:00.000Z')
 const env = { app: 'kidori', version: 1, dataVersion: 2, exportedAt: NOW.toISOString() }
@@ -46,7 +47,8 @@ describe('readTransferFile：共有のファイル', () => {
     shelf.clearance = { W: 1 }
     const r = readTransferFile(shareText(legacy, { dataVersion: 1 }))
     if (!r.ok || r.kind !== 'share') throw new Error('読めない')
-    expect(r.job).toEqual(sanitizeJobs([legacy], 1).jobs[0])
+    // 自動で足す最初の材料（第2.5.1版）は id が毎回違うので外して比べる
+    expect(dropAddedBuiltIns(r.job, legacy)).toEqual(dropAddedBuiltIns(sanitizeJobs([legacy], 1).jobs[0], legacy))
     expect(r.job.parts.find((p) => p.name === '棚板')!.expr.W).toBe('天地板.W - {n:nige-1}')
     expect(computeDimensions(r.job).parts.find((d) => d.name === '棚板')!.finished).toEqual({ W: 863, H: 18, D: 380 })
   })
@@ -77,7 +79,9 @@ describe('readTransferFile：バックアップのファイル', () => {
     const b = { ...bookshelfJob() }
     const r = readTransferFile(backupText([a, b], { settings: { kerf: 2 }, materials: [], flushes: [] }))
     if (!r.ok || r.kind !== 'backup') throw new Error('読めない')
-    expect(r.jobs).toEqual([a, b])
+    // 本棚（シナランバー・シナベニヤ）には最初から入っている材料が足される（第2.5.1版）
+    expect(r.jobs).toEqual([a, { ...b, boards: [...b.boards, ...r.jobs[1].boards.slice(2)] }])
+    expect(dropAddedBuiltIns(r.jobs[1], b)).toEqual(b)
     expect('template' in r).toBe(false)
     expect(r.notice).toBeUndefined()
     const r2 = readTransferFile(JSON.stringify({ ...env, kind: 'backup', jobs: [a] }))

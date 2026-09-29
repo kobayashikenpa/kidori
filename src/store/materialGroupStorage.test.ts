@@ -24,6 +24,7 @@ import { buildShareFile } from './transfer/share'
 import shareV1 from './transfer/fixtures/share-v1.kidori.json?raw'
 import backupV1 from './transfer/fixtures/backup-v1.json?raw'
 import shareV3 from './transfer/fixtures/share-v3.kidori.json?raw'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const NOW = new Date('2026-09-29T10:00:00.000Z')
 const pct = (r: number) => Math.round(r * 1000) / 10
@@ -94,7 +95,7 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
     const r = loadSaved(st, NOW)
     expect(r.status).toBe('ok')
     expect('message' in r).toBe(false)
-    const job = r.data.jobs[0]
+    const job = dropAddedBuiltIns(r.data.jobs[0], legacy)
     const core = job.boards.at(-1)!
     expect([core.material, core.thickness, core.noCut]).toEqual(['芯材', 15, true])
     expect(job.boards.slice(0, -1)).toEqual(legacy.boards)
@@ -134,7 +135,7 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
     const before = { ...legacy, boards: [...legacy.boards, cutCore], parts: [...legacy.parts, san] }
     const r = loadSaved(memoryStorage({ [JOBS_V2_KEY]: JSON.stringify({ version: 2, jobs: [before] }) }), NOW)
     expect(r.status).toBe('ok')
-    const job = r.data.jobs[0]
+    const job = dropAddedBuiltIns(r.data.jobs[0], before)
     expect(job.boards.slice(0, -1)).toEqual(before.boards)
     const core = job.boards.at(-1)!
     expect([core.material, core.thickness, core.noCut]).toEqual(['芯材（木取りしない）', 15, true])

@@ -15,6 +15,7 @@ import {
 } from './jobs'
 import { sampleJob } from './sample'
 import { JOBS_KEY, loadSaved, sanitizeJobs, saveSaved, type KeyValueStorage } from './storage'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
@@ -125,7 +126,7 @@ describe('保存・引き継ぎ・コピー', () => {
     expect(s.getItem(JOBS_KEY)).toContain('"stack":true')
     const r = loadSaved(s, NOW)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs[0]).toEqual(job)
+    expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual(job)
   })
 
   it('見本は見本がフラッシュ25 を足すので重ね切りオン（第2.1版）で、重ね切りの見本の値になる', () => {

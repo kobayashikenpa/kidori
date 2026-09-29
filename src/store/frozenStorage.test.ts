@@ -7,6 +7,7 @@ import type { FrozenSheet, Job } from '../engine/types'
 import { clearLegacyCut, copyJob, removeBoards, setPieceCheck, type OpResult } from './jobs'
 import { sampleJob } from './sample'
 import { CURRENT_JOB_KEY, JOBS_KEY, loadSaved, saveSaved, type KeyValueStorage } from './storage'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 
@@ -63,7 +64,7 @@ describe('読み込み（sanitizeJob）の frozenSheets', () => {
     delete raw.frozenSheets
     const r = loadSaved(stored([raw]), NOW)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs[0]).toEqual({ ...job, frozenSheets: [] })
+    expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual({ ...job, frozenSheets: [] })
   })
 
   it('第1.7版の見本（フラッシュの表面材ごとの完了 cutByBoard あり、frozenSheets なし）も失わずに読む', () => {
@@ -90,7 +91,7 @@ describe('読み込み（sanitizeJob）の frozenSheets', () => {
     expect(saveSaved(s, { jobs: [job], currentJobId: job.id }).ok).toBe(true)
     const r = loadSaved(s, NOW)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs[0]).toEqual(job)
+    expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual(job)
   })
 
   it('frozenSheets が配列でなければ [] にして直した数に数える', () => {

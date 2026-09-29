@@ -14,6 +14,7 @@ import { sanitizeJobs } from './storage'
 import golden from './fixtures/v22StackGolden.json'
 import { round1 } from '../engine/round'
 import type { PackingResult } from '../engine/types'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const NOW = new Date('2026-09-27T09:00:00.000Z')
 
@@ -353,7 +354,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         faces: f.faces.slice(1),
       }))
       expect(back.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
-      expect(job.boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
+      expect(dropAddedBuiltIns(job, legacyJob).boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
       if (unstacked.length > 0) unstackedJobs++
       const r = checkJob(job)
       if (kinds.some((k) => k.kind === 'custom')) {

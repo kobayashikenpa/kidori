@@ -1,5 +1,6 @@
 // localStorage への保存と読み込み。読み書きはすべて try/catch で囲み、失敗しても例外を外に出さない
 import { defaultNige, defaultSettings, NIGE_DEFAULT_NAME, nigeNameKey } from '../engine/defaults'
+import { addMissingBuiltIns } from '../engine/boards'
 import { validatePartName } from '../engine/formula/tokenize'
 import { migrateClearanceChecked, type LegacyJob, type LegacyPart } from '../engine/migrate/clearance'
 import { boardIdsInUse, migrateFlushCores, type LegacyFlush } from '../engine/migrate/flushCore'
@@ -633,6 +634,24 @@ function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): Froz
   return out
 }
 
+/**
+ * 消した最初の材料のキー（第2.5.1版）。無ければ undefined。配列でなければ直した数に数えて無しに、
+ * 文字でないもの・空・重なりは外して直した数に数える
+ */
+function sanitizeRemovedBuiltIns(v: unknown, fx: Fixes): string[] | undefined {
+  if (v === undefined) return undefined
+  if (!Array.isArray(v)) {
+    fx.count++
+    return undefined
+  }
+  const out: string[] = []
+  for (const k of v) {
+    if (typeof k !== 'string' || k === '' || out.includes(k)) fx.count++
+    else out.push(k)
+  }
+  return out.length > 0 ? out : undefined
+}
+
 /** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
 function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
@@ -681,6 +700,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
 
   const isDate = (x: unknown): x is string => typeof x === 'string' && !Number.isNaN(Date.parse(x))
   const fallbackDate = isDate(v.updatedAt) ? v.updatedAt : isDate(v.createdAt) ? v.createdAt : new Date(0).toISOString()
+  const removedBuiltIns = sanitizeRemovedBuiltIns(v.removedBuiltIns, fx)
   return {
     id: v.id,
     name,
@@ -690,6 +710,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
     stackSheets: stacks.stackSheets,
+    ...(removedBuiltIns ? { removedBuiltIns } : {}),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
   }
@@ -713,7 +734,8 @@ export function sanitizeJobs(
       continue
     }
     const m = migrateClearanceChecked(legacy, () => newId('nige'))
-    jobs.push(m.job)
+    // 最初から入っている材料で、この仕事に無いもの（消したものは除く）を足す（第2.5.1版）。直した数には数えない
+    jobs.push(addMissingBuiltIns(m.job, newId))
     if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
   return { jobs, fixes: fx.count, changed, unstacked: [...new Set(fx.unstacked)] }

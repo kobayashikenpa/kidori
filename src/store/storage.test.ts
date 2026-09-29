@@ -14,7 +14,12 @@ import {
   saveSaved,
   type KeyValueStorage,
 } from './storage'
-import { createJob } from './jobs'
+import { createJob, removeBoards } from './jobs'
+import { builtInKey, orderedBoards } from '../engine/boards'
+import { sampleGroupJob } from '../engine/fixtures/flush'
+import { packJob } from '../engine/packing'
+import type { Job } from '../engine/types'
+import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { map: Map<string, string> } {
   const map = new Map(Object.entries(init))
@@ -56,7 +61,7 @@ describe('保存と読み込み', () => {
     expect(saveSaved(s, { jobs: [job], currentJobId: job.id })).toEqual({ ok: true })
     const r = loadSaved(s)
     expect(r.status).toBe('ok')
-    expect(r.data).toEqual({ jobs: [bookshelfJob()], currentJobId: job.id })
+    expect({ ...r.data, jobs: r.data.jobs.map((j) => dropAddedBuiltIns(j, job)) }).toEqual({ jobs: [bookshelfJob()], currentJobId: job.id })
   })
 
   it('最初から入っている材料の印（builtIn）は保存して読み込んでも残り、足した材料には付かない', () => {
@@ -178,7 +183,8 @@ describe('中身の検査と修復', () => {
     )
     const job = r.data.jobs[0]!
     expect(job.settings).toEqual(defaultSettings())
-    expect(job.boards).toEqual([])
+    // 材料が無い仕事にも、最初から入っている材料を足す（第2.5.1版）
+    expect(job.boards.map((b) => `${b.material}${b.thickness}`)).toEqual(defaultBoards(() => '').map((b) => `${b.material}${b.thickness}`))
     expect(job.parts).toEqual([])
   })
 
@@ -190,7 +196,7 @@ describe('中身の検査と修復', () => {
       T1,
     )
     const job = r.data.jobs[0]!
-    expect(job.boards.map((b) => b.id)).toEqual([VENEER_4_ID])
+    expect(job.boards.filter((b) => b.builtIn !== true).map((b) => b.id)).toEqual([VENEER_4_ID])
     expect(job.parts.filter((p) => p.boardId === null).map((p) => p.name)).toEqual(
       expect.arrayContaining(['側板', '天地板', '棚板']),
     )
@@ -217,7 +223,7 @@ describe('中身の検査と修復', () => {
       }),
       T1,
     )
-    expect(r.data.jobs[0]!.boards).toHaveLength(2)
+    expect(r.data.jobs[0]!.boards.filter((b) => b.builtIn !== true)).toHaveLength(2)
   })
 
   it('id・名前の無い部材、同じ名前の部材は外し、ほかの部材は残す', () => {
@@ -402,7 +408,7 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     saveSaved(s, { jobs: [job], currentJobId: job.id })
     const r = loadSaved(s, T1)
     expect(r.status).toBe('ok')
-    expect(r.data.jobs[0]).toEqual(job)
+    expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual(job)
   })
 
   it('逃げの値が 0・負・重複しているもの、id が重複しているものは外して repaired で読む', () => {
@@ -544,5 +550,62 @@ describe('以前のひな形（最後に使った設定）のキー（第2.5.1�
     expect(st.map.get('kidori.lastSettings.v1')).toBe(old)
     const r = loadSaved(st)
     expect(r.data.jobs[0].settings.kerf).toBe(3)
+  })
+})
+
+describe('最初から入っている材料を今ある仕事に自動で足す（第2.5.1版）', () => {
+  const results = (job: Job) => {
+    const dims = computeDimensions(job)
+    return JSON.stringify([dims, packJob(job, dims)])
+  }
+  const labels = (job: Job) => orderedBoards(job).map((b) => `${b.material}${b.thickness}`)
+  const DEFAULT_LABELS = defaultBoards(() => 'x').map((b) => `${b.material}${b.thickness}`)
+
+  it('以前の4つだけの見本（重ね切り・チェック済み）を読むと25になり、今ある材料・部材・寸法表・木取りの結果・知らせは変わらない', () => {
+    const job = sampleGroupJob(true)
+    const st = memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [job] }) })
+    const r = loadSaved(st)
+    expect(r.status).toBe('ok')
+    expect('message' in r).toBe(false)
+    const got = r.data.jobs[0]
+    expect(labels(got)).toEqual(['芯材15', ...DEFAULT_LABELS])
+    expect(got.boards.filter((b) => job.boards.some((x) => x.id === b.id))).toEqual(job.boards)
+    expect(got.parts).toEqual(job.parts)
+    expect(got.flushes).toEqual(job.flushes)
+    expect(got.stackSheets).toEqual(job.stackSheets)
+    expect(results(got)).toBe(results(job))
+    // 保存して読み直しても増えない
+    saveSaved(st, r.data)
+    expect(loadSaved(st).data.jobs[0].boards).toEqual(got.boards)
+  })
+
+  it('消した最初の材料は覚えていて、読み直しても足さない', () => {
+    const src = createJob('A', new Date('2026-09-26T00:00:00Z'), 'job-a')
+    const r0 = removeBoards(src, src.boards.filter((b) => b.material === 'ラワン' && b.thickness === 9).map((b) => b.id))
+    if (!r0.ok) throw new Error(r0.message)
+    const st = memoryStorage()
+    saveSaved(st, { jobs: [r0.job], currentJobId: null })
+    const got = loadSaved(st).data.jobs[0]
+    expect(got).toEqual(r0.job)
+    expect(labels(got)).not.toContain('ラワン9')
+    expect(got.removedBuiltIns).toEqual([builtInKey('ラワン', 9)])
+  })
+
+  it('removedBuiltIns のおかしな値は外す（文字でないもの・重なり）。配列でなければ無しとして直した数に数える', () => {
+    const job = { ...createJob('A', new Date('2026-09-26T00:00:00Z'), 'job-a'), removedBuiltIns: [builtInKey('ラワン', 9), 3, builtInKey('ラワン', 9)] }
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [job] }) }))
+    expect(r.status).toBe('repaired')
+    expect(r.data.jobs[0].removedBuiltIns).toEqual([builtInKey('ラワン', 9)])
+    const bad = { ...job, removedBuiltIns: 'x' }
+    const r2 = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [bad] }) }))
+    expect(r2.status).toBe('repaired')
+    expect('removedBuiltIns' in r2.data.jobs[0]).toBe(false)
+  })
+
+  it('本棚（シナランバー18・シナベニヤ4）を読むと、足した材料 → 最初の材料25 の並びで、寸法表・木取りは同じ', () => {
+    const job = bookshelfJob()
+    const got = loadSaved(memoryStorage({ [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [job] }) })).data.jobs[0]
+    expect(labels(got)).toEqual(['シナランバー18', 'シナベニヤ4', ...DEFAULT_LABELS])
+    expect(results(got)).toBe(results(job))
   })
 })

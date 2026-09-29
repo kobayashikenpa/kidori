@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings } from '../engine/defaults'
+import { builtInKey } from '../engine/boards'
 import { bookshelfJob, LUMBER_18_ID, VENEER_4_ID } from '../engine/fixtures/bookshelf'
 import { computeDimensions } from '../engine/dimensions'
 import { DEFAULT_SETTINGS, type Job } from '../engine/types'
@@ -468,5 +469,30 @@ describe('逃げ・材料の一括削除と、材料のサイズの選択（第1
     expect(setRowSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 0, length: 2000, grain: 'long' }).ok).toBe(false)
     expect(setRowSize(job, LUMBER_18_ID, { sizeKind: 'custom', width: 1000, length: -1, grain: 'long' }).ok).toBe(false)
     expect(setRowSize(job, 'nothing', { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }).ok).toBe(false)
+  })
+})
+
+describe('消した最初の材料を覚える（removedBuiltIns。第2.5.1版）', () => {
+  it('最初の材料（ラワン 9）を消すと覚え、自分で足した材料（タモ）は覚えない。コピーでも写す', () => {
+    let job = unwrap(addBoard(createJob('A'), newBoard({ material: 'タモ', thickness: 18 })))
+    const ids = job.boards.filter((b) => (b.material === 'ラワン' && b.thickness === 9) || b.material === 'タモ').map((b) => b.id)
+    job = unwrap(removeBoards(job, ids))
+    expect(job.removedBuiltIns).toEqual([builtInKey('ラワン', 9)])
+    // 2回目に別の最初の材料を消すと足す（重ねない）
+    job = unwrap(removeBoards(job, job.boards.filter((b) => b.material === 'ポリ' && b.thickness === 4).map((b) => b.id)))
+    expect(job.removedBuiltIns).toEqual([builtInKey('ラワン', 9), builtInKey('ポリ', 4)])
+    const copy = copyJob(job, [job.name])
+    expect(copy.removedBuiltIns).toEqual(job.removedBuiltIns)
+    expect(copy.removedBuiltIns).not.toBe(job.removedBuiltIns)
+  })
+
+  it('自分で足した材料が最初の材料と同じ材料名＋厚み（シナ 18）でも、消したら覚える（読み込みで足し直さないように）', () => {
+    const job = { ...bookshelfJob(), boards: [...bookshelfJob().boards, newBoard({ id: 'mine', material: 'シナ', thickness: 18 })] }
+    expect(unwrap(removeBoards(job, ['mine'])).removedBuiltIns).toEqual([builtInKey('シナ', 18)])
+  })
+
+  it('最初の材料でないものだけ消したときは removedBuiltIns を付けない', () => {
+    const job = unwrap(removeBoards(bookshelfJob(), [VENEER_4_ID]))
+    expect('removedBuiltIns' in job).toBe(false)
   })
 })
