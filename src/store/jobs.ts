@@ -626,8 +626,6 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
   // 式の厚みボタン・材料の選択で、材料（ラワン4）と材料グループの名前が同じだと見分けられない
   const board = job.boards.find((b) => boardTokenLabel(b).normalize('NFKC') === key)
   if (board) return `「${f.name}」は材料（${boardLabel(board)}）と同じ名前です。別の名前にしてください`
-  // 以前の版の芯材（作業中だけ。S-30 で消す）
-  if (f.core !== undefined && !(Number.isFinite(f.core) && f.core > 0)) return '芯材の厚みは 0 より大きい数を入れてください'
   if (f.faces.length === 0) return '中身を1つ以上入れてください'
   const seen = new Set<string>()
   for (const face of f.faces) {
@@ -645,7 +643,6 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
 /** 前後の空白を外す。重ね切り・自動の名前は true のときだけ、初めの形は3つのどれかのときだけ持つ */
 function cleanFlush(f: FlushDraft): FlushDraft {
   const out: FlushDraft = { name: f.name.trim(), faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
-  if (f.core !== undefined) out.core = f.core
   if (f.stack === true) out.stack = true
   if (f.form !== undefined && GROUP_FORMS.includes(f.form)) out.form = f.form
   if (f.autoName === true) out.autoName = true

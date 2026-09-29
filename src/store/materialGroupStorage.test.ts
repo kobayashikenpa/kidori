@@ -1,7 +1,8 @@
 // S-28：保存データ第3版と、以前の芯材（core）の移し替え（読み込み・ひな形・見本・共有／バックアップのファイル）
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
-import { LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../engine/fixtures/flush'
+import { LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleGroupJob } from '../engine/fixtures/flush'
+import { legacySampleFlushJob, toLegacyJob, type LegacyJob } from '../engine/fixtures/legacyFlush'
 import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
 import { frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
@@ -49,9 +50,9 @@ const ok = (r: OpResult): Job => {
   return r.job
 }
 
-/** 第2.4版の見本（芯材 core 15・重ね切りオン）で、組の1枚目の片を1つチェックした仕事 */
-function legacyCheckedSample(): Job {
-  let job = sampleFlushJob(true)
+/** 第2.5版の見本（芯材15 は木取りしない材料・重ね切りオン）で、組の1枚目の片を1つチェックした仕事 */
+function checkedSample(): Job {
+  let job = sampleGroupJob(true)
   const m = packJob(job, computeDimensions(job)).materials.find((x) => x.stack)!
   const layout = m.sheets[0]
   job = ok(
@@ -67,17 +68,17 @@ function legacyCheckedSample(): Job {
   return job
 }
 
-/** 移し替えを戻した形（芯材15 の材料をなくし、core に戻す）。移す前の計算と比べるため */
-function unmigrate(job: Job): Job {
-  const cores = new Map(job.boards.filter((b) => b.material === '芯材' && b.noCut).map((b) => [b.id, b.thickness]))
-  return {
-    ...job,
-    boards: job.boards.filter((b) => !cores.has(b.id)),
-    flushes: job.flushes.map(({ form: _f, autoName: _a, ...f }) => {
-      const c = f.faces.find((x) => cores.has(x.boardId))
-      return c ? { ...f, core: cores.get(c.boardId)! * c.count, faces: f.faces.filter((x) => x !== c) } : f
-    }),
-  }
+/**
+ * 第2.4版の保存データの形（芯材 core 15）の、組の1枚目の片を1つチェックした仕事。
+ * 第2.4版で計算した固定した1枚は芯材の有無で変わらないので、checkedSample を以前の形に戻して作る
+ */
+function legacyCheckedSample(): LegacyJob {
+  return toLegacyJob(checkedSample())
+}
+
+/** 以前の形のフラッシュの厚み（core ＋ 中身の厚み×枚数）。移し替えで変わらないことを確かめる */
+function legacyThicknesses(job: LegacyJob): number[] {
+  return job.flushes.map((f) => (typeof f.core === 'number' ? f.core : 0) + flushThickness(f, job.boards))
 }
 
 /** 比べるための結果：寸法・木取り・固定した1枚の表示（「部材が変わっています」を含む）・まとめ */
@@ -118,8 +119,10 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
     expect(job.parts).toEqual(legacy.parts)
     expect(job.frozenSheets).toEqual(legacy.frozenSheets)
     expect(job.stackSheets).toEqual(legacy.stackSheets)
-    const a = results(legacy)
+    // 移す前（第2.4版）の結果は、同じ中身を第2.5版の形で持つ checkedSample の結果と同じ（芯材の材料の id だけが違う）
+    const a = results(checkedSample())
     const b = results(job)
+    expect(job.flushes.map((x) => flushThickness(x, job.boards))).toEqual(legacyThicknesses(legacy))
     expect(b.dims).toEqual(a.dims)
     expect(b.pack).toEqual(a.pack)
     expect(b.views).toEqual(a.views)
@@ -172,7 +175,7 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
   })
 
   it('芯材が 0 以下のフラッシュは今までどおり外す（直した数）', () => {
-    const job = JSON.parse(JSON.stringify(sampleFlushJob()))
+    const job = JSON.parse(JSON.stringify(legacySampleFlushJob()))
     job.flushes[0].core = 0
     const r = loadSaved(memoryStorage({ [JOBS_V2_KEY]: JSON.stringify({ version: 2, jobs: [job] }) }), NOW)
     expect(r.status).toBe('repaired')
@@ -182,7 +185,7 @@ describe('保存データ第3版（kidori.jobs.v3）と v2 からの移し替え
 
 describe('ひな形 version 2 と version 1 の移し替え', () => {
   const legacyTemplate = () => {
-    const t = templateOf(sampleFlushJob(true)) as unknown as Record<string, unknown>
+    const t = templateOf(sampleGroupJob(true)) as unknown as Record<string, unknown>
     // 第2.4版のひな形：芯材は core、材料に芯材は無い
     const flushes = (t.flushes as Record<string, unknown>[]).map(({ form: _f, autoName: _a, ...f }) => ({
       ...f,
@@ -246,29 +249,57 @@ describe('見本（芯材15 は木取りしない材料）', () => {
   })
 })
 
+// 第2.4版のコード（芯材 core を厚みに足していた版）で、移し替えの前後が同じことを確かめたときの値
+const SHARE_V1_SUMMARY = [
+  [
+    ['stack:board-1+board-3', 5, 85.2],
+    ['board-3', 1, 97.8],
+  ],
+  86.4,
+]
+const BACKUP_V1_SUMMARIES = [
+  [
+    [
+      ['stack:board-1+board-3', 5, 85.2],
+      ['board-3', 1, 97.8],
+    ],
+    86.4,
+  ],
+  [
+    [
+      ['stack:board-5+board-7', 5, 85.2],
+      ['board-7', 1, 97.8],
+    ],
+    86.4,
+  ],
+]
+
 describe('共有・バックアップのファイル（dataVersion 3）', () => {
   it('version 1（dataVersion 2）の共有・バックアップのファイルが同じ結果で取り込め、芯材15 に移る', () => {
     const r = readTransferFile(shareV1)
     if (!r.ok || r.kind !== 'share') throw new Error('読めない')
     expect(r.notice).toBeUndefined()
-    expect((JSON.parse(shareV1).job as Job).flushes[0].core).toBe(15)
+    const legacyShare = JSON.parse(shareV1).job as LegacyJob
+    expect(legacyShare.flushes[0].core).toBe(15)
     expect(r.job.boards.find((b) => b.material === '芯材')!.noCut).toBe(true)
-    expect(r.job.flushes[0].core).toBeUndefined()
-    const a = results(unmigrate(r.job))
-    const b = results(r.job)
-    expect(b.dims).toEqual(a.dims)
-    expect(b.pack).toEqual(a.pack)
-    expect(b.summary).toEqual(a.summary)
+    expect('core' in r.job.flushes[0]).toBe(false)
+    // 厚みが同じなら寸法・片・配置も同じ。見本の結果（第2.4版で読んだときと同じ値）
+    expect(r.job.flushes.map((x) => flushThickness(x, r.job.boards))).toEqual(legacyThicknesses(legacyShare))
+    expect(results(r.job).summary).toEqual(SHARE_V1_SUMMARY)
 
     const bk = readTransferFile(backupV1)
     if (!bk.ok || bk.kind !== 'backup') throw new Error('読めない')
     expect(bk.notice).toBeUndefined()
-    expect((JSON.parse(backupV1).jobs as Job[]).every((j) => j.flushes.every((f) => f.core === 15))).toBe(true)
-    for (const j of bk.jobs) {
-      expect(j.flushes.every((f) => f.core === undefined)).toBe(true)
-      expect(results(j).pack).toEqual(results(unmigrate(j)).pack)
-      expect(results(j).views).toEqual(results(unmigrate(j)).views)
-    }
+    const legacyJobs = JSON.parse(backupV1).jobs as LegacyJob[]
+    expect(legacyJobs.every((j) => j.flushes.every((f) => f.core === 15))).toBe(true)
+    bk.jobs.forEach((j, i) => {
+      expect(j.flushes.every((f) => !('core' in f))).toBe(true)
+      expect(j.flushes.map((x) => flushThickness(x, j.boards))).toEqual(legacyThicknesses(legacyJobs[i]))
+      const res = results(j)
+      expect(res.summary).toEqual(BACKUP_V1_SUMMARIES[i])
+      // 固定した1枚は「部材が変わっています」にならない
+      expect(res.views.every((v) => v.drift.length === 0)).toBe(true)
+    })
     expect(bk.template!.materials.some((m) => m.material === '芯材' && m.noCut === true)).toBe(true)
     expect(bk.template!.flushes[0].faces[0]).toEqual({ material: '芯材', thickness: 15, count: 1 })
   })

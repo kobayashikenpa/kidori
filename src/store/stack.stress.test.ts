@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
+import type { LegacyFlush } from '../engine/migrate/flushCore'
 import { canStack, cutFaces, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { findStackSheet, stackChoice, usesStock } from '../engine/packing/stock'
@@ -37,7 +38,11 @@ const SIZES: Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'>[] = [
   { sizeKind: 'custom', width: 910, length: 1820, grain: 'short' },
 ]
 
-/** legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる） */
+/**
+ * legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる）。
+ * フラッシュの芯材は、legacy なら以前の形（core）、そうでなければ 芯材◯（木取りしない）の材料と中身の先頭の1行（第2.5版）。
+ * どちらも乱数の使い方は同じ
+ */
 function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   const boards: Board[] = [
     ['メラミン', 1],
@@ -51,14 +56,26 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     // 多くは 3×6 にそろえ、ときどきずらす（そろわない組を作る）
     ...(r() < 0.75 ? SIZES[0] : pickOne(r, SIZES)),
   }))
-  const flushes: Flush[] = []
+  const flushes: LegacyFlush[] = []
+  const coreBoards: Board[] = []
+  const coreOf = (t: number): string => {
+    let b = coreBoards.find((x) => x.thickness === t)
+    if (!b) {
+      b = { id: `core-${t}`, material: '芯材', thickness: t, ...SIZES[1], noCut: true }
+      coreBoards.push(b)
+    }
+    return b.id
+  }
   for (let i = 0; i < int(r, 1, 3); i++) {
     const n = r() < 0.8 ? 2 : int(r, 1, 3)
     const ids = [...boards.map((b) => b.id)].sort(() => r() - 0.5).slice(0, n)
     const count = int(r, 1, 2)
     const faces = ids.map((boardId) => ({ boardId, count: r() < 0.85 ? count : int(r, 1, 2) }))
-    const f: Flush = { id: `f${i}`, name: `フラッシュ${i}`, core: int(r, 10, 20), faces }
-    if (canStack(f, boards) && r() < 0.8) f.stack = true
+    const core = int(r, 10, 20)
+    const f: LegacyFlush = legacy
+      ? { id: `f${i}`, name: `フラッシュ${i}`, core, faces }
+      : { id: `f${i}`, name: `フラッシュ${i}`, faces: [{ boardId: coreOf(core), count: 1 }, ...faces] }
+    if (canStack(f, [...boards, ...coreBoards]) && r() < 0.8) f.stack = true
     flushes.push(f)
   }
   const parts: Part[] = []
@@ -82,9 +99,11 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   }
   // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
   const stackSheets: StackSheet[] = []
+  const allBoards = [...boards, ...coreBoards]
   for (const f of legacy ? [] : flushes) {
-    if (!canStack(f, boards) || r() < 0.3) continue
-    const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
+    if (!canStack(f, allBoards) || r() < 0.3) continue
+    const [c0, c1] = cutFaces(f, allBoards)
+    const ids: [string, string] = r() < 0.5 ? [c0.boardId, c1.boardId] : [c1.boardId, c0.boardId]
     if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
     const row: StackSheet = { boardIds: ids, ...(r() < 0.6 ? SIZES[0] : pickOne(r, SIZES)) }
     if (r() < 0.25) {
@@ -101,7 +120,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     id: `job-${seed}`,
     name: `乱数${seed}`,
     settings,
-    boards,
+    boards: allBoards,
     flushes,
     parts,
     frozenSheets: [],

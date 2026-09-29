@@ -1,4 +1,4 @@
-// フラッシュ（第1.5版。仕様書 4）：厚み＝芯材＋表面材の厚み×枚数、厚みの内訳、使っているものの一覧
+// 材料グループ（コードは第1.5版からの Flush。仕様書 4）：厚み＝中身の材料の厚み×枚数の合計、厚みの内訳、使っているものの一覧
 import { boardTokenLabel } from './defaults'
 import { canStack, cutFaces } from './packing/stack'
 import { eq1, exactText, round1 } from './round'
@@ -6,15 +6,9 @@ import type { Board, Flush, GroupForm, Job, Part } from './types'
 
 export { cutFaces }
 
-/**
- * Σ 中身の材料の厚み×枚数（木取りしない材料も数える。見つからない材料は数えない）。
- * 以前の版の芯材（core。移し替えが済むまでの作業中だけ）があれば足す
- */
-export function flushThickness(
-  flush: Pick<Flush, 'core' | 'faces'>,
-  boards: readonly Pick<Board, 'id' | 'thickness'>[],
-): number {
-  let t = flush.core ?? 0
+/** Σ 中身の材料の厚み×枚数（木取りしない材料も数える。見つからない材料は数えない） */
+export function flushThickness(flush: Pick<Flush, 'faces'>, boards: readonly Pick<Board, 'id' | 'thickness'>[]): number {
+  let t = 0
   for (const f of flush.faces) {
     const b = boards.find((x) => x.id === f.boardId)
     if (b) t += b.thickness * f.count
@@ -68,8 +62,6 @@ export function partThicknessSource(
 }
 
 export interface FlushBreakdown {
-  /** 以前の版の芯材の厚み（作業中だけ。無ければ 0。S-30 で消す） */
-  core: number
   /** 中身（登録順。木取りしない材料も入れ、noCut を添える。見つからない材料は入れない） */
   faces: { boardId: string; label: string; thickness: number; count: number; noCut: boolean }[]
   total: number
@@ -84,13 +76,12 @@ export function flushBreakdown(job: Pick<Job, 'boards' | 'flushes'>, flushId: st
     const b = job.boards.find((x) => x.id === f.boardId)
     if (b) faces.push({ boardId: b.id, label: boardTokenLabel(b), thickness: b.thickness, count: f.count, noCut: b.noCut === true })
   }
-  return { core: flush.core ?? 0, faces, total: flushThickness(flush, job.boards) }
+  return { faces, total: flushThickness(flush, job.boards) }
 }
 
-/** 内訳の言葉（どの行も「材料名厚み×枚数」。以前の版の芯材（core）があれば「芯材15×1」として先頭に） */
+/** 内訳の言葉（どの行も「材料名厚み×枚数」） */
 function breakdownWords(b: FlushBreakdown): string[] {
-  const words = b.faces.map((f) => `${f.label}×${f.count}`)
-  return b.core > 0 ? [`芯材${round1(b.core)}×1`, ...words] : words
+  return b.faces.map((f) => `${f.label}×${f.count}`)
 }
 
 /** 内訳を1行の文字にする（例：芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25）。中身が無ければ「中身なし ＝ 0」 */

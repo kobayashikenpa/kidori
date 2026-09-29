@@ -10,7 +10,7 @@ import type { Board, Flush, GroupForm } from '../types'
 export const CORE_MATERIAL = '芯材'
 
 /** 以前の版のフラッシュ：芯材の厚み（core）を持つ。今の形のもそのまま渡せる */
-export type LegacyFlush = Omit<Flush, 'core'> & { core?: unknown }
+export type LegacyFlush = Flush & { core?: unknown }
 
 /** ひな形の材料（store/template.ts の MaterialSpec と同じ形） */
 export interface SpecMaterial {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_ALLOWANCE, LUMBER_18_ID, VENEER_4_ID } from '../fixtures/bookshelf'
 import type { Job, Part } from '../types'
-import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
+import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
 import { withStackStock, withStock } from '../fixtures/stock'
 import { packJob } from './index'
 import { stackKey } from './stack'
@@ -198,7 +198,7 @@ describe('枚数が少ない方・歩留まりが高い方（fewer・higher）',
 describe('compareStandardSizes と手持ちの材料（第2.2版）', () => {
   it('手持ちの材料はそのまま残し、ほかの材料だけサイズを替える（比べる材料・組が packJob と同じ）', () => {
     // フラッシュ25 の重ね切りオン、ラワン4 だけ手持ち 3×6 ×1。第2.3版から組は材料の手持ちによらず組のまま
-    const job = withStock(sampleFlushJob(true), LAUAN_4_ID, [['3×6', 1]])
+    const job = withStock(sampleGroupJob(true), LAUAN_4_ID, [['3×6', 1]])
     const dims = computeDimensions(job)
     const real = packJob(job, dims).materials.map((m) => m.boardId)
     const ids = compareStandardSizes(job, dims).map((c) => c.boardId)
@@ -217,8 +217,8 @@ describe('compareStandardSizes と手持ちの材料（第2.2版）', () => {
   })
 
   it('手持ちで木取りする組の行も、3×6・4×8 にしたときの本当の枚数・歩留まりを出す', () => {
-    const plain = summary(sampleFlushJob(true))
-    const job = withStackStock(sampleFlushJob(true), [MELAMINE_1_ID, LAUAN_4_ID], [['3×6', 1]])
+    const plain = summary(sampleGroupJob(true))
+    const job = withStackStock(sampleGroupJob(true), [MELAMINE_1_ID, LAUAN_4_ID], [['3×6', 1]])
     expect(summary(job)).toEqual(plain)
     expect(job.stackSheets.find((s) => s.boardIds.includes(LAUAN_4_ID))?.stockOn).toBe(true)
   })

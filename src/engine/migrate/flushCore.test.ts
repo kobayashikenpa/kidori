@@ -1,7 +1,8 @@
 // E-67：以前のフラッシュの芯材（core）を「芯材◯（木取りしない）」の材料と中身の1行に移す
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob, sampleGroupJob } from '../fixtures/flush'
+import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleGroupJob } from '../fixtures/flush'
+import { legacySampleFlushJob } from '../fixtures/legacyFlush'
 import { flushThickness } from '../flush'
 import { packJob } from '../packing'
 import type { Board } from '../types'
@@ -14,7 +15,7 @@ const counter = () => {
 
 describe('migrateFlushCores（仕事）', () => {
   it('core 15 の以前の見本 → 材料の最後に芯材15（木取りしない・4×8）、中身の先頭に ×1、form・autoName', () => {
-    const job = sampleFlushJob(true)
+    const job = legacySampleFlushJob(true)
     const r = migrateFlushCores(job.boards, job.flushes, counter())
     expect(r.boards.length).toBe(job.boards.length + 1)
     expect(r.boards.slice(0, -1)).toEqual(job.boards)
@@ -46,19 +47,22 @@ describe('migrateFlushCores（仕事）', () => {
     expect(flushThickness(r.flushes[0], r.boards)).toBe(25)
   })
 
-  it('移したあとの寸法・木取りは移す前と同じ（重ね切りオン・オフ）', () => {
+  it('移したあとは第2.5版の見本と同じ形で、寸法・木取りも以前の値（重ね切りオン・オフ）', () => {
+    const pct = (r: number) => Math.round(r * 1000) / 10
     for (const stack of [true, false]) {
-      const before = sampleFlushJob(stack)
+      const before = legacySampleFlushJob(stack)
       const r = migrateFlushCores(before.boards, before.flushes, () => CORE_15_ID)
       const after = { ...before, ...r }
       expect(after).toEqual(sampleGroupJob(stack))
-      expect(computeDimensions(after)).toEqual(computeDimensions(before))
-      expect(packJob(after, computeDimensions(after))).toEqual(packJob(before, computeDimensions(before)))
+      // フラッシュ25 の部材の厚み（側板 W・天地板と棚板 H）は 25 のまま
+      const dims = computeDimensions(after)
+      expect(dims.parts.find((p) => p.partId === 'part-gawa')?.finished?.W).toBe(25)
+      if (stack) expect(pct(packJob(after, dims).totalYieldRate)).toBe(86.4)
     }
   })
 
   it('core 15 のフラッシュが2つでも芯材15 は1つ。core 12 には別の芯材12', () => {
-    const job = sampleFlushJob()
+    const job = legacySampleFlushJob()
     const f = job.flushes[0]
     const flushes = [f, { ...f, id: 'f2', name: '本棚用' }, { ...f, id: 'f3', name: 'フラッシュ22', core: 12 }]
     const r = migrateFlushCores(job.boards, flushes, counter())
@@ -77,7 +81,7 @@ describe('migrateFlushCores（仕事）', () => {
   })
 
   it('芯材15（木取りしない）がすでにあれば足さずに使う', () => {
-    const job = sampleFlushJob()
+    const job = legacySampleFlushJob()
     const core: Board = { id: 'my-core', material: '芯材', thickness: 15, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', noCut: true }
     const boards = [...job.boards, core]
     const r = migrateFlushCores(boards, job.flushes, counter())
@@ -86,7 +90,7 @@ describe('migrateFlushCores（仕事）', () => {
   })
 
   it('木取りする 芯材15（全角・空白の違いも同じ材料）があれば noCut を付けて使う。もとの配列は変えない', () => {
-    const job = sampleFlushJob()
+    const job = legacySampleFlushJob()
     const core: Board = { id: 'my-core', material: ' 芯材 ', thickness: 15.0, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }
     const boards = [core, ...job.boards]
     const r = migrateFlushCores(boards, job.flushes, counter())

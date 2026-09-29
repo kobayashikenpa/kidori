@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from './dimensions'
 import { explainDimension, explanationText } from './dimensions/explain'
-import { FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from './fixtures/flush'
+import { CORE_15_ID, FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from './fixtures/flush'
 import {
   autoFlushName,
   defaultFlushFaces,
@@ -34,13 +34,17 @@ describe('flushThickness（フラッシュの厚み）', () => {
     expect(flushThickness(job.flushes[0], job.boards)).toBe(25)
   })
 
-  it('小数の材料（ラワン2.5×2＋芯材12）＝17', () => {
-    const boards = [{ id: 'b', thickness: 2.5 }]
-    expect(flushThickness({ core: 12, faces: [{ boardId: 'b', count: 2 }] }, boards)).toBe(17)
+  it('小数の材料（ラワン2.5×2＋芯材12×1）＝17', () => {
+    const boards = [
+      { id: 'b', thickness: 2.5 },
+      { id: 'c', thickness: 12 },
+    ]
+    expect(flushThickness({ faces: [{ boardId: 'c', count: 1 }, { boardId: 'b', count: 2 }] }, boards)).toBe(17)
   })
 
-  it('見つからない材料の表面材は数えない', () => {
-    expect(flushThickness({ core: 15, faces: [{ boardId: 'なし', count: 2 }] }, [])).toBe(15)
+  it('見つからない材料の中身は数えない', () => {
+    const boards = [{ id: 'c', thickness: 15 }]
+    expect(flushThickness({ faces: [{ boardId: 'c', count: 1 }, { boardId: 'なし', count: 2 }] }, boards)).toBe(15)
   })
 
   it('thicknessOfId は材料の厚みとフラッシュの合計の厚みを返す。無い id は null', () => {
@@ -87,9 +91,9 @@ describe('フラッシュの部材の厚みの判定', () => {
     expect(d.errors[0].message).toContain('材料の厚み 25')
   })
 
-  it('表面材の枚数を変えると厚みもついてくる（メラミン1×1 → 24 で一致）', () => {
+  it('中身の枚数を変えると厚みもついてくる（メラミン1×1 → 24 で一致）', () => {
     const job = flushJob()
-    job.flushes[0].faces[0].count = 1
+    job.flushes[0].faces[1].count = 1
     job.parts[0].expr.H = '24'
     expect(dims(job)['天板'].thicknessMismatch).toBe(false)
   })
@@ -116,8 +120,8 @@ describe('フラッシュの部材の厚みの判定', () => {
 describe('flushBreakdown（厚みの内訳）', () => {
   it('芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25', () => {
     const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
-    expect(b.core).toBe(15)
     expect(b.faces).toEqual([
+      { boardId: CORE_15_ID, label: '芯材15', thickness: 15, count: 1, noCut: true },
       { boardId: MELAMINE_1_ID, label: 'メラミン1', thickness: 1, count: 2, noCut: false },
       { boardId: LAUAN_4_ID, label: 'ラワン4', thickness: 4, count: 2, noCut: false },
     ])
@@ -128,17 +132,16 @@ describe('flushBreakdown（厚みの内訳）', () => {
   it('寸法表の厚みの内訳：フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）', () => {
     const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
     expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）')
-    expect(flushCompositionText('フラッシュ16', { core: 15.5, faces: [], total: 15.5 })).toBe('フラッシュ16（芯材15.5×1）')
+    const core = { boardId: 'c', label: '芯材15.5', thickness: 15.5, count: 1, noCut: true }
+    expect(flushCompositionText('フラッシュ16', { faces: [core], total: 15.5 })).toBe('フラッシュ16（芯材15.5×1）')
   })
 
-  it('第2.5版の形（芯材15 は中身の材料）でも同じ文字。ベタ20・中身なし', () => {
+  it('見本（芯材15 は中身の材料）も同じ文字。ベタ20・中身なし', () => {
     const job = sampleGroupJob()
     const b = flushBreakdown(job, job.flushes[0].id)!
-    expect(b.core).toBe(0)
     expect(flushBreakdownText(b)).toBe('芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
     expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）')
     const beta = {
-      core: 0,
       faces: [
         { boardId: 'l18', label: 'ラワン18', thickness: 18, count: 1, noCut: false },
         { boardId: 'm1', label: 'メラミン1', thickness: 1, count: 2, noCut: false },
@@ -147,8 +150,8 @@ describe('flushBreakdown（厚みの内訳）', () => {
     }
     expect(flushCompositionText('ベタ20', beta)).toBe('ベタ20（ラワン18×1 ＋ メラミン1×2）')
     expect(flushBreakdownText(beta)).toBe('ラワン18×1 ＋ メラミン1×2 ＝ 20')
-    expect(flushCompositionText('ベタ20', { core: 0, faces: [], total: 0 })).toBe('ベタ20（中身なし）')
-    expect(flushBreakdownText({ core: 0, faces: [], total: 0 })).toBe('中身なし ＝ 0')
+    expect(flushCompositionText('ベタ20', { faces: [], total: 0 })).toBe('ベタ20（中身なし）')
+    expect(flushBreakdownText({ faces: [], total: 0 })).toBe('中身なし ＝ 0')
   })
 
   it('無いフラッシュは null', () => {
@@ -163,10 +166,11 @@ describe('使っているものの一覧', () => {
     expect(flushesUsingBoards(job, ['なし'])).toEqual([])
   })
 
-  it('材料を削除すると表面材が無くなるフラッシュの名前', () => {
+  it('材料を削除すると中身が無くなるフラッシュの名前', () => {
     const job = flushJob()
     expect(flushesEmptiedByBoards(job, [LAUAN_4_ID])).toEqual([])
-    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID])).toEqual(['フラッシュ25'])
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID])).toEqual([])
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID, CORE_15_ID])).toEqual(['フラッシュ25'])
   })
 
   it('フラッシュを選んでいる部材の名前', () => {

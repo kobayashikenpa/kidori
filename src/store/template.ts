@@ -1,7 +1,7 @@
 // 最後に使った設定（ひな形）。新しい仕事・見本はこれを写して作る（仕様書 4「設定の引き継ぎ」、architecture.md 8.3）
 import { isBuiltInBoard } from '../engine/boards'
 import { DEFAULT_MATERIALS, defaultSettings } from '../engine/defaults'
-import { migrateFlushCores, type SpecGroup, type SpecMaterial } from '../engine/migrate/flushCore'
+import type { SpecGroup, SpecMaterial } from '../engine/migrate/flushCore'
 import type { Job, Settings } from '../engine/types'
 
 /**
@@ -35,16 +35,8 @@ export function defaultTemplate(): SettingsTemplate {
   }
 }
 
-/**
- * 仕事の設定と材料（材料名・厚み・印）・材料グループを写したひな形（深いコピー。サイズは入れない）。
- * 以前の版の芯材（core）が残っているフラッシュは、芯材◯（木取りしない）の材料と中身に移してから写す（第2.5版）
- */
-export function templateOf(source: Job): SettingsTemplate {
-  let n = 0
-  const moved = source.flushes.some((f) => f.core !== undefined)
-    ? migrateFlushCores(source.boards, source.flushes, () => `__core-${++n}`)
-    : null
-  const job: Job = moved ? { ...source, ...moved } : source
+/** 仕事の設定と材料（材料名・厚み・印）・材料グループを写したひな形（深いコピー。サイズは入れない） */
+export function templateOf(job: Job): SettingsTemplate {
   return {
     settings: { ...job.settings, nige: job.settings.nige.map((n) => ({ ...n })) },
     materials: job.boards.map((b) => {

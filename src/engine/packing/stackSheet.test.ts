@@ -2,7 +2,7 @@
 // 組は自分のサイズ（3×6／4×8 だけ。組の手持ちは使わない。E-64・15.9）で並べ、材料の行のサイズはその材料のふつうの片だけに効く
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob } from '../fixtures/flush'
+import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
 import { withStackStock, withStock } from '../fixtures/stock'
 import { freezeSheet } from '../progress/frozen'
 import type { Job, MaterialResult, SheetLayout } from '../types'
@@ -25,12 +25,12 @@ function lauanTo48(job: Job): Job {
 
 describe('stackChoice（組の行の設定）', () => {
   it('見本の組は 3×6。並びを逆にしても同じ行', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     expect(stackChoice(job, PAIR)).toMatchObject({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
     expect(stackChoice(job, [LAUAN_4_ID, MELAMINE_1_ID]).sizeKind).toBe('saburoku')
   })
   it('行が無ければ 4×8・長手・手持ちなし', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.stackSheets = []
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
@@ -38,7 +38,7 @@ describe('stackChoice（組の行の設定）', () => {
 
 describe('組の行のサイズで木取り', () => {
   it('組の設定 3×6：組 5枚（85.2%）・ラワン 4 のふつうの1枚が背板の1枚（97.8%）', () => {
-    const r = run(sampleFlushJob(true))
+    const r = run(sampleGroupJob(true))
     expect(r.materials.map((m) => [m.boardId, m.sheetCount, pct(m.yieldRate)])).toEqual([
       [KEY, 5, 85.2],
       [LAUAN_4_ID, 1, 97.8],
@@ -46,7 +46,7 @@ describe('組の行のサイズで木取り', () => {
   })
 
   it('ラワン 4 を 4×8 にしても組は 3×6 で5枚のまま、背板の1枚は 4×8（54.4%）', () => {
-    const r = run(lauanTo48(sampleFlushJob(true)))
+    const r = run(lauanTo48(sampleGroupJob(true)))
     expect(r.materials.map((m) => [m.boardId, m.sheetCount, pct(m.yieldRate)])).toEqual([
       [KEY, 5, 85.2],
       [LAUAN_4_ID, 1, 54.4],
@@ -56,7 +56,7 @@ describe('組の行のサイズで木取り', () => {
   })
 
   it('組の設定が無ければ組は 4×8 の大きさ（1220×2440）で並び、ラワン 4 は 3×6 のまま', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.stackSheets = []
     const r = run(job)
     const g = find(r.materials, KEY)!
@@ -67,7 +67,7 @@ describe('組の行のサイズで木取り', () => {
   })
 
   it('組の設定が自由入力の大きさ（910×1820）でも、組は 4×8 の大きさで並ぶ（組は 3×6／4×8 だけ。E-64）', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'custom', width: 910, length: 1820, grain: 'long' }]
     const g = find(run(job).materials, KEY)!
     expect(g.sheets.every((s) => size(s) === '1220×2440')).toBe(true)
@@ -75,7 +75,7 @@ describe('組の行のサイズで木取り', () => {
   })
 
   it('組の設定が自由入力で木目 短手でも、組は 4×8・長手方向で並ぶ（側板も入る）', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'custom', width: 910, length: 1820, grain: 'short' }]
     const g = find(run(job).materials, KEY)!
     expect(g.unplaced).toEqual([])
@@ -84,7 +84,7 @@ describe('組の行のサイズで木取り', () => {
 
   it('横切り優先・おまかせでも組は5枚（ラワン 4 が 4×8 でも）', () => {
     for (const cutMode of ['horizontal', 'auto'] as const) {
-      const job = lauanTo48(sampleFlushJob(true))
+      const job = lauanTo48(sampleGroupJob(true))
       job.settings.cutMode = cutMode
       expect(find(run(job).materials, KEY)!.sheetCount).toBe(5)
     }
@@ -93,7 +93,7 @@ describe('組の行のサイズで木取り', () => {
 
 describe('組は手持ちを使わない（E-64）', () => {
   it('組の行に手持ち 3×6 ×3 が残っていても、組は 3×6 で5枚（棚板も入る）。ラワン 4 は背板の1枚だけ', () => {
-    const job = withStackStock(sampleFlushJob(true), PAIR, [['3×6', 3]])
+    const job = withStackStock(sampleGroupJob(true), PAIR, [['3×6', 3]])
     const r = run(job)
     const g = find(r.materials, KEY)!
     expect(g.sheetCount).toBe(5)
@@ -104,7 +104,7 @@ describe('組は手持ちを使わない（E-64）', () => {
   })
 
   it('材料の手持ちは組に使わない（メラミン 1・ラワン 4 に手持ち 3×6 ×1、組は 3×6 の選択 → 組 5枚）', () => {
-    const job = withStock(withStock(sampleFlushJob(true), MELAMINE_1_ID, [['3×6', 1]]), LAUAN_4_ID, [['3×6', 1]])
+    const job = withStock(withStock(sampleGroupJob(true), MELAMINE_1_ID, [['3×6', 1]]), LAUAN_4_ID, [['3×6', 1]])
     const r = run(job)
     expect(r.materials.map((m) => [m.boardId, m.sheetCount, m.unplaced.length])).toEqual([
       [KEY, 5, 0],
@@ -120,7 +120,7 @@ describe('固定した1枚と手持ち（availableStock・availableStackStock）
   }
 
   it('組の固定した1枚は材料の手持ちから引かない。組は何枚でも（組の片の残りだけ並ぶ）', () => {
-    const job = withStock(sampleFlushJob(true), LAUAN_4_ID, [['3×6', 1]])
+    const job = withStock(sampleGroupJob(true), LAUAN_4_ID, [['3×6', 1]])
     job.frozenSheets = [frozenStack(job, true)]
     expect(availableStackStock(job, PAIR).map((k) => k.count)).toEqual([Infinity])
     expect(availableStock(job, LAUAN_4_ID).map((k) => k.count)).toEqual([1])
@@ -132,20 +132,20 @@ describe('固定した1枚と手持ち（availableStock・availableStackStock）
   })
 
   it('材料だけの固定した1枚（stackWith なし）は材料の手持ちから引く', () => {
-    const job = withStock(sampleFlushJob(true), MELAMINE_1_ID, [['3×6', 2]])
+    const job = withStock(sampleGroupJob(true), MELAMINE_1_ID, [['3×6', 2]])
     job.frozenSheets = [frozenStack(job, false)]
     expect(availableStock(job, MELAMINE_1_ID).map((k) => k.count)).toEqual([1])
     expect(availableStackStock(job, PAIR).map((k) => k.count)).toEqual([Infinity])
   })
 
   it('availableStackStock は組の大きさが何枚でも（1行・Infinity）', () => {
-    expect(availableStackStock(sampleFlushJob(true), PAIR)).toEqual([
+    expect(availableStackStock(sampleGroupJob(true), PAIR)).toEqual([
       { stockId: null, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: Infinity },
     ])
   })
 
   it('freezeSheet：組の1枚の木目は組の設定から（材料 a が短手でも長手。組の行が自由入力・短手でも 4×8 の長手）', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, sizeKind: 'custom', grain: 'short' } : b))
     expect(frozenStack(job, true).grain).toBe('long')
     job.stackSheets[0].grain = 'short'

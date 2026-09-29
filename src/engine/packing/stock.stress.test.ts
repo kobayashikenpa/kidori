@@ -36,6 +36,7 @@ const A = 'b-a18'
 const B = 'b-b4'
 const C = 'b-c1'
 const FLUSH = 'fl-1'
+const CORE = 'b-core15'
 
 function randomStock(r: Rng): StockSheet[] {
   const rows: StockSheet[] = []
@@ -89,7 +90,9 @@ function part(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
 }
 
 function randomJob(r: Rng, pieces: [number, number] = [4, 30]): Job {
-  const boards = [randomBoard(r, A, 'ランバー', 18), randomBoard(r, B, 'ラワン', 4), randomBoard(r, C, 'メラミン', 1)]
+  // 芯材15 は木取りしない材料（フラッシュ20 の中身。第2.5版）
+  const core: Board = { id: CORE, material: '芯材', thickness: 15, sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long', noCut: true }
+  const boards = [randomBoard(r, A, 'ランバー', 18), randomBoard(r, B, 'ラワン', 4), randomBoard(r, C, 'メラミン', 1), core]
   const stack = r.chance(0.6)
   // 組の行の設定（第2.3版）。無ければ 4×8
   const stackSheets = stack && r.chance(0.8) ? [randomStackSheet(r, [B, C])] : []
@@ -118,7 +121,7 @@ function randomJob(r: Rng, pieces: [number, number] = [4, 30]): Job {
     name: 'でたらめ',
     settings: { kerf: r.pick([2, 3, 4.5]), trim: r.pick([0, 3, 5, 10]), allowance: r.pick([0, 5, 10]), cutMode: r.pick(['vertical', 'horizontal', 'auto'] as const), nige: [] },
     boards,
-    flushes: [{ id: FLUSH, name: 'フラッシュ20', core: 15, faces: [{ boardId: C, count: 1 }, { boardId: B, count: 1 }], ...(stack ? { stack: true as const } : {}) }],
+    flushes: [{ id: FLUSH, name: 'フラッシュ20', faces: [{ boardId: CORE, count: 1 }, { boardId: C, count: 1 }, { boardId: B, count: 1 }], ...(stack ? { stack: true as const } : {}) }],
     parts,
     frozenSheets: [],
     stackSheets,

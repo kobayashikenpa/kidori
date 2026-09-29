@@ -1,10 +1,10 @@
 // E-63：材料（フラッシュ）を変えたときの式の厚みの置き換え（仕様書 5.4、architecture.md 15.7）
 import { describe, expect, it } from 'vitest'
-import { SAMPLE_FLUSH_ID, sampleFlushJob } from '../fixtures/flush'
+import { SAMPLE_FLUSH_ID, sampleGroupJob } from '../fixtures/flush'
 import { swapThicknessRef } from './usages'
 
 const F22 = 'flush-22'
-const tenchi = () => sampleFlushJob(true).parts.find((p) => p.name === '天地板')!.expr
+const tenchi = () => sampleGroupJob(true).parts.find((p) => p.name === '天地板')!.expr
 
 describe('swapThicknessRef', () => {
   it('天地板の H {t:フラッシュ25} をフラッシュ22 に → H が {t:フラッシュ22}・axes は [H]。W・D は変わらない', () => {

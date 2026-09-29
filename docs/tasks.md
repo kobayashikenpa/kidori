@@ -1092,10 +1092,11 @@
 - やること：`updateBoard` で `noCut` の付け外しと、`canStack` でなくなったグループの `stack` を外す。`refreshAutoNames` を `updateBoard`・`removeBoards`・`updateFlush` で呼ぶ。`validateFlush` から芯材の検査を外し、中身1つ以上・空欄の行・重なり・`canStack(f, boards)` の文言に（17.8）。`cleanFlush` で `form`・`autoName`。文言の「フラッシュ」「表面材」を「材料グループ」「中身」に（`validateBoard` を含む）
 - 完了の条件：重ね切りの見本でメラミン1 を木取りしないにすると フラッシュ25 の `stack` が外れ、組の行は残る。ラワン4 の厚みを 5 にすると 自動の名前の フラッシュ25 が フラッシュ27 になり（式の表示名もついてくる）、手で名前を付けたグループは変わらない。フラッシュ27 がすでにあれば フラッシュ27-2。中身が0・空欄の行・同じ材料の2行・枚数 0 はそれぞれの文言で断られる。core の無い下書きで `addFlush` できる。メラミン1 を削除すると中身から外れ、名前がついてくる
 
-### [ ] S-30 仕上げ：`Flush.core` をなくす
+### [x] S-30 仕上げ：`Flush.core` をなくす
 - 担当：engine-dev ／ 依存：U-76 ／ 仕様書：4
 - やること：`Flush.core` を型から消し、`flushThickness` などの core の扱いと、core を使っているテスト・fixtures（`engine/fixtures/flush.ts` など）を芯材の材料の形に書き直す（17.11）。以前の形は `migrate/flushCore.ts` の `LegacyFlush` だけが知っている
 - 完了の条件：`src/` の中で `core` を持つフラッシュを作るのは移し替えのテストだけ。見本・重ね切りの見本の期待値が同じ。`npm run check` が通る
+- 結果：`sampleFlushJob` は `sampleGroupJob`（芯材15 は木取りしない材料・材料の最後）にまとめ、`flushJob` も同じ形（form: 'flush'・autoName: true）にした。以前の形との比べは、移し替えたあとの厚みが core ＋ 中身と同じことと、第2.4版で確かめた値（組 5枚 85.2%・ラワン4 97.8%・全体 86.4%）で見る
 
 ### [x] S-31 最初から入っている材料の一覧（ラワン・シナ・ポリ・メラミン）と例の文字
 - 担当：engine-dev ／ 依存：なし ／ 仕様書：5.1（初めて使うときの材料）・4（見本）（コミット 0a547d7）

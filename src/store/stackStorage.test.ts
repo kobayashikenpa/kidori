@@ -2,7 +2,7 @@
 // 組は 3×6／4×8 だけ。サイズがそろわない・手持ち・自由入力の組は、読み込むときに重ね切りを外して知らせる
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
-import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob, sampleGroupJob } from '../engine/fixtures/flush'
+import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../engine/fixtures/flush'
 import { stockRows } from '../engine/fixtures/stock'
 import { packJob } from '../engine/packing'
 import { stackKey } from '../engine/packing/stack'
@@ -16,7 +16,7 @@ const rows = (job: Job) => packJob(job, computeDimensions(job)).materials.map((m
 
 /** 第2.2版までのデータ（stackSheets が無い）。JSON の写し */
 function legacy(edit?: (j: Record<string, unknown> & Job) => void): unknown {
-  const j = JSON.parse(JSON.stringify(sampleFlushJob(true))) as Record<string, unknown> & Job
+  const j = JSON.parse(JSON.stringify(sampleGroupJob(true))) as Record<string, unknown> & Job
   delete (j as Partial<Job>).stackSheets
   edit?.(j)
   return j
@@ -103,7 +103,7 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
   })
 
   it('固定した組の1枚は切った記録として残る（重ね切りを外しても）', () => {
-    const base = sampleFlushJob(true)
+    const base = sampleGroupJob(true)
     const g = packJob(base, computeDimensions(base)).materials.find((m) => m.boardId === KEY)!
     const frozen = {
       id: 'f1',

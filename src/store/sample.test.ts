@@ -50,7 +50,7 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     }
     expect(boardOf(job, 'ラワン', 2.5)[0].sizeKind).toBe('shihachi')
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
-    expect(job.flushes.map((f) => [f.name, f.core, flushThickness(f, job.boards)])).toEqual([['フラッシュ25', undefined, 25]])
+    expect(job.flushes.map((f) => [f.name, 'core' in f, flushThickness(f, job.boards)])).toEqual([['フラッシュ25', false, 25]])
 
     expect(computeDimensions(job).errors).toEqual([])
     expect(finishedOf(job, '側板')).toEqual({ W: 25, H: 1800, D: 400 })
@@ -116,7 +116,9 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     a = must(addBoard(a, newBoard({ material: 'シナランバー', thickness: 18 })))
     a = must(addBoard(a, newBoard({ material: 'タモ', thickness: 20 })))
     const lauan25 = a.boards.find((b) => b.thickness === 2.5)!
-    a = must(addFlush(a, { name: 'フラッシュ21', core: 16, faces: [{ boardId: lauan25.id, count: 2 }] }))
+    const core16 = newBoard({ material: '芯材', thickness: 16, noCut: true })
+    a = must(addBoard(a, core16))
+    a = must(addFlush(a, { name: 'フラッシュ21', faces: [{ boardId: core16.id, count: 1 }, { boardId: lauan25.id, count: 2 }] }))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings).toMatchObject({ allowance: 5, kerf: 4, trim: 8, cutMode: 'horizontal' })
     expect(job.settings.nige.map((n) => [n.name, n.value])).toEqual([
@@ -126,7 +128,7 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     ])
     expect(boardOf(job, 'シナランバー', 18)).toHaveLength(1)
     expect(boardOf(job, 'タモ', 20)).toHaveLength(1)
-    // 最初からある25・シナランバー・タモ・芯材16（フラッシュ21 の芯材を移したもの）・芯材15（見本のフラッシュ25）
+    // 最初からある25・シナランバー・タモ・芯材16（フラッシュ21 の中身）・芯材15（見本のフラッシュ25）
     expect(job.boards).toHaveLength(29)
     expect(partOf(job, '側板').boardId).toBeNull()
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ21', 'フラッシュ25'])
@@ -152,7 +154,9 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
   it('フラッシュ25 がすでにあれば、それを使う（中身が違っても重ねて作らない）', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
     const mel = a.boards.find((b) => b.material === 'メラミン')!
-    a = must(addFlush(a, { name: 'フラッシュ25', core: 21, faces: [{ boardId: mel.id, count: 2 }] }))
+    const core21 = newBoard({ material: '芯材', thickness: 21, noCut: true })
+    a = must(addBoard(a, core21))
+    a = must(addFlush(a, { name: 'フラッシュ25', faces: [{ boardId: core21.id, count: 1 }, { boardId: mel.id, count: 2 }] }))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.flushes).toHaveLength(1)
     // ひな形のフラッシュ25 の重ね切りの設定はそのまま（このフラッシュは表面材1種類なのでオフ）
@@ -167,14 +171,17 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     const base = createJob('A', undefined, NOW, 'job-a')
     const mel = base.boards.find((b) => b.material === 'メラミン')!
     const lauan = base.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
+    const core15 = newBoard({ material: '芯材', thickness: 15, noCut: true })
+    const withCore = must(addBoard(base, core15))
     const faces = [
+      { boardId: core15.id, count: 1 },
       { boardId: mel.id, count: 2 },
       { boardId: lauan.id, count: 2 },
     ]
-    const off = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces }))
+    const off = must(addFlush(withCore, { name: 'フラッシュ25', faces }))
     expect(off.flushes[0].stack).toBeUndefined()
     expect(sampleFromTemplate(templateOf(off), NOW).flushes[0].stack).toBeUndefined()
-    const on = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces, stack: true }))
+    const on = must(addFlush(withCore, { name: 'フラッシュ25', faces, stack: true }))
     expect(sampleFromTemplate(templateOf(on), NOW).flushes[0].stack).toBe(true)
   })
 

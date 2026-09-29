@@ -1685,7 +1685,7 @@ rekeyJob(job, ids: { job: string; next: (prefix: 'board'|'flush'|'part'|'nige') 
 
 ```
 src/engine/
-  types.ts               Board.noCut・Flush.form・Flush.autoName。Flush.core は移し替えが済むまで省略可（17.11 で消す）
+  types.ts               Board.noCut・Flush.form・Flush.autoName。Flush.core は S-30 で消した（17.11）
   flush.ts               flushThickness（中身の合計）・内訳の文字（×枚数）・cutFaces・partIsNoCut・defaultGroupFaces・autoGroupName
   packing/pieces.ts      木取りしない材料（部材が直接選んだ・中身）は片を作らない。片の id の連番は木取りする中身だけで数える
   packing/stack.ts       canStack(flush, boards)：木取りする中身が2種類で枚数が同じ
@@ -1876,6 +1876,7 @@ type MaterialEditTarget =
 ### 17.11 進め方（作業の順と、作業中の形）
 
 - 1つの作業ごとに `npm run check` が通るように、`Flush.core` は **E-66〜U-76 の間だけ省略可（`core?: number`）** で残す。engine は `core` があれば厚みに足す（木取りしない分として）。S-28 の読み込みの移し替えと新しい操作は `core` を作らない。U-76 で編集の画面から芯材の欄が消えたら、S-30 で `core` を型・engine から消す
+- **S-30 で済み**：`Flush.core`・`FlushBreakdown.core`・`validateFlush` の芯材の検査・`templateOf` の移し替えを消した。以前の形（core）を知っているのは `migrate/flushCore.ts`（`LegacyFlush`・`LegacySpecGroup`）と、それを呼ぶ読み込み（`store/storage.ts`）だけ。テストの見本（`engine/fixtures/flush.ts`）は 芯材15（木取りしない）の材料の形で、以前の形は移し替えのテスト用の `engine/fixtures/legacyFlush.ts`（`toLegacyJob`・`legacySampleFlushJob`）だけが作る
 - 途中のコミットでは設定の画面が古いまま（芯材の欄がある）の時期があるが、この版の PR はまとめて出す（途中の版を公開しない）
 
 ### 17.12 確かめ方（verifier）

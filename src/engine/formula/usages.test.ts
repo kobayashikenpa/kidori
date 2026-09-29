@@ -9,7 +9,7 @@ import {
   remapBoardIds,
   remapRefIds,
 } from './usages'
-import { FLUSH_25_ID, flushJob, LAUAN_4_ID, MELAMINE_1_ID } from '../fixtures/flush'
+import { CORE_15_ID, FLUSH_25_ID, flushJob, LAUAN_4_ID, MELAMINE_1_ID } from '../fixtures/flush'
 
 describe('partsUsingNige（逃げを式で使っている部材）', () => {
   it('見本の逃げ1mm は［棚板（W）］', () => {
@@ -145,10 +145,10 @@ describe('jobRefIds（仕事で使っている材料・フラッシュ・逃げ�
     expect([...r.nigeIds]).toEqual(['nige-1'])
   })
 
-  it('フラッシュの部材は、フラッシュとその表面材を使っている', () => {
+  it('フラッシュの部材は、フラッシュとその中身（芯材15 を含む）を使っている', () => {
     const r = jobRefIds(flushJob())
     expect([...r.flushIds]).toEqual([FLUSH_25_ID])
-    expect([...r.boardIds].sort()).toEqual([LAUAN_4_ID, MELAMINE_1_ID].sort())
+    expect([...r.boardIds].sort()).toEqual([CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID].sort())
   })
 
   it('式の {t:} で指した材料・フラッシュ（とその表面材）も使っている。無い id は入らない', () => {
@@ -157,7 +157,7 @@ describe('jobRefIds（仕事で使っている材料・フラッシュ・逃げ�
     delete job.parts[0].flushId
     const r = jobRefIds(job)
     expect([...r.flushIds]).toEqual([FLUSH_25_ID])
-    expect([...r.boardIds].sort()).toEqual([LAUAN_4_ID, MELAMINE_1_ID].sort())
+    expect([...r.boardIds].sort()).toEqual([CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID].sort())
     expect([...r.nigeIds]).toEqual([])
   })
 

@@ -1,7 +1,7 @@
 // 第2.5版（E-66）：木取りしない材料と、材料グループの中身の合計の厚み・片・重ね切り
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
-import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleFlushJob, sampleGroupJob, flushPart } from '../fixtures/flush'
+import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob, flushPart } from '../fixtures/flush'
 import { cutFaces, defaultFlushStack, flushBreakdown, flushThickness, partIsNoCut } from '../flush'
 import { materialSummaries, frozenSheetViews } from '../progress/frozen'
 import type { Job } from '../types'
@@ -45,7 +45,7 @@ function betaJob(): Job {
 }
 
 describe('中身の合計の厚み（木取りしない材料も数える）', () => {
-  it('芯材15（木取りしない）×1・メラミン1×2・ラワン4×2 は 25（core なし）', () => {
+  it('芯材15（木取りしない）×1・メラミン1×2・ラワン4×2 は 25', () => {
     const job = sampleGroupJob()
     expect(flushThickness(job.flushes[0], job.boards)).toBe(25)
   })
@@ -72,13 +72,6 @@ describe('重ね切りの見本（材料グループの形）は以前と同じ�
       [LAUAN_4_ID, 1, 97.8],
     ])
     expect(pct(s.totalYieldRate)).toBe(86.4)
-  })
-  it('配置は core のある以前の形と1片も違わない（重ね切りオン・オフ）', () => {
-    for (const stack of [true, false]) {
-      const a = packJob(sampleFlushJob(stack), computeDimensions(sampleFlushJob(stack)))
-      const b = packJob(sampleGroupJob(stack), computeDimensions(sampleGroupJob(stack)))
-      expect(b).toEqual(a)
-    }
   })
   it('片の id：メラミン1 #1〜#4・ラワン4 #5〜#8（芯材が中身の先頭でも）', () => {
     const job = sampleGroupJob(false)
