@@ -128,7 +128,7 @@ describe('removeJob', () => {
 describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
   /**
    * 初期の材料の仕事で、W602 H1200 D6（木目 H）×4枚・部材の切り代は空欄・仕事の切り代 0。
-   * 設定の切り代はフラッシュの部材だけに足す（第2.1版）ので、表面材 ラワン4 ×1・芯材2 のフラッシュにする
+   * 設定の切り代はフラッシュの部材だけに足す（第2.1版）ので、中身が 芯材2（木取りしない）×1・ラワン4 ×1 のフラッシュにする
    */
   function stateWithRawan(): StoreState {
     const r = updateSettings(createJob('お知らせ', undefined, NOW, 'job-h'), { allowance: 0, trim: 5, kerf: 3 })
@@ -137,7 +137,9 @@ describe('設定の変更とお知らせ（第1.2版 U-22）', () => {
     const rawan4 = job.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
     job = {
       ...job,
-      flushes: [{ id: 'fl', name: 'F6', core: 2, faces: [{ boardId: rawan4.id, count: 1 }] }],
+      // 芯材2 は木取りしない材料（第2.5版）
+      boards: [...job.boards, { ...rawan4, id: 'core-2', material: '芯材', thickness: 2, builtIn: undefined, noCut: true as const }],
+      flushes: [{ id: 'fl', name: 'F6', faces: [{ boardId: 'core-2', count: 1 }, { boardId: rawan4.id, count: 1 }] }],
       parts: [newPart({ name: '棚', boardId: null, flushId: 'fl', expr: { W: '602', H: '1200', D: '6' }, quantity: 4, grain: 'H' })],
     }
     return initialState({ status: 'ok', data: { jobs: [job], currentJobId: job.id } })
@@ -217,15 +219,15 @@ describe('足した逃げ・材料を消す（第1.3版 U-28 の不具合の再�
   it('足した材料をすぐ消すと消え、保存して読み込んでも戻らない', () => {
     const f = storeFlow(stateWithSample())
     const before = currentJob(f.react())!.boards.length
-    expect(f.run((j) => addBoard(j, newBoard({ material: 'シナ', thickness: 21 }))).ok).toBe(true)
-    const shown = currentJob(f.react())!.boards.find((b) => b.material === 'シナ' && b.thickness === 21)!
+    expect(f.run((j) => addBoard(j, newBoard({ material: 'タモ', thickness: 21 }))).ok).toBe(true)
+    const shown = currentJob(f.react())!.boards.find((b) => b.material === 'タモ' && b.thickness === 21)!
     expect(f.run((j) => removeBoards(j, [shown.id])).ok).toBe(true)
     expect(currentJob(f.react())!.boards).toHaveLength(before)
 
     const st = memoryStorage()
     saveSaved(st, { jobs: f.react().jobs, currentJobId: f.react().currentJobId })
     const job = loadSaved(st).data.jobs.find((j) => j.id === f.react().currentJobId)!
-    expect(job.boards.some((b) => b.material === 'シナ' && b.thickness === 21)).toBe(false)
+    expect(job.boards.some((b) => b.material === 'タモ' && b.thickness === 21)).toBe(false)
   })
 })
 
@@ -251,11 +253,11 @@ describe('最後に使った設定（ひな形）の更新（第1.3版 S-08）',
 
   it('材料の追加・削除でもひな形が変わる', () => {
     const s0 = twoJobs()
-    const s1 = runOp(s0, 'job-a', (j) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })), t)
-    expect(s1.template.materials.map((m) => m.material)).toContain('シナ')
-    const id = currentJob(s1)!.boards.find((b) => b.material === 'シナ')!.id
+    const s1 = runOp(s0, 'job-a', (j) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })), t)
+    expect(s1.template.materials.map((m) => m.material)).toContain('タモ')
+    const id = currentJob(s1)!.boards.find((b) => b.material === 'タモ')!.id
     const s2 = runOp(s1, 'job-a', (j) => removeBoards(j, [id]), t)
-    expect(s2.template.materials.map((m) => m.material)).not.toContain('シナ')
+    expect(s2.template.materials.map((m) => m.material)).not.toContain('タモ')
   })
 
   it('部材の変更・材料のサイズの選択・名前の変更・仕事の追加や削除ではひな形が変わらない', () => {

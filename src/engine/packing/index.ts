@@ -2,6 +2,8 @@
 // おまかせは縦切り優先・横切り優先の両方を計算し、
 // 入らない片が少ないほう → 必要な板が少ないほう → 使った材料の面積の合計が小さいほう（第2.2版。未決事項 41）
 // → 同じなら一番大きい端材が大きいほう → それも同じなら縦切り優先 を採る
+// 帯の並べ方（第2.5版。E-69）：材料の行・組の行ごとに、同じ幅を優先する並べ方と今までの並べ方の両方を計算し、
+// 入らない片が少ないほう → 板が少ないほう → 同じなら同じ幅を優先するほう を採る
 // （横切り優先は長手も端切りするので、縦切り優先でしか入らない片がありうる）
 // 手持ちの材料（第2.2版。architecture.md 14.5）：stockOn の材料は、固定した1枚を引いた手持ち（availableStock）で並べる。
 // 1枚ごとにその大きさで端切り・切る順番・端材・歩留まりを出し、sheet を付ける。入らない片は noStock
@@ -26,11 +28,20 @@ interface Layout {
   unplaced: Piece[]
 }
 
-function layout(pieces: Piece[], board: Board, trim: number, kerf: number, mode: StripMode): Layout {
+/**
+ * 木取りの並べ方の選択（E-68・E-69）。sameWidthFirst を指定しなければ、材料の行・組の行ごとに
+ * 同じ幅を優先する並べ方と今までの並べ方の両方を計算して、板が増えないほうを使う（仕様書 8。preferSameWidth）。
+ * true は同じ幅を優先する並べ方だけ、false は第2.4版までの並べ方だけで計算する（比べるためだけに使う）
+ */
+export interface PackOptions {
+  sameWidthFirst?: boolean
+}
+
+function layout(pieces: Piece[], board: Board, trim: number, kerf: number, mode: StripMode, sameWidthFirst: boolean): Layout {
   const usable = usableRect(board, trim, mode)
   const orientation = sheetOrientation(mode)
   const trims = trimRects(board, trim, mode)
-  const g = packGuillotine(pieces, usable, kerf, mode)
+  const g = packGuillotine(pieces, usable, kerf, mode, sameWidthFirst)
   const sheets = g.sheets.map((sh, i): SheetLayout => {
     const placements = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
     const y = sheetYield(placements, board)
@@ -52,9 +63,16 @@ function layout(pieces: Piece[], board: Board, trim: number, kerf: number, mode:
 }
 
 /** 手持ちで並べる（1枚ごとにその大きさ）。used は行ごとに使った枚数（stock の並び） */
-function stockLayout(pieces: Piece[], stock: StockKind[], trim: number, kerf: number, mode: StripMode): Layout & { used: number[] } {
+function stockLayout(
+  pieces: Piece[],
+  stock: StockKind[],
+  trim: number,
+  kerf: number,
+  mode: StripMode,
+  sameWidthFirst: boolean,
+): Layout & { used: number[] } {
   const orientation = sheetOrientation(mode)
-  const g = packOnStock(pieces, stock, trim, kerf, mode)
+  const g = packOnStock(pieces, stock, trim, kerf, mode, sameWidthFirst)
   const sheets = g.sheets.map((sh, i): SheetLayout => {
     const size = { width: sh.stock.width, length: sh.stock.length }
     const placements = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
@@ -116,11 +134,37 @@ function preferFirst(a: Layout, b: Layout): boolean {
 }
 
 /**
+ * 並べ方の比べ方（E-69。仕様書 8）：同じ幅を優先する並べ方 same を採るなら true。
+ * 入らない片が少ないほう → 必要な板が少ないほう → 同じなら同じ幅を優先するほう
+ */
+function preferSameWidth(same: Layout, old: Layout): boolean {
+  if (same.unplaced.length !== old.unplaced.length) return same.unplaced.length < old.unplaced.length
+  return same.sheets.length <= old.sheets.length
+}
+
+/**
+ * 並べ方（同じ幅を優先するか）ごとに切り方で並べる。fixed が無ければ両方を並べて preferSameWidth で選ぶ
+ * （おまかせは並べ方ごとに縦切り・横切りを選んでから比べる）
+ */
+function chooseWay<L extends Layout>(fixed: boolean | undefined, run: (sameWidthFirst: boolean) => L): L {
+  if (fixed !== undefined) return run(fixed)
+  const same = run(true)
+  const old = run(false)
+  return preferSameWidth(same, old) ? same : old
+}
+
+/**
  * 木取りの計算。plan は重ねる組（初期値は今の仕事の stackPlan）。
  * 組の結果は boardId: stackKey・stack 付き（material・thickness は a）。全体の歩留まりは組の1枚を2枚（a と b）として数える
  */
-export function packJob(job: Job, dims: DimensionResult, plan: StackPlan = stackPlan(job)): PackingResult {
+export function packJob(
+  job: Job,
+  dims: DimensionResult,
+  plan: StackPlan = stackPlan(job),
+  options: PackOptions = {},
+): PackingResult {
   const { kerf, trim, cutMode } = job.settings
+  const fixedWay = options.sameWidthFirst
   const { groups, skipped, done } = expandPieces(job, dims, plan)
   const partOrder = new Map(job.parts.map((p, i) => [p.id, i]))
 
@@ -147,11 +191,11 @@ export function packJob(job: Job, dims: DimensionResult, plan: StackPlan = stack
     if (usesStock(board)) {
       // 手持ち（固定した1枚を引いた残り）。組は組の手持ち、材料は材料の手持ち
       const stock = stack ? availableStackStock(job, stack.boardIds) : availableStock(job, board.id)
-      chosen = choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode))
+      chosen = chooseWay(fixedWay, (way) => choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode, way)))
       reason = 'noStock'
     } else {
       // 配置で入らなかった片（通常は起きない）も「入らない部材」に加える
-      chosen = choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode))
+      chosen = chooseWay(fixedWay, (way) => choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode, way)))
     }
     const result: MaterialResult = {
       boardId: stack?.key ?? board.id,

@@ -1,20 +1,22 @@
 // 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { boardTokenLabel } from '../../engine/defaults'
 import { swapThicknessRef } from '../../engine/formula/usages'
 import { computeDimensions } from '../../engine/dimensions'
-import { flushBreakdown, flushBreakdownText, flushThickness, partThicknessSource } from '../../engine/flush'
+import { flushBreakdown, flushBreakdownText, flushThickness, partIsNoCut, partThicknessSource } from '../../engine/flush'
 import { partAllowance } from '../../engine/dimensions/cutSize'
 import { computeFinished } from '../../engine/dimensions/finished'
 import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
-import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
+import { addPart, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
+import { materialLabel, materialRuns } from '../materials'
 import { FormulaInput } from './FormulaInput'
 import { Help } from './Help'
+import { MaterialEditSheet, type MaterialEditTarget } from './MaterialEditSheet'
 import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
@@ -27,7 +29,12 @@ interface Props {
 
 export function PartEditor({ part, onClose }: Props) {
   const { job, run } = useCurrentJob()
-  const [draft, setDraft] = useState<Part>(() => part ?? newPart({ boardId: orderedBoards(job)[0]?.id ?? null }))
+  // 新しい部材の材料は、並びの最初の木取りする材料（木取りしない材料（芯材など）を初めから選ばないように）
+  const [draft, setDraft] = useState<Part>(() => {
+    if (part) return part
+    const boards = orderedBoards(job)
+    return newPart({ boardId: (boards.find((b) => b.noCut !== true) ?? boards[0])?.id ?? null })
+  })
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const patch = (p: Partial<Part>) => {
@@ -36,7 +43,11 @@ export function PartEditor({ part, onClose }: Props) {
   }
   // 材料を変えたときの厚みの置き換えの知らせ（仕様書 5.4・architecture.md 15.7）。before は置き換える前の下書きの式（元に戻す用）
   const [swapped, setSwapped] = useState<{ message: string; before: Part['expr'] } | null>(null)
-  // 材料・フラッシュの表示名（式の {t:…} の名前と同じ）
+  // 部材の編集の上に重ねて開いている、設定の材料・材料グループの編集（architecture.md 17.10）
+  const [materialEdit, setMaterialEdit] = useState<MaterialEditTarget | null>(null)
+  // 「＋ 材料グループを作る」で作った材料グループ。仕事に入ったあと（次の描画）で部材の下書きに選ぶ
+  const [createdGroup, setCreatedGroup] = useState<string | null>(null)
+  // 材料・材料グループの表示名（式の {t:…} の名前と同じ）
   const thicknessName = (id: string | null): string => {
     const f = job.flushes.find((x) => x.id === id)
     if (f) return f.name
@@ -55,6 +66,14 @@ export function PartEditor({ part, onClose }: Props) {
         : null,
     )
   }
+
+  useEffect(() => {
+    if (createdGroup === null || !job.flushes.some((f) => f.id === createdGroup)) return
+    setCreatedGroup(null)
+    // changeMaterial を通すので、式の厚みの置き換えと知らせも出る
+    changeMaterial({ flushId: createdGroup, boardId: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createdGroup, job])
 
   // 入力中の内容で寸法を計算し直す（計算は engine に任せる）
   const draftJob = useMemo(
@@ -102,230 +121,261 @@ export function PartEditor({ part, onClose }: Props) {
   const referencing = part ? partsReferencing(job, part.id) : []
 
   return (
-    <Sheet title={part ? `部材の編集：${part.name}` : '部材を追加'} onClose={onClose}>
-      <div className="field">
-        <Help className="label" title="名前">
-          式の中で「{draft.name.trim() || '名前'}.W」のように使います。同じ名前は付けられません
-        </Help>
-        <input
-          id="part-name"
-          aria-label="名前"
-          className="input"
-          value={draft.name}
-          placeholder="例：側板"
-          onChange={(e) => patch({ name: e.target.value })}
-        />
-      </div>
-
-      <div className="field">
-        <Help className="label" title="枚数">
-          枚数0は切り出さない、寸法だけの行です（例：全体）
-        </Help>
-        <NumberField
-          ariaLabel="枚数"
-          integer
-          unit="枚"
-          value={draft.quantity}
-          onChange={(v) => v !== null && patch({ quantity: v })}
-        />
-      </div>
-
-      {cutting && (
+    <>
+      <Sheet title={part ? `部材の編集：${part.name}` : '部材を追加'} onClose={onClose}>
         <div className="field">
-          <Help className="label" title="材料">
-            材料名と厚みで選びます。フラッシュを選ぶと、表面材ごとに木取りします（芯材は木取りに入れません）
+          <Help className="label" title="名前">
+            式の中で「{draft.name.trim() || '名前'}.W」のように使います。同じ名前は付けられません
           </Help>
-          <select
-            id="part-board"
-            aria-label="材料"
+          <input
+            id="part-name"
+            aria-label="名前"
             className="input"
-            value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
-            onChange={(e) => {
-              const v = e.target.value
-              if (v.startsWith('flush:')) changeMaterial({ flushId: v.slice(6), boardId: null })
-              else changeMaterial({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
-            }}
-          >
-            <option value="">（材料が未設定）</option>
-            <optgroup label="材料">
-              {orderedBoards(job).map((b) => (
-                <option key={b.id} value={`board:${b.id}`}>
-                  {boardLabel(b)}
-                </option>
-              ))}
-            </optgroup>
-            {job.flushes.length > 0 && (
-              <optgroup label="フラッシュ">
-                {job.flushes.map((f) => (
-                  <option key={f.id} value={`flush:${f.id}`}>
-                    {f.name}（厚み {fmt(flushThickness(f, job.boards))}mm）
-                  </option>
+            value={draft.name}
+            placeholder="例：側板"
+            onChange={(e) => patch({ name: e.target.value })}
+          />
+        </div>
+
+        <div className="field">
+          <Help className="label" title="枚数">
+            枚数0は切り出さない、寸法だけの行です（例：全体）
+          </Help>
+          <NumberField
+            ariaLabel="枚数"
+            integer
+            unit="枚"
+            value={draft.quantity}
+            onChange={(v) => v !== null && patch({ quantity: v })}
+          />
+        </div>
+
+        {cutting && (
+          <div className="field">
+            <Help className="label" title="材料">
+              材料名と厚みで選びます。材料グループを選ぶと、木取りする中身ごとに木取りします（木取りしない材料は入れません）。「編集」で設定の材料・材料グループを直せます
+            </Help>
+            <div className="list-add">
+              <select
+                id="part-board"
+                aria-label="材料"
+                className="input"
+                style={{ flex: 1, minWidth: 0 }}
+                value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === 'new-group') setMaterialEdit({ kind: 'newGroup' })
+                  else if (v.startsWith('flush:')) changeMaterial({ flushId: v.slice(6), boardId: null })
+                  else changeMaterial({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
+                }}
+              >
+                <option value="">（材料が未設定）</option>
+                {materialRuns(orderedBoards(job)).map((g) => (
+                  <optgroup key={`${g.name}-${g.boards[0].id}`} label={`材料：${g.name}`}>
+                    {g.boards.map((b) => (
+                      <option key={b.id} value={`board:${b.id}`}>
+                        {materialLabel(b)}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            )}
-          </select>
-          {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
-          {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
-          {swapped && (
-            <div className="swap-note" role="status">
-              <p className="msg ok" style={{ margin: 0 }}>
-                {swapped.message}
-              </p>
+                {job.flushes.length > 0 && (
+                  <optgroup label="材料グループ">
+                    {job.flushes.map((f) => (
+                      <option key={f.id} value={`flush:${f.id}`}>
+                        {f.name}（厚み {fmt(flushThickness(f, job.boards))}mm）
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="new-group">＋ 材料グループを作る</option>
+              </select>
               <button
                 type="button"
                 className="btn"
+                aria-label="選んでいる材料を設定で編集"
+                aria-disabled={draft.flushId === undefined && draft.boardId === null}
                 onClick={() => {
-                  patch({ expr: swapped.before })
-                  setSwapped(null)
+                  if (draft.flushId !== undefined) setMaterialEdit({ kind: 'group', id: draft.flushId })
+                  else if (draft.boardId !== null) setMaterialEdit({ kind: 'board', id: draft.boardId })
                 }}
               >
-                元に戻す
+                編集
               </button>
             </div>
-          )}
-        </div>
-      )}
-
-      {AXES.map((axis) => (
-        <FormulaInput
-          key={axis}
-          axis={axis}
-          value={draft.expr[axis]}
-          job={job}
-          thicknessId={draft.flushId ?? draft.boardId}
-          onChange={(v) => {
-            setSwapped(null)
-            patch({ expr: { ...draft.expr, [axis]: v } })
-          }}
-          parts={job.parts.filter((p) => p.id !== draft.id)}
-          finished={dims.finished?.[axis] ?? null}
-          finishedOf={finishedOf}
-          // 厚みが合わないエラーは「厚み」の欄の下に出すので、式の下（2行の枠）には式のエラーだけを出す
-          errors={dims.errors.filter((e) => e.axis === axis && e.kind !== 'thicknessMismatch')}
-          open={padAxis === axis}
-          onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
-        />
-      ))}
-
-      {cutting && (
-        <>
-          <div className="field">
-            {choice.showSelector && (
-              <Help className="label" title="厚み">
-                W・H・D のうち、材料の厚みにあたる寸法です
-              </Help>
-            )}
-            {!choice.showSelector ? (
-              <p className="thick-auto" style={{ margin: 0 }}>
-                {board ? `厚み：${choice.autoAxis ?? '—'}（自動）` : '厚み：材料を選ぶと自動で決まります'}
-              </p>
-            ) : (
-              <Segmented<Axis | 'auto'>
-                ariaLabel="厚み"
-                value={draft.thicknessAxis ?? 'auto'}
-                options={[
-                  { value: 'auto', label: dims.thicknessAuto && dims.thicknessAxis ? `自動（${dims.thicknessAxis}）` : '自動' },
-                  ...AXES.map((a) => ({ value: a, label: a })),
-                ]}
-                onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
-              />
-            )}
-            {choice.showSelector && choice.ambiguous && (
-              <span className="hint">
-                材料の厚みと同じ寸法が {choice.candidates.join('・')} にあります。どれが厚みか選んでください
-              </span>
-            )}
-            {blockers.length > 0 && (
-              <div className="part-errors" role="alert">
-                {blockers.map((m) => (
-                  <p key={m} className="msg err" style={{ margin: 0 }}>
-                    {m}
-                  </p>
-                ))}
+            {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
+            {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
+            {partIsNoCut(job, draft) && <p className="msg warn">木取りしない材料なので、木取りの計算には入りません</p>}
+            {swapped && (
+              <div className="swap-note" role="status">
+                <p className="msg ok" style={{ margin: 0 }}>
+                  {swapped.message}
+                </p>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    patch({ expr: swapped.before })
+                    setSwapped(null)
+                  }}
+                >
+                  元に戻す
+                </button>
               </div>
             )}
           </div>
+        )}
 
-          <div className="field">
-            <span className="label">木目</span>
-            {faces ? (
-              <Segmented<PartGrain>
-                ariaLabel="木目"
-                value={grain}
-                options={[
-                  ...faces.map((a) => ({ value: a, label: `${a}方向` })),
-                  { value: 'any', label: 'どちらでもよい' },
-                ]}
-                onChange={(v) => patch({ grain: v })}
-              />
-            ) : (
-              <span className="hint">厚みが決まると選べます</span>
-            )}
-          </div>
-
-          <div className="field">
-            <label className="label" htmlFor="part-allowance">
-              切り代
-            </label>
-            <NumberField
-              id="part-allowance"
-              ariaLabel="切り代"
-              allowEmpty
-              placeholder={`空欄＝${draft.flushId !== undefined ? '初期値 ' : ''}${fmt(partAllowance({ allowance: null, flushId: draft.flushId }, job.settings))}`}
-              value={draft.allowance}
-              onChange={(v) => patch({ allowance: v })}
-            />
-            <span className="hint">フラッシュの部材だけに足します（ほかの部材は、入れたときだけ足します）</span>
-          </div>
-        </>
-      )}
-
-      <div className="field">
-        <Help className="label" title="メモ（任意）">
-          寸法表にも出ます
-        </Help>
-        <textarea
-          id="part-memo"
-          aria-label="メモ"
-          className="input memo-input"
-          rows={3}
-          value={draft.memo}
-          placeholder="例：切り出したあとに穴あけ"
-          onChange={(e) => patch({ memo: e.target.value })}
-        />
-      </div>
-
-      {error && <p className="msg err">{error}</p>}
-      {!error && blockers.length > 0 && <p className="msg err">厚みの寸法が材料の厚みと合わないうちは{part ? '保存' : '追加'}できません</p>}
-      <div className="sheet-foot">
-        <button type="button" className="btn primary" aria-disabled={blockers.length > 0} onClick={save}>
-          {part ? '保存する' : '追加する'}
-        </button>
-      </div>
-
-      {part &&
-        (confirming ? (
-          <div className="card stack" role="alertdialog" aria-label="部材の削除の確認">
-            {referencing.length > 0 && (
-              <p className="msg warn" style={{ margin: 0 }}>
-                <b>{referencing.join('・')}</b> の式がこの部材の寸法を使っています。削除すると、その式はエラーになります。
-              </p>
-            )}
-            <p style={{ margin: 0 }}>「{part.name}」を削除しますか？</p>
-            <div className="sheet-foot">
-              <button type="button" className="btn" onClick={() => setConfirming(false)}>
-                やめる
-              </button>
-              <button type="button" className="btn danger solid" onClick={remove}>
-                削除する
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" className="btn danger wide" onClick={() => setConfirming(true)}>
-            この部材を削除
-          </button>
+        {AXES.map((axis) => (
+          <FormulaInput
+            key={axis}
+            axis={axis}
+            value={draft.expr[axis]}
+            job={job}
+            thicknessId={draft.flushId ?? draft.boardId}
+            onChange={(v) => {
+              setSwapped(null)
+              patch({ expr: { ...draft.expr, [axis]: v } })
+            }}
+            parts={job.parts.filter((p) => p.id !== draft.id)}
+            finished={dims.finished?.[axis] ?? null}
+            finishedOf={finishedOf}
+            // 厚みが合わないエラーは「厚み」の欄の下に出すので、式の下（2行の枠）には式のエラーだけを出す
+            errors={dims.errors.filter((e) => e.axis === axis && e.kind !== 'thicknessMismatch')}
+            open={padAxis === axis}
+            onOpenChange={(o) => setPadAxis(o ? axis : padAxis === axis ? null : padAxis)}
+          />
         ))}
-    </Sheet>
+
+        {cutting && (
+          <>
+            <div className="field">
+              {choice.showSelector && (
+                <Help className="label" title="厚み">
+                  W・H・D のうち、材料の厚みにあたる寸法です
+                </Help>
+              )}
+              {!choice.showSelector ? (
+                <p className="thick-auto" style={{ margin: 0 }}>
+                  {board ? `厚み：${choice.autoAxis ?? '—'}（自動）` : '厚み：材料を選ぶと自動で決まります'}
+                </p>
+              ) : (
+                <Segmented<Axis | 'auto'>
+                  ariaLabel="厚み"
+                  value={draft.thicknessAxis ?? 'auto'}
+                  options={[
+                    { value: 'auto', label: dims.thicknessAuto && dims.thicknessAxis ? `自動（${dims.thicknessAxis}）` : '自動' },
+                    ...AXES.map((a) => ({ value: a, label: a })),
+                  ]}
+                  onChange={(v) => patch({ thicknessAxis: v === 'auto' ? null : v })}
+                />
+              )}
+              {choice.showSelector && choice.ambiguous && (
+                <span className="hint">
+                  材料の厚みと同じ寸法が {choice.candidates.join('・')} にあります。どれが厚みか選んでください
+                </span>
+              )}
+              {blockers.length > 0 && (
+                <div className="part-errors" role="alert">
+                  {blockers.map((m) => (
+                    <p key={m} className="msg err" style={{ margin: 0 }}>
+                      {m}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="field">
+              <span className="label">木目</span>
+              {faces ? (
+                <Segmented<PartGrain>
+                  ariaLabel="木目"
+                  value={grain}
+                  options={[
+                    ...faces.map((a) => ({ value: a, label: `${a}方向` })),
+                    { value: 'any', label: 'どちらでもよい' },
+                  ]}
+                  onChange={(v) => patch({ grain: v })}
+                />
+              ) : (
+                <span className="hint">厚みが決まると選べます</span>
+              )}
+            </div>
+
+            <div className="field">
+              <label className="label" htmlFor="part-allowance">
+                切り代
+              </label>
+              <NumberField
+                id="part-allowance"
+                ariaLabel="切り代"
+                allowEmpty
+                placeholder={`空欄＝${draft.flushId !== undefined ? '初期値 ' : ''}${fmt(partAllowance({ allowance: null, flushId: draft.flushId }, job.settings))}`}
+                value={draft.allowance}
+                onChange={(v) => patch({ allowance: v })}
+              />
+              <span className="hint">材料グループの部材だけに足します（材料の部材は、入れたときだけ足します）</span>
+            </div>
+          </>
+        )}
+
+        <div className="field">
+          <Help className="label" title="メモ（任意）">
+            寸法表にも出ます
+          </Help>
+          <textarea
+            id="part-memo"
+            aria-label="メモ"
+            className="input memo-input"
+            rows={3}
+            value={draft.memo}
+            placeholder="例：切り出したあとに穴あけ"
+            onChange={(e) => patch({ memo: e.target.value })}
+          />
+        </div>
+
+        {error && <p className="msg err">{error}</p>}
+        {!error && blockers.length > 0 && <p className="msg err">厚みの寸法が材料の厚みと合わないうちは{part ? '保存' : '追加'}できません</p>}
+        <div className="sheet-foot">
+          <button type="button" className="btn primary" aria-disabled={blockers.length > 0} onClick={save}>
+            {part ? '保存する' : '追加する'}
+          </button>
+        </div>
+
+        {part &&
+          (confirming ? (
+            <div className="card stack" role="alertdialog" aria-label="部材の削除の確認">
+              {referencing.length > 0 && (
+                <p className="msg warn" style={{ margin: 0 }}>
+                  <b>{referencing.join('・')}</b> の式がこの部材の寸法を使っています。削除すると、その式はエラーになります。
+                </p>
+              )}
+              <p style={{ margin: 0 }}>「{part.name}」を削除しますか？</p>
+              <div className="sheet-foot">
+                <button type="button" className="btn" onClick={() => setConfirming(false)}>
+                  やめる
+                </button>
+                <button type="button" className="btn danger solid" onClick={remove}>
+                  削除する
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="btn danger wide" onClick={() => setConfirming(true)}>
+              この部材を削除
+            </button>
+          ))}
+      </Sheet>
+      {materialEdit && (
+        <MaterialEditSheet
+          target={materialEdit}
+          onClose={(id) => {
+            setMaterialEdit(null)
+            if (id !== null) setCreatedGroup(id)
+          }}
+        />
+      )}
+    </>
   )
 }

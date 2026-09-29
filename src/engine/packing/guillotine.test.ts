@@ -154,10 +154,54 @@ describe('packGuillotine 縦切り優先（右から帯詰め、帯の中は上�
     expect(r0.sheets[0].strips).toHaveLength(1)
   })
 
-  it('帯より細い片は帯の右端に寄せ、前の片の下に刃厚をあけて置く', () => {
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
+  it('帯より細い片は帯の右端に寄せ、前の片の下に刃厚をあけて置く（板の残りの幅が足りず、新しい帯を作れないとき）', () => {
+    // 700 の帯の左の残りは 905 − 700 − 3 = 202 で、300 の帯は作れない
+    const r = packGuillotine([piece('wide', 700, 1000), piece('narrow', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
     expect(r.sheets[0].strips).toHaveLength(1)
     expect(rect(placements(r, 0)[1])).toEqual({ x: 605, y: 17, w: 300, h: 800 })
+  })
+
+  describe('帯の中は同じ幅の部材を優先する（E-68。仕様書 8）', () => {
+    it('幅 400 の帯があっても、板の残りの幅があれば幅 300 の片は新しい帯に入る', () => {
+      const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
+      expect(r.sheets[0].strips.map((st) => st.local.pw)).toEqual([400, 300])
+      expect(rect(placements(r, 0)[1])).toEqual({ x: 202, y: 1020, w: 300, h: 800 })
+    })
+
+    it('板の残りの幅がちょうど足りれば新しい帯、1mm 足りなければ広い帯に入る', () => {
+      // 使える幅 905：602 ＋ 刃厚 3 ＋ 300 ＝ 905 ぴったり
+      const fit = packGuillotine([piece('a', 602, 1000), piece('b', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
+      expect(fit.sheets[0].strips).toHaveLength(2)
+      const over = packGuillotine([piece('a', 603, 1000), piece('b', 300, 800)], SABUROKU_USABLE, 3, 'vertical')
+      expect(over.sheets[0].strips.map((st) => st.items.map((i) => i.placement.name))).toEqual([['a', 'b']])
+    })
+
+    it('同じ幅の帯があれば、先にある広い帯より同じ幅の帯に入る', () => {
+      const r = packGuillotine(
+        [piece('w', 400, 1000), piece('n1', 300, 1000), piece('n2', 300, 500)],
+        SABUROKU_USABLE,
+        3,
+        'vertical',
+      )
+      expect(r.sheets[0].strips.map((st) => st.items.map((i) => i.placement.name))).toEqual([['w'], ['n1', 'n2']])
+      // 第2.4版までの並べ方では、先にある広い帯（400）の残りに入れていた
+      const old = packGuillotine(
+        [piece('w', 400, 1000), piece('n1', 300, 1000), piece('n2', 300, 500)],
+        SABUROKU_USABLE,
+        3,
+        'vertical',
+        false,
+      )
+      expect(old.sheets[0].strips.map((st) => st.items.map((i) => i.placement.name))).toEqual([['w', 'n2'], ['n1']])
+    })
+
+    it('同じ幅の帯でも、残りの長さに刃厚ぶん入らなければ使わない', () => {
+      // 300 の帯の残り：1820 − 1500 − 3 ＝ 317。長さ 317 は入り、318 は入らない（新しい帯）
+      const fit = packGuillotine([piece('a', 300, 1500), piece('b', 300, 317)], SABUROKU_USABLE, 3, 'vertical')
+      expect(fit.sheets[0].strips).toHaveLength(1)
+      const over = packGuillotine([piece('a', 300, 1500), piece('b', 300, 318)], SABUROKU_USABLE, 3, 'vertical')
+      expect(over.sheets[0].strips).toHaveLength(2)
+    })
   })
 
   it('前の板の帯に空きがあれば、そこに戻して入れる（First Fit）', () => {
@@ -290,10 +334,11 @@ describe('packGuillotine 横切り優先（横長に置き、右から妻手の�
   })
 
   it('帯より細い片は帯の右端に寄せ、前の片の下に刃厚をあけて置く', () => {
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], LANDSCAPE_USABLE, 3, 'horizontal')
+    // 1100 の帯の左の残りは 1815 − 1100 − 3 ＝ 712 で、800 の帯は作れない
+    const r = packGuillotine([piece('wide', 400, 1100), piece('narrow', 300, 800)], LANDSCAPE_USABLE, 3, 'horizontal')
     expect(r.sheets[0].strips).toHaveLength(1)
     expect(placements(r, 0).map((p) => rect(p))).toEqual([
-      { x: 815, y: 510, w: 1000, h: 400 },
+      { x: 715, y: 510, w: 1100, h: 400 },
       { x: 1015, y: 207, w: 800, h: 300 },
     ])
   })

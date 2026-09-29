@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../../engine/dimensions'
 import { bookshelfJob } from '../../engine/fixtures/bookshelf'
-import { sampleFlushJob } from '../../engine/fixtures/flush'
+import { sampleGroupJob } from '../../engine/fixtures/flush'
 import { packJob } from '../../engine/packing'
 import type { Job } from '../../engine/types'
 import { sampleFromTemplate } from '../sample'
@@ -53,7 +53,7 @@ describe('readTransferFile：共有のファイル', () => {
   })
 
   it('stackSheets の無い仕事は今の読み込みと同じに組の行ができる', () => {
-    const raw = JSON.parse(JSON.stringify(sampleFlushJob(true)))
+    const raw = JSON.parse(JSON.stringify(sampleGroupJob(true)))
     delete raw.stackSheets
     const r = readTransferFile(shareText(raw))
     if (!r.ok || r.kind !== 'share') throw new Error('読めない')

@@ -1,10 +1,17 @@
-// フラッシュの見本（仕様書 4「フラッシュ」の例）：フラッシュ25（芯材15・メラミン1×2・ラワン4×2）で天板を2枚
+// フラッシュの見本（仕様書 4「フラッシュ」の例）：フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2）で天板を2枚。
+// 芯材は「芯材15（木取りしない）」の材料（第2.5版。以前の芯材 core の形は fixtures/legacyFlush.ts だけが作る）
 import { defaultSettings } from '../defaults'
-import type { Job, Part } from '../types'
+import type { Board, Job, Part } from '../types'
 
 export const MELAMINE_1_ID = 'board-melamine-1'
 export const LAUAN_4_ID = 'board-lauan-4'
 export const FLUSH_25_ID = 'flush-25'
+export const CORE_15_ID = 'board-core-15'
+
+/** 芯材15（木取りしない・4×8。以前のデータを移し替えたときと同じ形） */
+function core15(): Board {
+  return { id: CORE_15_ID, material: '芯材', thickness: 15, sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long', noCut: true }
+}
 
 /** テスト用の部材（足りない項目は初期値） */
 export function flushPart(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>): Part {
@@ -20,7 +27,7 @@ export function flushPart(p: Partial<Part> & Pick<Part, 'id' | 'name' | 'expr'>)
   }
 }
 
-/** 天板（W900・H25・D600、フラッシュ25、2枚、木目 W）だけの仕事。材料は 3×6 */
+/** 天板（W900・H25・D600、フラッシュ25、2枚、木目 W）だけの仕事。材料は 3×6（芯材15 は材料の最後）。フラッシュ25 は form: 'flush'・autoName: true */
 export function flushJob(): Job {
   const sheet = { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
   return {
@@ -30,16 +37,19 @@ export function flushJob(): Job {
     boards: [
       { id: MELAMINE_1_ID, material: 'メラミン', thickness: 1, ...sheet },
       { id: LAUAN_4_ID, material: 'ラワン', thickness: 4, ...sheet },
+      core15(),
     ],
     flushes: [
       {
         id: FLUSH_25_ID,
         name: 'フラッシュ25',
-        core: 15,
         faces: [
+          { boardId: CORE_15_ID, count: 1 },
           { boardId: MELAMINE_1_ID, count: 2 },
           { boardId: LAUAN_4_ID, count: 2 },
         ],
+        form: 'flush',
+        autoName: true,
       },
     ],
     parts: [
@@ -64,10 +74,12 @@ export const LAUAN_55_ID = 'board-lauan-5.5'
 export const SAMPLE_FLUSH_ID = 'flush-sample-25'
 
 /**
- * 第1.7版の見本（S-14。store の sampleFromTemplate をひな形の初期値で作ったものと同じ中身、id は固定）。
- * 材料は メラミン1・ラワン2.5・ラワン4・ラワン5.5（3×6）。組（メラミン1＋ラワン4）の設定も 3×6（第2.3版）。stack を true にすると第2.0版の見本（フラッシュ25 の重ね切りオン）
+ * 第1.7版の見本（S-14。id は固定）を第2.5版の材料グループの形にしたもの。
+ * 材料は メラミン1・ラワン2.5・ラワン4・ラワン5.5（3×6）と、最後に 芯材15（木取りしない・4×8）。
+ * フラッシュ25 の中身は 芯材15×1・メラミン1×2・ラワン4×2、form: 'flush'・autoName: true。
+ * 組（メラミン1＋ラワン4）の設定も 3×6（第2.3版）。stack を true にすると第2.0版の見本（フラッシュ25 の重ね切りオン）
  */
-export function sampleFlushJob(stack = false): Job {
+export function sampleGroupJob(stack = false): Job {
   const sheet = { sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' } as const
   const settings = defaultSettings()
   settings.nige = [{ id: 'nige-1', name: '逃げ', value: 1 }]
@@ -81,17 +93,20 @@ export function sampleFlushJob(stack = false): Job {
       { id: LAUAN_25_ID, material: 'ラワン', thickness: 2.5, ...sheet, builtIn: true },
       { id: LAUAN_4_ID, material: 'ラワン', thickness: 4, ...sheet, builtIn: true },
       { id: LAUAN_55_ID, material: 'ラワン', thickness: 5.5, ...sheet, builtIn: true },
+      core15(),
     ],
     flushes: [
       {
         id: SAMPLE_FLUSH_ID,
         name: 'フラッシュ25',
-        core: 15,
         faces: [
+          { boardId: CORE_15_ID, count: 1 },
           { boardId: MELAMINE_1_ID, count: 2 },
           { boardId: LAUAN_4_ID, count: 2 },
         ],
         ...(stack ? { stack: true as const } : {}),
+        form: 'flush',
+        autoName: true,
       },
     ],
     parts: [

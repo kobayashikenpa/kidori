@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { packJob } from '../engine/packing'
-import { canStack, stackKey, stackPlan } from '../engine/packing/stack'
+import type { LegacyFlush } from '../engine/migrate/flushCore'
+import { canStack, cutFaces, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { findStackSheet, stackChoice, usesStock } from '../engine/packing/stock'
 import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
@@ -37,7 +38,11 @@ const SIZES: Pick<Board, 'sizeKind' | 'width' | 'length' | 'grain'>[] = [
   { sizeKind: 'custom', width: 910, length: 1820, grain: 'short' },
 ]
 
-/** legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる） */
+/**
+ * legacy：第2.2版の作り方（組の設定を作らない＝乱数を使わない。v22StackGolden.json と同じ仕事になる）。
+ * フラッシュの芯材は、legacy なら以前の形（core）、そうでなければ 芯材◯（木取りしない）の材料と中身の先頭の1行（第2.5版）。
+ * どちらも乱数の使い方は同じ
+ */
 function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   const boards: Board[] = [
     ['メラミン', 1],
@@ -51,14 +56,26 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     // 多くは 3×6 にそろえ、ときどきずらす（そろわない組を作る）
     ...(r() < 0.75 ? SIZES[0] : pickOne(r, SIZES)),
   }))
-  const flushes: Flush[] = []
+  const flushes: LegacyFlush[] = []
+  const coreBoards: Board[] = []
+  const coreOf = (t: number): string => {
+    let b = coreBoards.find((x) => x.thickness === t)
+    if (!b) {
+      b = { id: `core-${t}`, material: '芯材', thickness: t, ...SIZES[1], noCut: true }
+      coreBoards.push(b)
+    }
+    return b.id
+  }
   for (let i = 0; i < int(r, 1, 3); i++) {
     const n = r() < 0.8 ? 2 : int(r, 1, 3)
     const ids = [...boards.map((b) => b.id)].sort(() => r() - 0.5).slice(0, n)
     const count = int(r, 1, 2)
     const faces = ids.map((boardId) => ({ boardId, count: r() < 0.85 ? count : int(r, 1, 2) }))
-    const f: Flush = { id: `f${i}`, name: `フラッシュ${i}`, core: int(r, 10, 20), faces }
-    if (canStack(f) && r() < 0.8) f.stack = true
+    const core = int(r, 10, 20)
+    const f: LegacyFlush = legacy
+      ? { id: `f${i}`, name: `フラッシュ${i}`, core, faces }
+      : { id: `f${i}`, name: `フラッシュ${i}`, faces: [{ boardId: coreOf(core), count: 1 }, ...faces] }
+    if (canStack(f, [...boards, ...coreBoards]) && r() < 0.8) f.stack = true
     flushes.push(f)
   }
   const parts: Part[] = []
@@ -82,9 +99,11 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
   }
   // 組の行の設定（第2.3版）：組ごとに、ときどき行を作る（無ければ 4×8）。大きさはでたらめ、ときどき手持ち。a・b の並びもでたらめ
   const stackSheets: StackSheet[] = []
+  const allBoards = [...boards, ...coreBoards]
   for (const f of legacy ? [] : flushes) {
-    if (!canStack(f) || r() < 0.3) continue
-    const ids: [string, string] = r() < 0.5 ? [f.faces[0].boardId, f.faces[1].boardId] : [f.faces[1].boardId, f.faces[0].boardId]
+    if (!canStack(f, allBoards) || r() < 0.3) continue
+    const [c0, c1] = cutFaces(f, allBoards)
+    const ids: [string, string] = r() < 0.5 ? [c0.boardId, c1.boardId] : [c1.boardId, c0.boardId]
     if (stackSheets.some((x) => x.boardIds.includes(ids[0]) && x.boardIds.includes(ids[1]))) continue
     const row: StackSheet = { boardIds: ids, ...(r() < 0.6 ? SIZES[0] : pickOne(r, SIZES)) }
     if (r() < 0.25) {
@@ -101,7 +120,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     id: `job-${seed}`,
     name: `乱数${seed}`,
     settings,
-    boards,
+    boards: allBoards,
     flushes,
     parts,
     frozenSheets: [],
@@ -149,8 +168,9 @@ function expected(job: Job, excluded: Set<string>): Map<string, number> {
   const out = new Map<string, number>()
   for (const p of job.parts) {
     if (excluded.has(p.id) || p.quantity < 1) continue
+    // 木取りしない材料（第2.5版の芯材）の中身は片にならない
     const faces = p.flushId !== undefined
-      ? job.flushes.find((f) => f.id === p.flushId)!.faces
+      ? cutFaces(job.flushes.find((f) => f.id === p.flushId)!, job.boards)
       : [{ boardId: p.boardId!, count: 1 }]
     for (const f of faces) out.set(`${p.id}|${f.boardId}`, (out.get(`${p.id}|${f.boardId}`) ?? 0) + f.count * p.quantity)
   }
@@ -263,7 +283,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
           const i = int(r, 0, job.flushes.length - 1)
           const f = job.flushes[i]
           const { stack: _s, ...rest } = f
-          const next: Flush = f.stack ? rest : canStack(f) ? { ...f, stack: true } : f
+          const next: Flush = f.stack ? rest : canStack(f, job.boards) ? { ...f, stack: true } : f
           job = { ...job, flushes: job.flushes.map((x, j) => (j === i ? next : x)) }
         }
         checkJob(job)
@@ -279,7 +299,8 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       expect(packJob(job, computeDimensions(job))).toEqual(first)
     }
     expect(frozenStacks).toBeGreaterThan(20)
-  })
+    // 40件 × 25回 packJob するので、ほかのテストと同時に走って重いときでも止まらないよう 20 秒まで待つ（中身の確かめは同じ）
+  }, 20_000)
 
   it('部材 100 枚超（重ね切りあり）でも 1 件 2 秒以内', () => {
     for (let seed = 1; seed <= 5; seed++) {
@@ -324,7 +345,15 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
       expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
       expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
-      expect(job.flushes.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      // 芯材（core）は 芯材◯（木取りしない）の材料と中身の先頭に移る（第2.5版）。戻すと第2.2版と同じ
+      const cores = new Map(job.boards.filter((b) => b.noCut).map((b) => [b.id, b.thickness]))
+      const back = job.flushes.map(({ form: _f, autoName: _a, ...f }) => ({
+        ...f,
+        core: cores.get(f.faces[0].boardId),
+        faces: f.faces.slice(1),
+      }))
+      expect(back.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      expect(job.boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
       if (unstacked.length > 0) unstackedJobs++
       const r = checkJob(job)
       if (kinds.some((k) => k.kind === 'custom')) {
@@ -333,7 +362,9 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         customCommon++
       } else {
         // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
-        expect(digest(r), `seed ${seed}`).toEqual(table[`s${seed}`])
+        // 第2.5版（E-68）で帯の並べ方（同じ幅を優先）を変えたので、第2.2版と比べるのは第2.4版までの並べ方で並べた結果
+        const old = packJob(job, computeDimensions(job), undefined, { sameWidthFirst: false })
+        expect(digest(old), `seed ${seed}`).toEqual(table[`s${seed}`])
         unchanged++
       }
     }

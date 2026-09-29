@@ -67,11 +67,11 @@ function apply(state: StoreState, text: string): { state: StoreState; message: s
 }
 
 describe('buildBackup', () => {
-  it('外側は kind: backup・version 1・dataVersion 2。仕事はそのまま、ひな形あり', () => {
+  it('外側は kind: backup・version 1・dataVersion 3。仕事はそのまま、ひな形あり', () => {
     const a = checkedSample()
     const t = templateOf(a)
     const data = JSON.parse(buildBackup(stateOf([a], t), NOW))
-    expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'backup', 1, 2, NOW.toISOString()])
+    expect([data.app, data.kind, data.version, data.dataVersion, data.exportedAt]).toEqual(['kidori', 'backup', 1, 3, NOW.toISOString()])
     expect(data.jobs).toEqual([a])
     expect(data.template).toEqual(t)
   })

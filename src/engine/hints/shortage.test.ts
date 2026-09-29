@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { bookshelfJob, LUMBER_18_ID } from '../fixtures/bookshelf'
-import { LAUAN_4_ID, sampleFlushJob } from '../fixtures/flush'
+import { LAUAN_4_ID, sampleGroupJob } from '../fixtures/flush'
 import { withStock, type StockRowDraft } from '../fixtures/stock'
 import { packJob } from '../packing'
 import type { Job } from '../types'
@@ -86,7 +86,7 @@ describe('stockShortage（手持ちが足りないときの解決策）', () => 
 
   it('重ね切りの見本でラワン 4 の手持ちが 600×1200 ×5 → 背板が入らない。3×6 を 1枚・4×8 を 1枚（組は組の設定 3×6 のまま）', () => {
     const small = { width: 600, length: 1200, grain: 'long' as const, count: 5 }
-    const job = withStock(sampleFlushJob(true), LAUAN_4_ID, [small])
+    const job = withStock(sampleGroupJob(true), LAUAN_4_ID, [small])
     const [s] = run(job)
     expect(s.message).toBe('ラワン 4mm が足りません（入らない部材：背板）')
     expect(s.change).toBeNull()
@@ -95,14 +95,14 @@ describe('stockShortage（手持ちが足りないときの解決策）', () => 
       { kind: 'shihachi', count: 1 },
     ])
     // 第2.3版：材料の手持ちから組の分を引かないので、3×6 ×1 で足りる
-    expect(run(withStock(sampleFlushJob(true), LAUAN_4_ID, [['3×6', 1]]))).toEqual([])
+    expect(run(withStock(sampleGroupJob(true), LAUAN_4_ID, [['3×6', 1]]))).toEqual([])
   })
 
   it('材料を減らせるときのお知らせは、手持ちが足りない材料に出さない（組は組の手持ちなので別。第2.3版）', () => {
     // 端切りを小さくすると3枚 → 2枚になる仕事でも、手持ちが足りなければお知らせは出ない
     const job = lumberStock([['3×6', 2]])
     expect(findSavingHints(job).filter((h) => h.materials.some((m) => m.boardId === LUMBER_18_ID))).toEqual([])
-    const stacked = withStock(sampleFlushJob(true), LAUAN_4_ID, [{ width: 600, length: 1200, grain: 'long', count: 5 }])
+    const stacked = withStock(sampleGroupJob(true), LAUAN_4_ID, [{ width: 600, length: 1200, grain: 'long', count: 5 }])
     expect(findSavingHints(stacked).flatMap((h) => h.materials.map((m) => m.boardId))).not.toContain(LAUAN_4_ID)
   })
 

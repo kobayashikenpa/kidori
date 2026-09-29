@@ -3,8 +3,8 @@ import type { Job } from '../../engine/types'
 
 /** 外側の形の版（このファイルの形）。形を変えたら上げる。古い数の読み方は消さない */
 export const TRANSFER_VERSION = 1
-/** 中の仕事の形の版（= 保存データの版） */
-export const TRANSFER_DATA_VERSION = 2
+/** 中の仕事の形の版（= 保存データの版。第2.5版で 3。1・2 のファイルも読んで移し替える） */
+export const TRANSFER_DATA_VERSION = 3
 /** 読む文字列の大きさの上限（20MB） */
 export const MAX_TRANSFER_SIZE = 20 * 1024 * 1024
 
@@ -18,7 +18,7 @@ export interface Envelope {
   app: 'kidori'
   kind: TransferKind
   version: 1
-  dataVersion: 1 | 2
+  dataVersion: 1 | 2 | 3
   exportedAt: string
 }
 
@@ -49,12 +49,12 @@ const isNewer = (v: unknown, current: number) => typeof v === 'number' && Number
  */
 export function checkEnvelope(
   data: unknown,
-): { ok: true; kind: TransferKind; dataVersion: 1 | 2; data: Record<string, unknown> } | { ok: false; message: string } {
+): { ok: true; kind: TransferKind; dataVersion: 1 | 2 | 3; data: Record<string, unknown> } | { ok: false; message: string } {
   if (!isRecord(data) || data.app !== 'kidori') return { ok: false, message: READ_FAILED }
   if (isNewer(data.version, TRANSFER_VERSION)) return { ok: false, message: NEWER_VERSION }
   if (data.version !== 1) return { ok: false, message: READ_FAILED }
   if (isNewer(data.dataVersion, TRANSFER_DATA_VERSION)) return { ok: false, message: NEWER_VERSION }
-  if (data.dataVersion !== 1 && data.dataVersion !== 2) return { ok: false, message: READ_FAILED }
+  if (data.dataVersion !== 1 && data.dataVersion !== 2 && data.dataVersion !== 3) return { ok: false, message: READ_FAILED }
   if (data.kind !== 'share' && data.kind !== 'backup') return { ok: false, message: READ_FAILED }
   return { ok: true, kind: data.kind, dataVersion: data.dataVersion, data }
 }

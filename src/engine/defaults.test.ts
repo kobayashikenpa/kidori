@@ -41,14 +41,18 @@ describe('defaultBoards（新しい仕事の材料）', () => {
   let n = 0
   const newId = (prefix: string) => `${prefix}-${++n}`
 
-  it('メラミン1・ラワン2.5・ラワン4・ラワン5.5 の4つ', () => {
+  it('メラミン1、ラワン・シナ 2.5〜30 の11ずつ、ポリ 2.5・4 の25（第2.5版。仕様書 5.1）', () => {
     const b = defaultBoards(newId)
+    const list = [2.5, 3, 4, 5.5, 9, 12, 15, 18, 21, 24, 30]
     expect(b.map((x) => [x.material, x.thickness])).toEqual([
       ['メラミン', 1],
-      ['ラワン', 2.5],
-      ['ラワン', 4],
-      ['ラワン', 5.5],
+      ...list.map((t) => ['ラワン', t]),
+      ...list.map((t) => ['シナ', t]),
+      ['ポリ', 2.5],
+      ['ポリ', 4],
     ])
+    expect(b).toHaveLength(25)
+    expect(b.every((x) => x.builtIn === true && x.noCut === undefined)).toBe(true)
   })
   it('すべて 4×8（1220×2440）・木目は長手方向（仕様書 5.1）', () => {
     for (const x of defaultBoards(newId)) {
@@ -61,14 +65,14 @@ describe('defaultBoards（新しい仕事の材料）', () => {
       prefixes.push(p)
       return newId(p)
     })
-    expect(prefixes).toEqual(['board', 'board', 'board', 'board'])
-    expect(new Set(b.map((x) => x.id)).size).toBe(4)
+    expect(prefixes).toEqual(b.map(() => 'board'))
+    expect(new Set(b.map((x) => x.id)).size).toBe(25)
   })
 })
 
 describe('boardTokenLabel（式の中の材料の厚みの表示）', () => {
   it('材料名＋厚み。mm は付けず、間に空白なし', () => {
-    const [, , lauan4] = defaultBoards((p) => `${p}-x${Math.random()}`)
+    const lauan4 = defaultBoards((p) => `${p}-x${Math.random()}`).find((b) => b.material === 'ラワン' && b.thickness === 4)!
     expect(boardTokenLabel(lauan4)).toBe('ラワン4')
     expect(boardTokenLabel({ material: 'ラワン', thickness: 2.5 })).toBe('ラワン2.5')
   })

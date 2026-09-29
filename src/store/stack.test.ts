@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
-import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleFlushJob } from '../engine/fixtures/flush'
+import { LAUAN_25_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleGroupJob } from '../engine/fixtures/flush'
 import { packJob } from '../engine/packing'
 import { stackKey, stackPlan } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
@@ -30,30 +30,30 @@ function memoryStorage(): KeyValueStorage {
   const map = new Map<string, string>()
   return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) }
 }
-const MSG = '重ねて切れるのは、表面材が2種類で枚数が同じときだけです'
+const MSG = '重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです'
 
 describe('フラッシュの重ね切りの設定（validateFlush・cleanFlush）', () => {
   it('表面材 メラミン1×2・ラワン4×1 で stack: true は断られる（足す・変える）', () => {
-    const job = sampleFlushJob(false)
+    const job = sampleGroupJob(false)
     const faces = [{ boardId: MELAMINE_1_ID, count: 2 }, { boardId: LAUAN_4_ID, count: 1 }]
-    expect(addFlush(job, { name: 'フラッシュ22', core: 15, faces, stack: true })).toEqual({ ok: false, message: MSG })
+    expect(addFlush(job, { name: 'フラッシュ22', faces, stack: true })).toEqual({ ok: false, message: MSG })
     const f = job.flushes[0]
-    expect(updateFlush(job, f.id, { name: f.name, core: f.core, faces, stack: true })).toEqual({ ok: false, message: MSG })
+    expect(updateFlush(job, f.id, { name: f.name, faces, stack: true })).toEqual({ ok: false, message: MSG })
   })
 
   it('条件に合えば stack: true を持ち、オフ（false・無し）は持たない', () => {
-    const job = sampleFlushJob(false)
+    const job = sampleGroupJob(false)
     const f = job.flushes[0]
-    const on = unwrap(updateFlush(job, f.id, { name: f.name, core: f.core, faces: f.faces, stack: true }))
+    const on = unwrap(updateFlush(job, f.id, { name: f.name, faces: f.faces, stack: true }))
     expect(on.flushes[0].stack).toBe(true)
-    const off = unwrap(updateFlush(on, f.id, { name: f.name, core: f.core, faces: f.faces, stack: false as unknown as true }))
+    const off = unwrap(updateFlush(on, f.id, { name: f.name, faces: f.faces, stack: false as unknown as true }))
     expect('stack' in off.flushes[0]).toBe(false)
-    const added = unwrap(addFlush(job, { name: 'フラッシュ21', core: 11, faces: f.faces, stack: true }, 'f2'))
-    expect(added.flushes[1]).toEqual({ id: 'f2', name: 'フラッシュ21', core: 11, faces: f.faces, stack: true })
+    const added = unwrap(addFlush(job, { name: 'フラッシュ21', faces: f.faces, stack: true }, 'f2'))
+    expect(added.flushes[1]).toEqual({ id: 'f2', name: 'フラッシュ21', faces: f.faces, stack: true })
   })
 
   it('ラワン 4 を削除すると フラッシュ25 の stack が外れる。ほかの材料を消しても外れない', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     expect('stack' in unwrap(removeBoards(job, [LAUAN_4_ID])).flushes[0]).toBe(false)
     expect(unwrap(removeBoards(job, [LAUAN_25_ID])).flushes[0].stack).toBe(true)
   })
@@ -61,7 +61,7 @@ describe('フラッシュの重ね切りの設定（validateFlush・cleanFlush�
 
 describe('読み込み（sanitizeFlushes・固定した1枚の stackWith）', () => {
   const raw = (edit: (j: any) => void) => {
-    const j = JSON.parse(JSON.stringify(sampleFlushJob(true)))
+    const j = JSON.parse(JSON.stringify(sampleGroupJob(true)))
     edit(j)
     return sanitizeJobs([j])
   }
@@ -82,7 +82,7 @@ describe('読み込み（sanitizeFlushes・固定した1枚の stackWith）', ()
   })
 
   function withFrozen(edit: (s: any) => void) {
-    let job = sampleFlushJob(true)
+    let job = sampleGroupJob(true)
     const m = pack(job).materials[0]
     const t = { kind: 'computed', boardId: MELAMINE_1_ID, stackWith: LAUAN_4_ID, mode: m.mode, layout: m.sheets[0] } as const
     job = unwrap(setPieceCheck(job, t, m.sheets[0].placements[0].pieceId, true, NOW, 'sheet-1'))
@@ -118,7 +118,7 @@ describe('読み込み（sanitizeFlushes・固定した1枚の stackWith）', ()
 
 describe('保存・引き継ぎ・コピー', () => {
   it('保存して読み込むと stack と stackWith が残る', () => {
-    let job = sampleFlushJob(true)
+    let job = sampleGroupJob(true)
     const m = pack(job).materials[0]
     const t = { kind: 'computed', boardId: MELAMINE_1_ID, stackWith: LAUAN_4_ID, mode: m.mode, layout: m.sheets[0] } as const
     job = unwrap(setPieceCheck(job, t, m.sheets[0].placements[0].pieceId, true, NOW, 'sheet-1'))
@@ -131,9 +131,9 @@ describe('保存・引き継ぎ・コピー', () => {
   })
 
   it('ひな形から新しい仕事を作ると stack が残る（材料が見つからず条件から外れると外す）', () => {
-    const tpl = templateOf(sampleFlushJob(true))
+    const tpl = templateOf(sampleGroupJob(true))
     expect(tpl.flushes[0].stack).toBe(true)
-    expect(sameTemplate(tpl, templateOf(sampleFlushJob(false)))).toBe(false)
+    expect(sameTemplate(tpl, templateOf(sampleGroupJob(false)))).toBe(false)
     const job = createJob('新しい仕事', tpl, NOW)
     expect(job.flushes[0].stack).toBe(true)
     expect(stackPlan(job).groups).toHaveLength(1)
@@ -148,7 +148,7 @@ describe('保存・引き継ぎ・コピー', () => {
   })
 
   it('仕事をコピーすると stack が残る（表面材は新しい材料を指す）', () => {
-    const copy = copyJob(sampleFlushJob(true), [], NOW, 'job-copy')
+    const copy = copyJob(sampleGroupJob(true), [], NOW, 'job-copy')
     expect(copy.flushes[0].stack).toBe(true)
     expect(stackPlan(copy).groups[0].boardIds).toEqual([copy.boards[0].id, copy.boards[2].id])
   })
@@ -156,7 +156,7 @@ describe('保存・引き継ぎ・コピー', () => {
 
 describe('組のチェック・サイズ', () => {
   it('組の計算した1枚目の側板にチェックすると frozenSheets の1枚に stackWith（ラワン 4）が付き、組が4枚に', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     const m = pack(job).materials[0]
     expect(m.boardId).toBe(KEY)
     const layout = m.sheets[0]
@@ -175,7 +175,7 @@ describe('組のチェック・サイズ', () => {
   })
 
   it('stackWith の材料が無い・自分と同じなら断る', () => {
-    const job = sampleFlushJob(true)
+    const job = sampleGroupJob(true)
     const m = pack(job).materials[0]
     const p = m.sheets[0].placements[0].pieceId
     for (const stackWith of ['board-none', MELAMINE_1_ID]) {
@@ -185,7 +185,7 @@ describe('組のチェック・サイズ', () => {
   })
 
   it('組の行で 4×8 を選ぶと組の設定だけ 4×8（第2.3版）。メラミン 1・ラワン 4 は変わらず、組は 4×8 で並ぶ', () => {
-    const job = unwrap(setRowSize(sampleFlushJob(true), [MELAMINE_1_ID, LAUAN_4_ID], SHIHACHI))
+    const job = unwrap(setRowSize(sampleGroupJob(true), [MELAMINE_1_ID, LAUAN_4_ID], SHIHACHI))
     expect(job.stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...SHIHACHI }])
     for (const id of [MELAMINE_1_ID, LAUAN_4_ID]) expect(job.boards.find((b) => b.id === id)?.sizeKind).toBe('saburoku')
     expect(stackPlan(job)).toMatchObject({ groups: [{ key: KEY }] })
@@ -196,7 +196,7 @@ describe('組のチェック・サイズ', () => {
   })
 
   it('重ね切りの組の材料の行で 4×8 を選んでも、相手の材料と組は変わらない（未決事項 36 は不要になった）', () => {
-    const job = unwrap(setRowSize(sampleFlushJob(true), LAUAN_4_ID, SHIHACHI))
+    const job = unwrap(setRowSize(sampleGroupJob(true), LAUAN_4_ID, SHIHACHI))
     expect(job.boards.find((b) => b.id === LAUAN_4_ID)).toMatchObject(SHIHACHI)
     expect(job.boards.find((b) => b.id === MELAMINE_1_ID)?.sizeKind).toBe('saburoku')
     expect(job.stackSheets[0].sizeKind).toBe('saburoku')
@@ -208,7 +208,7 @@ describe('組のチェック・サイズ', () => {
   })
 
   it('組の行を逆の並び（ラワン 4, メラミン 1）で指しても同じ行を変える', () => {
-    const job = unwrap(setRowSize(sampleFlushJob(true), [LAUAN_4_ID, MELAMINE_1_ID], SHIHACHI))
+    const job = unwrap(setRowSize(sampleGroupJob(true), [LAUAN_4_ID, MELAMINE_1_ID], SHIHACHI))
     expect(job.stackSheets).toHaveLength(1)
     expect(job.stackSheets[0]).toMatchObject({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'shihachi' })
     expect(job.flushes[0].id).toBe(SAMPLE_FLUSH_ID)

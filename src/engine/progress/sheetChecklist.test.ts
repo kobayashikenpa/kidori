@@ -15,9 +15,13 @@ const sheetsOf = (job: Job) => packJob(job, computeDimensions(job)).materials.fi
 const BOARD = { id: 'b', material: 'シナランバー', thickness: 18, sizeKind: 'saburoku' as const, width: 910, length: 1820, grain: 'long' as const }
 
 /** 片から1枚の配置（packJob と同じ組み立て）を作る */
+/**
+ * 1枚の配置。帯の中に幅の違う片が並ぶ配置を作るため、第2.4版までの並べ方（sameWidthFirst: false）で並べる
+ * （切る順番・取り出す順だけを確かめる。E-68 の並べ方は guillotine.test.ts）
+ */
 function layoutOf(pieces: Piece[], mode: 'vertical' | 'horizontal' = 'vertical', trim = 5, kerf = 3): SheetLayout {
   const usable = usableRect(BOARD, trim, mode)
-  const g = packGuillotine(pieces, usable, kerf, mode)
+  const g = packGuillotine(pieces, usable, kerf, mode, false)
   const sh = g.sheets[0]
   const placements: Placement[] = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
   return {

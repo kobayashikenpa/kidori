@@ -134,9 +134,12 @@ interface CoreSheet {
 /**
  * 帯詰めの本体。specs は手持ちの行（サイズを選んだ材料は1行・無限）、orient はその行に置いてよい片の向き。
  * 1. 帯の幅（p 方向）の大きい順 → 長さ（q 方向）の大きい順に並べる（基準の向きは、入る行のうち一番大きい値）
- * 2. 開いている板の帯を先頭から見て、幅が収まり残りの長さに刃厚込みで入る最初の帯に置く
+ * 2. 開いている板の帯を先頭から見て、片と同じ幅で、残りの長さに刃厚込みで入る最初の帯に置く
+ *    （帯の中に縦に並べるのは、なるべく同じ幅の部材だけ。第2.5版。仕様書 8。sameWidthFirst が false なら飛ばす）
  * 3. なければ、残りの幅がある板に新しい帯を作る
- * 4. それもなければ新しい板を出す：残りの枚数が 1 以上で、その片が入る行のうち面積が一番小さい行（同じなら登録順で前）
+ * 4. それもなければ、幅が収まり残りの長さに入る（幅の広い）最初の帯に置く
+ *    （sameWidthFirst が false なら第2.4版までと同じく 3 の前に、同じ幅に限らず置く）
+ * 5. それもなければ新しい板を出す：残りの枚数が 1 以上で、その片が入る行のうち面積が一番小さい行（同じなら登録順で前）
  * 計算量は 片の数 × 帯の数 ＋ 片の数 × 行の数
  */
 function packCore(
@@ -144,6 +147,7 @@ function packCore(
   specs: readonly CoreSpec[],
   kerf: number,
   orient: (piece: Piece, spec: number) => Orientation[],
+  sameWidthFirst: boolean,
 ): { sheets: CoreSheet[]; unplaced: Piece[]; used: number[] } {
   const items = pieces.map((piece, idx) => {
     // 行ごとの試す順：帯の中の方向に長く置く向き（main）を先に
@@ -168,7 +172,8 @@ function packCore(
   const sheets: WorkSheet[] = []
   const unplaced: Piece[] = []
 
-  const placeInStrips = (piece: Piece, tries: Cand[][]): boolean => {
+  /** exact：片と同じ幅の帯だけに置く。そうでなければ幅が収まる帯に置く */
+  const placeInStrips = (piece: Piece, tries: Cand[][], exact: boolean): boolean => {
     for (const sh of sheets) {
       const tryOrder = tries[sh.spec]
       if (tryOrder.length === 0) continue
@@ -176,7 +181,8 @@ function packCore(
       for (const st of sh.strips) {
         for (const c of tryOrder) {
           const q = round1(st.used + kerf)
-          if (round1(c.pw) <= round1(st.pw) && round1(q + c.qh) <= qCap) {
+          const wide = exact ? round1(c.pw) === round1(st.pw) : round1(c.pw) <= round1(st.pw)
+          if (wide && round1(q + c.qh) <= qCap) {
             st.items.push({ piece, c, q })
             st.used = round1(q + c.qh)
             return true
@@ -201,8 +207,14 @@ function packCore(
   }
 
   for (const { piece, tries } of items) {
-    if (placeInStrips(piece, tries)) continue
-    if (sheets.some((sh) => openStrip(sh, piece, tries[sh.spec]))) continue
+    if (sameWidthFirst) {
+      if (placeInStrips(piece, tries, true)) continue
+      if (sheets.some((sh) => openStrip(sh, piece, tries[sh.spec]))) continue
+      if (placeInStrips(piece, tries, false)) continue
+    } else {
+      if (placeInStrips(piece, tries, false)) continue
+      if (sheets.some((sh) => openStrip(sh, piece, tries[sh.spec]))) continue
+    }
     let placed = false
     // 新しい1枚：入る行のうち面積が一番小さい行（同じなら登録順）
     const order = specs.map((_, k) => k).sort((a, b) => specs[a].area - specs[b].area || a - b)
@@ -255,11 +267,18 @@ function packCore(
 
 /**
  * 片を帯詰めで1つの大きさの板（無限にある）に並べる。片の向きは piece.orientations。
- * 片はどれも使える範囲に入る向きを1つ以上持つこと（pieces.ts で確認済み）
+ * 片はどれも使える範囲に入る向きを1つ以上持つこと（pieces.ts で確認済み）。
+ * sameWidthFirst：帯の中は同じ幅の部材を優先する（第2.5版。false は第2.4版までの並べ方。比べるためだけに使う）
  */
-export function packGuillotine(pieces: readonly Piece[], usable: Rect, kerf: number, mode: StripMode): GuillotineResult {
+export function packGuillotine(
+  pieces: readonly Piece[],
+  usable: Rect,
+  kerf: number,
+  mode: StripMode,
+  sameWidthFirst = true,
+): GuillotineResult {
   const frame = frameOf(mode, usable)
-  const r = packCore(pieces, [{ count: Infinity, area: 0, frame }], kerf, (piece) => piece.orientations)
+  const r = packCore(pieces, [{ count: Infinity, area: 0, frame }], kerf, (piece) => piece.orientations, sameWidthFirst)
   return { frame, unplaced: r.unplaced, sheets: r.sheets.map((sh) => ({ strips: sh.strips })) }
 }
 
@@ -283,6 +302,7 @@ export function packOnStock(
   trim: number,
   kerf: number,
   mode: StripMode,
+  sameWidthFirst = true,
 ): StockPackResult {
   const specs = sheetSpecs(stock, trim, mode)
   // 向きは行ごと・片の形ごとに1回だけ計算する
@@ -303,6 +323,7 @@ export function packOnStock(
     specs.map((sp) => ({ count: sp.stock.count, area: sp.stock.width * sp.stock.length, frame: sp.frame })),
     kerf,
     orient,
+    sameWidthFirst,
   )
   return {
     sheets: core.sheets.map((sh) => ({ strips: sh.strips, stock: specs[sh.spec].stock, frame: specs[sh.spec].frame })),

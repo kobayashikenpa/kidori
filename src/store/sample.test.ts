@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { orderedBoards } from '../engine/boards'
+import { defaultBoards } from '../engine/defaults'
 import { computeDimensions } from '../engine/dimensions'
 import { flushThickness } from '../engine/flush'
 import { packJob } from '../engine/packing'
@@ -37,17 +38,19 @@ const boardOf = (job: Job, material: string, thickness: number) =>
   job.boards.filter((b) => b.material === material && b.thickness === thickness)
 
 describe('sampleFromTemplate（見本をひな形から作る。フラッシュ25 と ラワン4 だけ）', () => {
-  it('初期値のひな形から：材料は初期の4つのまま・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
+  it('初期値のひな形から：材料は最初からある材料＋芯材15（木取りしない）・フラッシュ25・逃げ0.5・1、寸法と木取りは見本の表どおり', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
     expect(job.name).toBe(SAMPLE_NAME)
-    expect(orderedBoards(job).map(boardLabel)).toEqual(['メラミン 1mm', 'ラワン 2.5mm', 'ラワン 4mm', 'ラワン 5.5mm'])
+    // 芯材15（木取りしない。第2.5版）は見本で足した材料なので上に並ぶ
+    expect(orderedBoards(job).map(boardLabel)).toEqual(['芯材 15mm', ...defaultBoards(() => 'x').map(boardLabel)])
+    expect(boardOf(job, '芯材', 15)[0].noCut).toBe(true)
     // 見本で使う材料は 3×6、使わない材料は 4×8 のまま
     for (const [m, t] of [['メラミン', 1], ['ラワン', 4]] as const) {
       expect(boardOf(job, m, t)[0]).toMatchObject({ sizeKind: 'saburoku', width: 910, length: 1820 })
     }
     expect(boardOf(job, 'ラワン', 2.5)[0].sizeKind).toBe('shihachi')
     expect(job.settings.nige.map((n) => n.value)).toEqual([0.5, 1])
-    expect(job.flushes.map((f) => [f.name, f.core, flushThickness(f, job.boards)])).toEqual([['フラッシュ25', 15, 25]])
+    expect(job.flushes.map((f) => [f.name, 'core' in f, flushThickness(f, job.boards)])).toEqual([['フラッシュ25', false, 25]])
 
     expect(computeDimensions(job).errors).toEqual([])
     expect(finishedOf(job, '側板')).toEqual({ W: 25, H: 1800, D: 400 })
@@ -94,7 +97,7 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     expect(partOf(job, '天地板').expr.H).toBe(flushT)
     expect(partOf(job, '棚板').expr.H).toBe(flushT)
     expect(partOf(job, '背板').expr.D).toBe(`{t:${boardOf(job, 'ラワン', 4)[0].id}}`)
-    const thicker = { ...job, flushes: [{ ...job.flushes[0], core: 18 }] }
+    const thicker = { ...job, boards: job.boards.map((b) => (b.material === '芯材' ? { ...b, thickness: 18 } : b)) }
     expect(finishedOf(thicker, '天地板')!.H).toBe(28)
     expect(finishedOf(thicker, '天地板')!.W).toBe(844)
   })
@@ -113,7 +116,9 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     a = must(addBoard(a, newBoard({ material: 'シナランバー', thickness: 18 })))
     a = must(addBoard(a, newBoard({ material: 'タモ', thickness: 20 })))
     const lauan25 = a.boards.find((b) => b.thickness === 2.5)!
-    a = must(addFlush(a, { name: 'フラッシュ21', core: 16, faces: [{ boardId: lauan25.id, count: 2 }] }))
+    const core16 = newBoard({ material: '芯材', thickness: 16, noCut: true })
+    a = must(addBoard(a, core16))
+    a = must(addFlush(a, { name: 'フラッシュ21', faces: [{ boardId: core16.id, count: 1 }, { boardId: lauan25.id, count: 2 }] }))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.settings).toMatchObject({ allowance: 5, kerf: 4, trim: 8, cutMode: 'horizontal' })
     expect(job.settings.nige.map((n) => [n.name, n.value])).toEqual([
@@ -123,7 +128,8 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     ])
     expect(boardOf(job, 'シナランバー', 18)).toHaveLength(1)
     expect(boardOf(job, 'タモ', 20)).toHaveLength(1)
-    expect(job.boards).toHaveLength(6)
+    // 最初からある25・シナランバー・タモ・芯材16（フラッシュ21 の中身）・芯材15（見本のフラッシュ25）
+    expect(job.boards).toHaveLength(29)
     expect(partOf(job, '側板').boardId).toBeNull()
     expect(job.flushes.map((f) => f.name)).toEqual(['フラッシュ21', 'フラッシュ25'])
     expect(dimOf(job, '側板').cutSize).toMatchObject({ H: 1805, D: 405 })
@@ -148,7 +154,9 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
   it('フラッシュ25 がすでにあれば、それを使う（中身が違っても重ねて作らない）', () => {
     let a = createJob('A', undefined, NOW, 'job-a')
     const mel = a.boards.find((b) => b.material === 'メラミン')!
-    a = must(addFlush(a, { name: 'フラッシュ25', core: 21, faces: [{ boardId: mel.id, count: 2 }] }))
+    const core21 = newBoard({ material: '芯材', thickness: 21, noCut: true })
+    a = must(addBoard(a, core21))
+    a = must(addFlush(a, { name: 'フラッシュ25', faces: [{ boardId: core21.id, count: 1 }, { boardId: mel.id, count: 2 }] }))
     const job = sampleFromTemplate(templateOf(a), NOW)
     expect(job.flushes).toHaveLength(1)
     // ひな形のフラッシュ25 の重ね切りの設定はそのまま（このフラッシュは表面材1種類なのでオフ）
@@ -163,14 +171,17 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     const base = createJob('A', undefined, NOW, 'job-a')
     const mel = base.boards.find((b) => b.material === 'メラミン')!
     const lauan = base.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!
+    const core15 = newBoard({ material: '芯材', thickness: 15, noCut: true })
+    const withCore = must(addBoard(base, core15))
     const faces = [
+      { boardId: core15.id, count: 1 },
       { boardId: mel.id, count: 2 },
       { boardId: lauan.id, count: 2 },
     ]
-    const off = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces }))
+    const off = must(addFlush(withCore, { name: 'フラッシュ25', faces }))
     expect(off.flushes[0].stack).toBeUndefined()
     expect(sampleFromTemplate(templateOf(off), NOW).flushes[0].stack).toBeUndefined()
-    const on = must(addFlush(base, { name: 'フラッシュ25', core: 15, faces, stack: true }))
+    const on = must(addFlush(withCore, { name: 'フラッシュ25', faces, stack: true }))
     expect(sampleFromTemplate(templateOf(on), NOW).flushes[0].stack).toBe(true)
   })
 
@@ -217,9 +228,10 @@ describe('sampleFromTemplate（見本をひな形から作る。フラッシュ2
     expect(finishedOf(job, '棚板')!.W).toBe(849)
   })
 
-  it('シナランバー・シナベニヤは足さない', () => {
+  it('シナランバー・シナベニヤは足さない（最初から入っている材料のほかに足すのは 芯材15 だけ）', () => {
     const job = sampleFromTemplate(defaultTemplate(), NOW)
-    expect(job.boards.some((b) => b.material.startsWith('シナ'))).toBe(false)
+    expect(job.boards.some((b) => b.material === 'シナランバー' || b.material === 'シナベニヤ')).toBe(false)
+    expect(job.boards.filter((b) => b.builtIn !== true).map((b) => b.material)).toEqual(['芯材'])
   })
 
   it('ひな形を変えない', () => {

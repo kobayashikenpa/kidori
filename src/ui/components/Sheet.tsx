@@ -1,5 +1,6 @@
-// 下から出る編集シート。背景を押すか「閉じる」で閉じる
-import { useEffect, type ReactNode } from 'react'
+// 下から出る編集シート。背景を押すか「閉じる」で閉じる。
+// 重ねて開いたとき（部材の編集の上の MaterialEditSheet）は、Escape でいちばん上のシートだけを閉じる
+import { useEffect, useRef, type ReactNode } from 'react'
 
 interface Props {
   title: string
@@ -8,9 +9,12 @@ interface Props {
 }
 
 export function Sheet({ title, onClose, children }: Props) {
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      const all = document.querySelectorAll('.sheet-backdrop')
+      if (all[all.length - 1] === ref.current) onClose()
     }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -22,7 +26,7 @@ export function Sheet({ title, onClose, children }: Props) {
   }, [onClose])
 
   return (
-    <div className="sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div ref={ref} className="sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-head">
           <h2>{title}</h2>

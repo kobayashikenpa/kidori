@@ -1890,10 +1890,6 @@ button.dim-name {
   flex-wrap: wrap;
   min-width: 0;
 }
-.stk-use b {
-  font-size: 17px;
-  margin: 0 2px;
-}
 .stk-del {
   flex: 0 0 auto;
   padding: 8px 12px;
@@ -1935,4 +1931,31 @@ button.dim-name {
 }
 .swap-note .btn {
   flex: 0 0 auto;
+}
+
+/* ---------- 設定の一覧の見出し（材料名ごと）・木取りしない の印（第2.5版） ---------- */
+.list-group-head {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.list-name .chip {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.chip.nocut {
+  border: 1px dashed var(--muted);
+}
+
+/* 手持ちの行の表示（第2.5版） */
+.stk-use.stk-noFit {
+  color: var(--err);
+  font-weight: 700;
+}
+.stk-use.stk-unused {
+  color: var(--muted);
+}
+.stk-use.stk-all {
+  font-weight: 700;
 }

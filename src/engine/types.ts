@@ -83,7 +83,7 @@ export interface SheetChoice {
 /** 板（材料）。材料名＋厚みで区別する。同じ組み合わせの板は2つ作れない */
 export interface Board extends SheetChoice {
   id: string
-  /** 材料名（例：シナランバー） */
+  /** 材料名（例：ラワン） */
   material: string
   /** 厚み（mm） */
   thickness: number
@@ -92,6 +92,10 @@ export interface Board extends SheetChoice {
    * 画面の並び順（boards.ts の orderedBoards）に使う。第1.1版までのデータには無い
    */
   builtIn?: true
+  /**
+   * 木取りしない（第2.5版。仕様書 4）：厚みの計算には使うが、片を作らない（例：芯材15）。オンのときだけ true を持つ
+   */
+  noCut?: true
 }
 
 /**
@@ -166,24 +170,33 @@ export interface FlushFace {
   count: number
 }
 
+/** 材料グループの初めの形（第2.5版）。自動の名前の頭に使う（フラッシュ／ベタ／グループ） */
+export type GroupForm = 'flush' | 'beta' | 'empty'
+
 /**
- * フラッシュ（第1.5版。仕様書 4）：芯材の両面に表面材を貼って厚みを作る部材の登録。
- * 厚み＝芯材＋表面材の厚み×枚数（flush.ts の flushThickness）
+ * 材料グループ（画面の言葉。コードは第1.5版からの Flush のまま。仕様書 4、architecture.md 17章）：
+ * 材料 × 枚数を並べたもの。厚み＝中身の合計（flush.ts の flushThickness）。
+ * 対応：Flush・job.flushes＝材料グループ、faces＝中身、Board.noCut＝木取りしない、form＝初めの形
  */
 export interface Flush {
   /** 仕事の中で重複しない。部材の flushId・式の {t:id} から参照する */
   id: string
   /** 名前（例：フラッシュ25）。空でなく、ほかのフラッシュと重ならない */
   name: string
-  /** 芯材の厚み（mm。0 より大きい） */
-  core: number
-  /** 表面材（同じ材料を重ねない。1つ以上） */
+  /**
+   * 中身（同じ材料を重ねない。順番・芯材／表面材の区別に意味は持たせない）。
+   * 以前の版の芯材の厚み（core）は、読み込むときに「芯材◯（木取りしない）」の中身へ移す（migrate/flushCore.ts の LegacyFlush だけが知っている）
+   */
   faces: FlushFace[]
   /**
    * 表面材を重ねて切る（第2.0版）。オンのときだけ true を持つ（オフは持たない）。
-   * 表面材がちょうど2つで枚数が同じとき（packing/stack.ts の canStack）だけ持てる
+   * 木取りする中身がちょうど2つで枚数が同じとき（packing/stack.ts の canStack）だけ持てる
    */
   stack?: true
+  /** 初めの形（第2.5版）。無ければ 'flush'（以前のデータ） */
+  form?: GroupForm
+  /** 名前を自動でつけている（中身を変えると名前がついてくる。第2.5版）。オンのときだけ true */
+  autoName?: true
 }
 
 /** 仕事 */

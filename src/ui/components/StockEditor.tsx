@@ -8,6 +8,7 @@ import { addRowStock, removeRowStock, setRowStockMode, updateRowStock, type Size
 import { useCurrentJob } from '../../store/useJobStore'
 import { exactText } from '../../engine/round'
 import { fmt, parseNum } from '../format'
+import { stockRowStatus } from '../stockStatus'
 import { KeypadField } from './KeypadField'
 import { Segmented } from './Segmented'
 
@@ -31,9 +32,11 @@ interface Props {
   label: string
   /** その行の stockUsage（手持ちで木取りしていなければ null） */
   usage: StockUsage | null
+  /** 手持ちに入らない部材がある材料か（engine の stockShortage に出ている） */
+  short: boolean
 }
 
-export function StockEditor({ target, choice, label, usage }: Props) {
+export function StockEditor({ target, choice, label, usage, short }: Props) {
   const { run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   const on = choice.stockOn === true
@@ -50,6 +53,7 @@ export function StockEditor({ target, choice, label, usage }: Props) {
               label={label}
               sheet={s}
               use={usage?.rows.find((r) => r.stockId === s.id) ?? null}
+              short={short}
               onResult={report}
             />
           ))}
@@ -91,10 +95,11 @@ interface RowProps {
   label: string
   sheet: StockSheet
   use: StockUsage['rows'][number] | null
+  short: boolean
   onResult: (r: { ok: boolean; message?: string }) => void
 }
 
-function StockRow({ target, label, sheet, use, onResult }: RowProps) {
+function StockRow({ target, label, sheet, use, short, onResult }: RowProps) {
   const { run } = useCurrentJob()
   const update = (patch: Partial<Omit<StockSheet, 'id'>>) => onResult(run((j) => updateRowStock(j, target, sheet.id, patch)))
   const name = `${label} の手持ち`
@@ -121,9 +126,7 @@ function StockRow({ target, label, sheet, use, onResult }: RowProps) {
           <span className="kd-k">枚数</span>
           <CommitField ariaLabel="手持ちの枚数" value={sheet.count} unit="枚" integer onCommit={(v) => update({ count: v })} />
         </label>
-        <span className="stk-use num" aria-label="使う枚数と残り">
-          使う <b>{use?.used ?? 0}</b>／残り <b>{use?.left ?? sheet.count}</b>
-        </span>
+        <StockRowStatus used={use?.used ?? 0} count={sheet.count} short={short} />
         <button
           type="button"
           className="btn danger stk-del"
@@ -134,6 +137,16 @@ function StockRow({ target, label, sheet, use, onResult }: RowProps) {
         </button>
       </div>
     </li>
+  )
+}
+
+/** 手持ちの行の表示（仕様書 9「手持ちの行の表示」）：部材が収まりません／不採用／◯枚採用／採用 */
+function StockRowStatus({ used, count, short }: { used: number; count: number; short: boolean }) {
+  const st = stockRowStatus(used, count, short)
+  return (
+    <span className={`stk-use num stk-${st.kind}`} role="status">
+      {st.text}
+    </span>
   )
 }
 

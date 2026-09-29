@@ -1,7 +1,7 @@
 // 設定の画面の一覧（調整寸法・材料で共通の見た目と操作）。
 // 上に追加の入力、その下に1行ずつ 名前・使っている部材・「編集」「削除」。
 // 編集・削除の確認は、その行がその場で形を変える。調整寸法・材料の操作は呼ぶ側から受け取る
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import type { OpResult } from '../../store/jobs'
 
 interface Props<T extends { id: string }> {
@@ -10,12 +10,16 @@ interface Props<T extends { id: string }> {
   /** 画面の中で重ならない id の頭 */
   idPrefix: string
   items: readonly T[]
-  /** 行の名前（逃げ1・シナランバー 18mm） */
+  /** 行の名前（逃げ1・ラワン 18mm） */
   label: (item: T) => string
   /** 行に出す「使っている部材」の文 */
   usage: (item: T) => string
   /** 行に出す注意（無ければ null） */
   warning?: (item: T) => string | null
+  /** 名前の横に出す印（木取りしない など。無ければ null） */
+  badge?: (item: T) => ReactNode
+  /** 見出しでまとめる名前（材料名。隣り合う同じ名前の行を1つの見出しの下に並べる。並び順は変えない） */
+  groupOf?: (item: T) => string
   /** 上に置く追加の入力 */
   add: ReactNode
   /** 編集の形（done で一覧の形に戻す） */
@@ -35,6 +39,8 @@ export function SettingsList<T extends { id: string }>({
   label,
   usage,
   warning,
+  badge,
+  groupOf,
   add,
   renderEdit,
   removeWarning,
@@ -101,6 +107,100 @@ export function SettingsList<T extends { id: string }>({
     else setRemoveError(r.message)
   }
 
+  /** 1行（選ぶモード・編集・削除の確認・ふつうの行） */
+  const row = (item: T): ReactNode => {
+    const name = label(item)
+    if (selecting) {
+      const on = chosen.includes(item.id)
+      return (
+        <button
+          key={item.id}
+          type="button"
+          role="checkbox"
+          aria-checked={on}
+          className={`card list-item list-check${on ? ' on' : ''}`}
+          onClick={() => toggle(item.id)}
+        >
+          <span className="check-box" aria-hidden="true">
+            {on ? '✓' : ''}
+          </span>
+          <span className="list-info">
+            <span className="list-name">
+              {name}
+              {badge?.(item)}
+            </span>
+            <span className="lead" style={{ margin: 0 }}>
+              {usage(item)}
+            </span>
+          </span>
+        </button>
+      )
+    }
+    if (editId === item.id) {
+      return (
+        <div key={item.id} className="card stack" aria-label={`${name} を編集`}>
+          {renderEdit(item, () => setEditId(null))}
+        </div>
+      )
+    }
+    if (removeId === item.id) {
+      return (
+        <div
+          key={item.id}
+          id={`${idPrefix}-confirm-${item.id}`}
+          className="card stack confirm"
+          role="alertdialog"
+          aria-label={`${name} の削除の確認`}
+        >
+          {removeWarning([item.id])}
+          <p style={{ margin: 0 }}>「{name}」を削除しますか？</p>
+          {removeError && (
+            <p className="msg err" role="alert" style={{ margin: 0 }}>
+              削除できませんでした：{removeError}
+            </p>
+          )}
+          <div className="sheet-foot">
+            <button type="button" className="btn" onClick={cancelRemove}>
+              やめる
+            </button>
+            <button type="button" className="btn danger solid" onClick={() => remove(item.id)}>
+              削除する
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div key={item.id} className="card list-item">
+        <div className="list-info">
+          <span className="list-name">
+              {name}
+              {badge?.(item)}
+            </span>
+          <span className="lead" style={{ margin: 0 }}>
+            {usage(item)}
+          </span>
+          {warning?.(item) && <span className="msg warn">{warning(item)}</span>}
+        </div>
+        <div className="list-actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              cancelRemove()
+              setEditId(item.id)
+            }}
+          >
+            編集
+          </button>
+          <button type="button" className="btn danger" onClick={() => startRemove(item.id)}>
+            削除
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="stack" role="group" aria-label={`${kind}の一覧`}>
       {!selecting && add}
@@ -111,90 +211,14 @@ export function SettingsList<T extends { id: string }>({
         </button>
       )}
       {selecting && <p className="lead" style={{ margin: 0 }}>削除する{kind}を選んでください（いくつでも選べます）。</p>}
-      {items.map((item) => {
-        const name = label(item)
-        if (selecting) {
-          const on = chosen.includes(item.id)
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="checkbox"
-              aria-checked={on}
-              className={`card list-item list-check${on ? ' on' : ''}`}
-              onClick={() => toggle(item.id)}
-            >
-              <span className="check-box" aria-hidden="true">
-                {on ? '✓' : ''}
-              </span>
-              <span className="list-info">
-                <span className="list-name">{name}</span>
-                <span className="lead" style={{ margin: 0 }}>
-                  {usage(item)}
-                </span>
-              </span>
-            </button>
-          )
-        }
-        if (editId === item.id) {
-          return (
-            <div key={item.id} className="card stack" aria-label={`${name} を編集`}>
-              {renderEdit(item, () => setEditId(null))}
-            </div>
-          )
-        }
-        if (removeId === item.id) {
-          return (
-            <div
-              key={item.id}
-              id={`${idPrefix}-confirm-${item.id}`}
-              className="card stack confirm"
-              role="alertdialog"
-              aria-label={`${name} の削除の確認`}
-            >
-              {removeWarning([item.id])}
-              <p style={{ margin: 0 }}>「{name}」を削除しますか？</p>
-              {removeError && (
-                <p className="msg err" role="alert" style={{ margin: 0 }}>
-                  削除できませんでした：{removeError}
-                </p>
-              )}
-              <div className="sheet-foot">
-                <button type="button" className="btn" onClick={cancelRemove}>
-                  やめる
-                </button>
-                <button type="button" className="btn danger solid" onClick={() => remove(item.id)}>
-                  削除する
-                </button>
-              </div>
-            </div>
-          )
-        }
+      {items.map((item, i) => {
+        const group = groupOf?.(item)
+        const head = group !== undefined && (i === 0 || groupOf?.(items[i - 1]) !== group)
         return (
-          <div key={item.id} className="card list-item">
-            <div className="list-info">
-              <span className="list-name">{name}</span>
-              <span className="lead" style={{ margin: 0 }}>
-                {usage(item)}
-              </span>
-              {warning?.(item) && <span className="msg warn">{warning(item)}</span>}
-            </div>
-            <div className="list-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  cancelRemove()
-                  setEditId(item.id)
-                }}
-              >
-                編集
-              </button>
-              <button type="button" className="btn danger" onClick={() => startRemove(item.id)}>
-                削除
-              </button>
-            </div>
-          </div>
+          <Fragment key={item.id}>
+            {head && <h4 className="list-group-head">{group}</h4>}
+            {row(item)}
+          </Fragment>
         )
       })}
       {selecting &&

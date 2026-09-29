@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from './dimensions'
 import { explainDimension, explanationText } from './dimensions/explain'
-import { FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID } from './fixtures/flush'
+import { CORE_15_ID, FLUSH_25_ID, flushJob, flushPart, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from './fixtures/flush'
 import {
   autoFlushName,
   defaultFlushFaces,
@@ -9,6 +9,8 @@ import {
   isAutoFlushName,
   flushBreakdown,
   flushBreakdownText,
+  autoGroupName,
+  defaultGroupFaces,
   flushCompositionText,
   flushesEmptiedByBoards,
   flushesUsingBoards,
@@ -32,13 +34,17 @@ describe('flushThickness（フラッシュの厚み）', () => {
     expect(flushThickness(job.flushes[0], job.boards)).toBe(25)
   })
 
-  it('小数の材料（ラワン2.5×2＋芯材12）＝17', () => {
-    const boards = [{ id: 'b', thickness: 2.5 }]
-    expect(flushThickness({ core: 12, faces: [{ boardId: 'b', count: 2 }] }, boards)).toBe(17)
+  it('小数の材料（ラワン2.5×2＋芯材12×1）＝17', () => {
+    const boards = [
+      { id: 'b', thickness: 2.5 },
+      { id: 'c', thickness: 12 },
+    ]
+    expect(flushThickness({ faces: [{ boardId: 'c', count: 1 }, { boardId: 'b', count: 2 }] }, boards)).toBe(17)
   })
 
-  it('見つからない材料の表面材は数えない', () => {
-    expect(flushThickness({ core: 15, faces: [{ boardId: 'なし', count: 2 }] }, [])).toBe(15)
+  it('見つからない材料の中身は数えない', () => {
+    const boards = [{ id: 'c', thickness: 15 }]
+    expect(flushThickness({ faces: [{ boardId: 'c', count: 1 }, { boardId: 'なし', count: 2 }] }, boards)).toBe(15)
   })
 
   it('thicknessOfId は材料の厚みとフラッシュの合計の厚みを返す。無い id は null', () => {
@@ -85,9 +91,9 @@ describe('フラッシュの部材の厚みの判定', () => {
     expect(d.errors[0].message).toContain('材料の厚み 25')
   })
 
-  it('表面材の枚数を変えると厚みもついてくる（メラミン1×1 → 24 で一致）', () => {
+  it('中身の枚数を変えると厚みもついてくる（メラミン1×1 → 24 で一致）', () => {
     const job = flushJob()
-    job.flushes[0].faces[0].count = 1
+    job.flushes[0].faces[1].count = 1
     job.parts[0].expr.H = '24'
     expect(dims(job)['天板'].thicknessMismatch).toBe(false)
   })
@@ -114,19 +120,38 @@ describe('フラッシュの部材の厚みの判定', () => {
 describe('flushBreakdown（厚みの内訳）', () => {
   it('芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25', () => {
     const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
-    expect(b.core).toBe(15)
     expect(b.faces).toEqual([
-      { boardId: MELAMINE_1_ID, label: 'メラミン1', thickness: 1, count: 2 },
-      { boardId: LAUAN_4_ID, label: 'ラワン4', thickness: 4, count: 2 },
+      { boardId: CORE_15_ID, label: '芯材15', thickness: 15, count: 1, noCut: true },
+      { boardId: MELAMINE_1_ID, label: 'メラミン1', thickness: 1, count: 2, noCut: false },
+      { boardId: LAUAN_4_ID, label: 'ラワン4', thickness: 4, count: 2, noCut: false },
     ])
     expect(b.total).toBe(25)
-    expect(flushBreakdownText(b)).toBe('芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
+    expect(flushBreakdownText(b)).toBe('芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
   })
 
-  it('寸法表の厚みの内訳：フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）', () => {
+  it('寸法表の厚みの内訳：フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）', () => {
     const b = flushBreakdown(flushJob(), FLUSH_25_ID)!
-    expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）')
-    expect(flushCompositionText('フラッシュ16', { core: 15.5, faces: [], total: 15.5 })).toBe('フラッシュ16（芯材15.5）')
+    expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）')
+    const core = { boardId: 'c', label: '芯材15.5', thickness: 15.5, count: 1, noCut: true }
+    expect(flushCompositionText('フラッシュ16', { faces: [core], total: 15.5 })).toBe('フラッシュ16（芯材15.5×1）')
+  })
+
+  it('見本（芯材15 は中身の材料）も同じ文字。ベタ20・中身なし', () => {
+    const job = sampleGroupJob()
+    const b = flushBreakdown(job, job.flushes[0].id)!
+    expect(flushBreakdownText(b)).toBe('芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25')
+    expect(flushCompositionText('フラッシュ25', b)).toBe('フラッシュ25（芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2）')
+    const beta = {
+      faces: [
+        { boardId: 'l18', label: 'ラワン18', thickness: 18, count: 1, noCut: false },
+        { boardId: 'm1', label: 'メラミン1', thickness: 1, count: 2, noCut: false },
+      ],
+      total: 20,
+    }
+    expect(flushCompositionText('ベタ20', beta)).toBe('ベタ20（ラワン18×1 ＋ メラミン1×2）')
+    expect(flushBreakdownText(beta)).toBe('ラワン18×1 ＋ メラミン1×2 ＝ 20')
+    expect(flushCompositionText('ベタ20', { faces: [], total: 0 })).toBe('ベタ20（中身なし）')
+    expect(flushBreakdownText({ faces: [], total: 0 })).toBe('中身なし ＝ 0')
   })
 
   it('無いフラッシュは null', () => {
@@ -141,10 +166,11 @@ describe('使っているものの一覧', () => {
     expect(flushesUsingBoards(job, ['なし'])).toEqual([])
   })
 
-  it('材料を削除すると表面材が無くなるフラッシュの名前', () => {
+  it('材料を削除すると中身が無くなるフラッシュの名前', () => {
     const job = flushJob()
     expect(flushesEmptiedByBoards(job, [LAUAN_4_ID])).toEqual([])
-    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID])).toEqual(['フラッシュ25'])
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID])).toEqual([])
+    expect(flushesEmptiedByBoards(job, [LAUAN_4_ID, MELAMINE_1_ID, CORE_15_ID])).toEqual(['フラッシュ25'])
   })
 
   it('フラッシュを選んでいる部材の名前', () => {
@@ -206,25 +232,66 @@ describe('autoFlushName（自動の名前）・isAutoFlushName', () => {
   })
 })
 
+const FB = [{ id: 'm1' }, { id: 'l4' }, { id: 'l25' }]
+
+describe('defaultGroupFaces（材料グループの初めの形の中身。第2.5版）', () => {
+  const bs = defaultBoards((p) => `${p}-${Math.random()}`)
+  const id = (m: string, t: number) => bs.find((b) => b.material === m && b.thickness === t)!.id
+  it('フラッシュ＝[空欄×1, メラミン1×2, ラワン4×2]・ベタ＝[空欄×1, メラミン1×2]・空＝[]', () => {
+    expect(defaultGroupFaces({ boards: bs }, 'flush')).toEqual([
+      { boardId: null, count: 1 },
+      { boardId: id('メラミン', 1), count: 2 },
+      { boardId: id('ラワン', 4), count: 2 },
+    ])
+    expect(defaultGroupFaces({ boards: bs }, 'beta')).toEqual([
+      { boardId: null, count: 1 },
+      { boardId: id('メラミン', 1), count: 2 },
+    ])
+    expect(defaultGroupFaces({ boards: bs }, 'empty')).toEqual([])
+  })
+  it('メラミン1 が無ければその行なし', () => {
+    const boards = bs.filter((b) => b.material !== 'メラミン')
+    expect(defaultGroupFaces({ boards }, 'beta')).toEqual([{ boardId: null, count: 1 }])
+    expect(defaultGroupFaces({ boards }, 'flush')).toEqual([
+      { boardId: null, count: 1 },
+      { boardId: id('ラワン', 4), count: 2 },
+    ])
+  })
+})
+
+describe('autoGroupName（材料グループの自動の名前。第2.5版）', () => {
+  it('初めの形の名前＋合計の厚み。空は「グループ」（未決事項 54）', () => {
+    expect(autoGroupName('beta', 20, [])).toBe('ベタ20')
+    expect(autoGroupName('flush', 25, [])).toBe('フラッシュ25')
+    expect(autoGroupName('empty', 20, [])).toBe('グループ20')
+    expect(autoGroupName('flush', 25.5, [])).toBe('フラッシュ25.5')
+  })
+  it('重なれば -2・-3（全角・空白の違いも重なりとみなす）', () => {
+    expect(autoGroupName('flush', 25, ['フラッシュ25'])).toBe('フラッシュ25-2')
+    expect(autoGroupName('beta', 20, [' ベタ20', 'ベタ20-2'])).toBe('ベタ20-3')
+  })
+})
+
 describe('defaultFlushStack（新しいフラッシュの「表面材を重ねて切る」の初期値。第2.1版）', () => {
   it('表面材が2種類で枚数が同じならオン（メラミン1×2・ラワン4×2）', () => {
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 2 }])).toBe(true)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 2 }], FB)).toBe(true)
   })
 
   it('重ねられない表面材ならオフ（枚数が違う・1種類・3種類・表面材なし）', () => {
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 1 }])).toBe(false)
-    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }])).toBe(false)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }, { boardId: 'l4', count: 1 }], FB)).toBe(false)
+    expect(defaultFlushStack([{ boardId: 'm1', count: 2 }], FB)).toBe(false)
     expect(
       defaultFlushStack([
         { boardId: 'm1', count: 1 },
         { boardId: 'l4', count: 1 },
         { boardId: 'l25', count: 1 },
-      ]),
+      ], FB),
     ).toBe(false)
-    expect(defaultFlushStack([])).toBe(false)
+    expect(defaultFlushStack([], FB)).toBe(false)
   })
 
   it('初期の材料の表面材の初期値（defaultFlushFaces）ならオン', () => {
-    expect(defaultFlushStack(defaultFlushFaces({ boards: defaultBoards((p) => `${p}-x${Math.random()}`) }))).toBe(true)
+    const boards = defaultBoards((p) => `${p}-x${Math.random()}`)
+    expect(defaultFlushStack(defaultFlushFaces({ boards }), boards)).toBe(true)
   })
 })

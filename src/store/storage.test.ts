@@ -7,6 +7,7 @@ import {
   BROKEN_BACKUP_KEY,
   CURRENT_JOB_KEY,
   JOBS_KEY,
+  JOBS_V2_KEY,
   LEGACY_JOBS_KEY,
   MAX_BACKUPS,
   TEMPLATE_KEY,
@@ -67,7 +68,7 @@ describe('保存と読み込み', () => {
     const job = bookshelfJob()
     job.boards = [...defaultBoards((p) => `${p}-${Math.random()}`), ...job.boards]
     saveSaved(s, { jobs: [job], currentJobId: job.id })
-    expect(loadSaved(s).data.jobs[0].boards.map((b) => b.builtIn)).toEqual([true, true, true, true, undefined, undefined])
+    expect(loadSaved(s).data.jobs[0].boards.map((b) => b.builtIn)).toEqual([...Array(25).fill(true), undefined, undefined])
   })
 
   it('何も保存されていなければ empty', () => {
@@ -94,18 +95,19 @@ describe('保存と読み込み', () => {
   })
 
   it('壊れた JSON は読まずにエラーの印を返し、元のデータを退避して上書きしない', () => {
-    const s = memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[', [CURRENT_JOB_KEY]: 'x' })
+    const s = memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[', [CURRENT_JOB_KEY]: 'x' })
     const r = loadSaved(s, T1)
     expect(r.status).toBe('error')
     expect(r.data).toEqual({ jobs: [], currentJobId: null })
-    expect(s.map.get(JOBS_KEY)).toBe('{"version":2,"jobs":[')
-    expect(s.map.get(`${BROKEN_BACKUP_KEY}.2026-09-25T01:00:00.000Z`)).toBe('{"version":2,"jobs":[')
+    expect(s.map.get(JOBS_KEY)).toBe('{"version":3,"jobs":[')
+    expect(s.map.get(`${BROKEN_BACKUP_KEY}.2026-09-25T01:00:00.000Z`)).toBe('{"version":3,"jobs":[')
     if (r.status === 'error') expect(r.canSave).toBe(true)
   })
 
   it('形の違うデータ（版が違う・仕事の形でない）もエラーにする', () => {
     expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":1,"jobs":[]}' })).status).toBe('error')
-    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[]}' })).status).toBe('error')
+    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[]}' })).status).toBe('error')
+    expect(loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":4,"jobs":[]}' })).status).toBe('error')
     expect(loadSaved(memoryStorage({ [JOBS_KEY]: 'null' })).status).toBe('error')
   })
 
@@ -128,7 +130,7 @@ function storedWith(edit: (job: Record<string, any>) => void, extraJobs: unknown
   const job = JSON.parse(JSON.stringify(bookshelfJob()))
   edit(job)
   return memoryStorage({
-    [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [job, ...extraJobs] }),
+    [JOBS_KEY]: JSON.stringify({ version: 3, jobs: [job, ...extraJobs] }),
     [CURRENT_JOB_KEY]: job.id,
   })
 }
@@ -153,7 +155,7 @@ describe('中身の検査と修復', () => {
   })
 
   it('仕事の配列が全部読めなくても、空の一覧で画面を出せる', () => {
-    const r = loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[{"id":1}]}' }), T1)
+    const r = loadSaved(memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[{"id":1}]}' }), T1)
     expect(r.status).toBe('repaired')
     expect(r.data.jobs).toEqual([])
   })
@@ -372,7 +374,7 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
     // 保存すると第2版に書かれ、第1版は元のまま残る
     expect(saveSaved(s, r.data)).toEqual({ ok: true })
     expect(s.map.get(LEGACY_JOBS_KEY)).toBe(v1)
-    expect(JSON.parse(s.map.get(JOBS_KEY)!).version).toBe(2)
+    expect(JSON.parse(s.map.get(JOBS_KEY)!).version).toBe(3)
     const again = loadSaved(s, T1)
     expect(again.status).toBe('ok')
     expect(again.data).toEqual(r.data)
@@ -380,7 +382,7 @@ describe('保存データ第2版と、以前の版からの移し替え', () => 
 
   it('第2版があれば第1版は読まない', () => {
     const s = memoryStorage({
-      [JOBS_KEY]: JSON.stringify({ version: 2, jobs: [] }),
+      [JOBS_V2_KEY]: JSON.stringify({ version: 2, jobs: [] }),
       [LEGACY_JOBS_KEY]: JSON.stringify({ version: 1, jobs: [legacyBookshelf()] }),
     })
     const r = loadSaved(s, T1)
@@ -542,7 +544,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     const steps = [
       (j: typeof job) => updateSettings(j, { kerf: 2, allowance: 5, cutMode: 'auto' }),
       (j: typeof job) => addNige(j, '逃げ', 2, 'nige-2'),
-      (j: typeof job) => addBoard(j, newBoard({ material: 'シナ', thickness: 18 })),
+      (j: typeof job) => addBoard(j, newBoard({ material: 'タモ', thickness: 18 })),
     ]
     for (const step of steps) {
       const r = step(job)
@@ -552,12 +554,12 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     return templateOf(job)
   }
 
-  it('保存して読み込むと同じ内容に戻り、kidori.jobs.v2 には触らない', () => {
-    const st = memoryStorage({ [JOBS_KEY]: '{"version":2,"jobs":[]}' })
+  it('保存して読み込むと同じ内容に戻り、仕事の保存データ（kidori.jobs.v3）には触らない', () => {
+    const st = memoryStorage({ [JOBS_KEY]: '{"version":3,"jobs":[]}' })
     const t = changedTemplate()
     expect(saveTemplate(st, t).ok).toBe(true)
-    expect(st.map.get(JOBS_KEY)).toBe('{"version":2,"jobs":[]}')
-    expect(JSON.parse(st.map.get(TEMPLATE_KEY)!).version).toBe(1)
+    expect(st.map.get(JOBS_KEY)).toBe('{"version":3,"jobs":[]}')
+    expect(JSON.parse(st.map.get(TEMPLATE_KEY)!).version).toBe(2)
     expect(loadTemplate(st, [])).toEqual(t)
   })
 
@@ -597,8 +599,8 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
       template: {
         settings: { kerf: -1, trim: 5, allowance: 10, cutMode: 'vertical', nige: [{ id: 'nige-1', value: 1 }] },
         materials: [
-          { material: 'シナ', thickness: 18 },
-          { material: ' シナ ', thickness: 18 },
+          { material: 'タモ', thickness: 18 },
+          { material: ' タモ ', thickness: 18 },
           { material: '', thickness: 4 },
           { material: 'ラワン', thickness: 0 },
           { material: 'ラワン', thickness: 4, builtIn: true },
@@ -609,7 +611,7 @@ describe('最後に使った設定（ひな形）の保存と読み込み（第1
     expect(t.settings.kerf).toBe(3)
     expect(t.settings.nige).toEqual([{ id: 'nige-1', name: '逃げ', value: 1 }])
     expect(t.materials).toEqual([
-      { material: 'シナ', thickness: 18 },
+      { material: 'タモ', thickness: 18 },
       { material: 'ラワン', thickness: 4, builtIn: true },
     ])
   })

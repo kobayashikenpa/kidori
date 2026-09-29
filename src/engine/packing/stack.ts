@@ -3,9 +3,20 @@
 import { boardTokenLabel } from '../defaults'
 import type { Board, Flush, Job } from '../types'
 
-/** 重ねて切れるフラッシュか：表面材がちょうど2つ（違う材料）で、枚数が同じ。材料があるかは見ない */
-export function canStack(flush: Pick<Flush, 'faces'>): boolean {
-  const f = flush.faces
+/** 木取りする中身（材料があり、木取りしないでない）。中身の並びのまま（第2.5版。flush.ts からも出す） */
+export function cutFaces(flush: Pick<Flush, 'faces'>, boards: readonly Pick<Board, 'id' | 'noCut'>[]): Flush['faces'] {
+  return flush.faces.filter((f) => {
+    const b = boards.find((x) => x.id === f.boardId)
+    return b !== undefined && b.noCut !== true
+  })
+}
+
+/**
+ * 重ねて切れる材料グループか：木取りする中身（cutFaces：材料があり木取りしないでない）がちょうど2つ（違う材料）で、
+ * 枚数が同じ（第2.5版。木取りしない中身は数えない）
+ */
+export function canStack(flush: Pick<Flush, 'faces'>, boards: readonly Pick<Board, 'id' | 'noCut'>[]): boolean {
+  const f = cutFaces(flush, boards)
   return f.length === 2 && f[0].boardId !== f[1].boardId && f[0].count === f[1].count
 }
 
@@ -35,8 +46,8 @@ export function stackPlan(job: Pick<Job, 'boards' | 'flushes'>): StackPlan {
   const index = new Map(job.boards.map((b, i) => [b.id, i]))
   const pairs = new Map<string, { boardIds: [string, string]; flushIds: string[] }>()
   for (const f of job.flushes) {
-    if (f.stack !== true || !canStack(f)) continue
-    const [x, y] = f.faces.map((face) => face.boardId)
+    if (f.stack !== true || !canStack(f, job.boards)) continue
+    const [x, y] = cutFaces(f, job.boards).map((face) => face.boardId)
     const ix = index.get(x)
     const iy = index.get(y)
     if (ix === undefined || iy === undefined) continue

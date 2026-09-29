@@ -107,7 +107,8 @@ describe('scrapsOf（端材）', () => {
   })
 
   it('帯より細い片の横の残り（刃厚を除く）も端材にする', () => {
-    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], USABLE, 3, 'vertical')
+    // 帯の中に幅の違う片が並ぶ配置を作るため、第2.4版までの並べ方（sameWidthFirst: false）で並べる
+    const r = packGuillotine([piece('wide', 400, 1000), piece('narrow', 300, 800)], USABLE, 3, 'vertical', false)
     const scraps = scrapsOf(r.sheets[0], r.frame, 3)
     expect(scraps).toContainEqual({ x: 505, y: 17, w: 97, h: 800 })
   })
