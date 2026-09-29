@@ -145,13 +145,7 @@ function StockRowStatus({ used, count, short }: { used: number; count: number; s
   const st = stockRowStatus(used, count, short)
   return (
     <span className={`stk-use num stk-${st.kind}`} role="status">
-      {st.kind === 'part' ? (
-        <>
-          <b>{used}</b>枚採用（残り {count - used}枚）
-        </>
-      ) : (
-        st.text
-      )}
+      {st.text}
     </span>
   )
 }

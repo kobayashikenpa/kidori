@@ -1890,10 +1890,6 @@ button.dim-name {
   flex-wrap: wrap;
   min-width: 0;
 }
-.stk-use b {
-  font-size: 17px;
-  margin: 0 2px;
-}
 .stk-del {
   flex: 0 0 auto;
   padding: 8px 12px;
