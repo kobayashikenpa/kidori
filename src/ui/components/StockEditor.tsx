@@ -140,7 +140,7 @@ function StockRow({ target, label, sheet, use, short, onResult }: RowProps) {
   )
 }
 
-/** 手持ちの行の表示（仕様書 9「手持ちの行の表示」）：部材が収まりません／不採用／◯枚採用／採用 */
+/** 手持ちの行の表示（仕様書 9「手持ちの行の表示」）：不採用／◯枚採用／採用 */
 function StockRowStatus({ used, count, short }: { used: number; count: number; short: boolean }) {
   const st = stockRowStatus(used, count, short)
   return (

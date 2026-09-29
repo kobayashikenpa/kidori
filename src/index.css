@@ -1949,10 +1949,6 @@ button.dim-name {
 }
 
 /* 手持ちの行の表示（第2.5版） */
-.stk-use.stk-noFit {
-  color: var(--err);
-  font-weight: 700;
-}
 .stk-use.stk-unused {
   color: var(--muted);
 }

@@ -69,7 +69,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
                   <span className="sz-n num">{o.sheetCount}枚</span>
                   <span className="sz-y num">{o.sheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
                   <span className="sz-tags">
-                    {o.unplacedCount > 0 && <span className="sz-tag err">入らない {o.unplacedCount}</span>}
+                    {o.unplacedCount > 0 && <span className="sz-tag err">部材が収まりません</span>}
                     {compare.fewer === kind && <span className="sz-tag ok">枚数が少ない</span>}
                     {compare.higher === kind && <span className="sz-tag ok">歩留まりが高い</span>}
                   </span>
@@ -86,7 +86,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
                 <span className="sz-n num">{current.sheetCount}枚</span>
                 <span className="sz-y num">{current.sheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
                 <span className="sz-tags">
-                  {current.unplaced.length > 0 && <span className="sz-tag err">入らない {current.unplaced.length}</span>}
+                  {current.unplaced.length > 0 && <span className="sz-tag err">部材が収まりません</span>}
                 </span>
               </>
             ) : (
