@@ -2,7 +2,7 @@
 import { boardTokenLabel } from './defaults'
 import { canStack, cutFaces } from './packing/stack'
 import { eq1, exactText, round1 } from './round'
-import type { Board, Flush, Job, Part } from './types'
+import type { Board, Flush, GroupForm, Job, Part } from './types'
 
 export { cutFaces }
 
@@ -68,6 +68,7 @@ export function partThicknessSource(
 }
 
 export interface FlushBreakdown {
+  /** 以前の版の芯材の厚み（作業中だけ。無ければ 0。S-30 で消す） */
   core: number
   /** 中身（登録順。木取りしない材料も入れ、noCut を添える。見つからない材料は入れない） */
   faces: { boardId: string; label: string; thickness: number; count: number; noCut: boolean }[]
@@ -86,16 +87,22 @@ export function flushBreakdown(job: Pick<Job, 'boards' | 'flushes'>, flushId: st
   return { core: flush.core ?? 0, faces, total: flushThickness(flush, job.boards) }
 }
 
-/** 内訳を1行の文字にする（例：芯材15 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25） */
-export function flushBreakdownText(b: FlushBreakdown): string {
-  const words = [`芯材${round1(b.core)}`, ...b.faces.map((f) => `${f.label}×${f.count}`)]
-  return `${words.join(' ＋ ')} ＝ ${round1(b.total)}`
+/** 内訳の言葉（どの行も「材料名厚み×枚数」。以前の版の芯材（core）があれば「芯材15×1」として先頭に） */
+function breakdownWords(b: FlushBreakdown): string[] {
+  const words = b.faces.map((f) => `${f.label}×${f.count}`)
+  return b.core > 0 ? [`芯材${round1(b.core)}×1`, ...words] : words
 }
 
-/** 寸法表の厚みの内訳（例：フラッシュ25（芯材15 ＋ メラミン1×2 ＋ ラワン4×2）） */
+/** 内訳を1行の文字にする（例：芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25）。中身が無ければ「中身なし ＝ 0」 */
+export function flushBreakdownText(b: FlushBreakdown): string {
+  const words = breakdownWords(b)
+  return `${words.length > 0 ? words.join(' ＋ ') : '中身なし'} ＝ ${round1(b.total)}`
+}
+
+/** 寸法表の厚みの内訳（例：ベタ20（ラワン18×1 ＋ メラミン1×2））。中身が無ければ「ベタ20（中身なし）」 */
 export function flushCompositionText(name: string, b: FlushBreakdown): string {
-  const words = [`芯材${round1(b.core)}`, ...b.faces.map((f) => `${f.label}×${f.count}`)]
-  return `${name}（${words.join(' ＋ ')}）`
+  const words = breakdownWords(b)
+  return `${name}（${words.length > 0 ? words.join(' ＋ ') : '中身なし'}）`
 }
 
 /** 表面材にその材料のどれかを使っているフラッシュの名前（登録順）。材料を削除する前の確認に使う */
@@ -145,20 +152,44 @@ export function defaultFlushStack(faces: Flush['faces'], boards: readonly Pick<B
   return canStack({ faces }, boards)
 }
 
-const AUTO_PREFIX = 'フラッシュ'
+/** 材料グループの中身の行。boardId が null の行は空欄（材料をまだ選んでいない） */
+export interface GroupFaceDraft {
+  boardId: string | null
+  count: number
+}
 
 /**
- * 自動の名前＝「フラッシュ＋合計の厚み」（例：フラッシュ25、フラッシュ25.5。厚みは丸めない）。
- * taken（ほかのフラッシュの名前）と重なるときは フラッシュ25-2・-3 … にする
+ * 材料グループの初めの形の中身（第2.5版。仕様書 4）：フラッシュ＝空欄×1 ＋ メラミン1×2 ＋ ラワン4×2、
+ * ベタ＝空欄×1 ＋ メラミン1×2、空＝なし。メラミン1・ラワン4 は材料名＋厚みで探し、無ければその行を入れない
  */
-export function autoFlushName(total: number, taken: readonly string[] = []): string {
-  const base = `${AUTO_PREFIX}${exactText(total)}`
+export function defaultGroupFaces(job: Pick<Job, 'boards'>, form: GroupForm): GroupFaceDraft[] {
+  if (form === 'empty') return []
+  const faces = defaultFlushFaces(job)
+  const melamine = job.boards.find((b) => nameKey(b.material) === 'メラミン' && eq1(b.thickness, 1))
+  const rest = form === 'flush' ? faces : faces.filter((f) => f.boardId === melamine?.id)
+  return [{ boardId: null, count: 1 }, ...rest]
+}
+
+/** 自動の名前の頭（未決事項 54：空は「グループ」） */
+const GROUP_PREFIX: Record<GroupForm, string> = { flush: 'フラッシュ', beta: 'ベタ', empty: 'グループ' }
+
+/**
+ * 材料グループの自動の名前＝「初めの形の名前＋合計の厚み」（例：フラッシュ25、ベタ20、グループ20、フラッシュ25.5。厚みは丸めない）。
+ * taken（ほかの材料グループの名前）と重なるときは -2・-3 … にする
+ */
+export function autoGroupName(form: GroupForm, total: number, taken: readonly string[] = []): string {
+  const base = `${GROUP_PREFIX[form]}${exactText(total)}`
   const used = new Set(taken.map(nameKey))
   if (!used.has(base)) return base
   for (let i = 2; ; i++) {
     const n = `${base}-${i}`
     if (!used.has(n)) return n
   }
+}
+
+/** フラッシュの形の自動の名前（autoGroupName('flush', …)）。以前の画面から使う */
+export function autoFlushName(total: number, taken: readonly string[] = []): string {
+  return autoGroupName('flush', total, taken)
 }
 
 /** 自動の名前の形（フラッシュ25・フラッシュ25.5・フラッシュ25-2）か。編集のとき、名前を芯材・表面材についていかせるかの判定に使う */

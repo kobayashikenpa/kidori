@@ -1064,7 +1064,7 @@
 - やること：`types.ts` に `Board.noCut?: true`・`GroupForm`・`Flush.form?`・`Flush.autoName?`、`Flush.core` を省略可にする（17.2・17.11）。`flush.ts` の `flushThickness`（中身の合計＋あれば core）・`cutFaces`・`partIsNoCut`・`FlushBreakdown` の中身に `noCut`（17.3）。`pieces.ts` は木取りしない材料（直接・中身）の片を作らず、片の id の連番を木取りする中身だけで数える。木取りしない材料だけの部材は片・`done`・`skipped` のどれにも入れない（17.4）。`canStack(flush, boards)`・`stackPlan`・`defaultFlushStack(faces, boards)` を木取りする中身で判定（17.5）。呼び出し元（store を含む）は引数を足すだけ
 - 完了の条件：芯材15（木取りしない）×1・メラミン1×2・ラワン4×2（core なし）のフラッシュ25 にした重ね切りの見本で、厚み 25・組 3×6 で5枚 85.2%・ラワン4 の1枚 97.8%・全体 86.4%、片の id がメラミン1 #1〜#4・ラワン4 #5〜#8（芯材が中身の先頭でも）。ベタ20（ラワン18×1・メラミン1×2）の側板 2枚 → ラワン18 の片2・メラミン1 の片4、`canStack` は false、切り代 10 が足される。芯材15 を直接選んだ部材は片が無く `skipped` にも出ない。中身が芯材15 だけのグループの部材も同じ。フラッシュ25 の芯材15 を木取りする材料にすると芯材15 の片が出て `canStack` が false。今のテスト（core のあるフラッシュ）は `canStack` などの引数を足すほかはそのまま通る
 
-### [~] E-67 以前の芯材の移し替え・初めの形・自動の名前・内訳の文字
+### [x] E-67 以前の芯材の移し替え・初めの形・自動の名前・内訳の文字
 - 担当：engine-dev ／ 依存：E-66 ／ 仕様書：4（材料と材料グループ）・9（寸法表の内訳）
 - やること：`migrate/flushCore.ts` の `migrateFlushCores`（仕事）・`migrateFlushSpecCores`（ひな形）（17.6）。`flush.ts` の `defaultGroupFaces(job, form)`（空欄の行は null）・`autoGroupName(form, total, taken)`・`flushBreakdownText`・`flushCompositionText` をどの行も「材料名厚み×枚数」に（17.3）
 - 完了の条件：core 15 の以前の見本 → 材料の最後に「芯材 15（木取りしない）」が1つ足され、中身の先頭に ×1、`form: 'flush'`・`autoName: true`、id・名前・`stack` はそのまま、厚み 25。core 15 のフラッシュが2つでも芯材15 は1つ。芯材15（木取りしない）がすでにあれば足さずに使い、木取りする 芯材15 があれば `noCut` を付けて使う。手で付けた名前（例：本棚用）は `autoName` なし。core の無いフラッシュは変わらない。`defaultGroupFaces` は フラッシュ＝[空欄×1, メラミン1×2, ラワン4×2]・ベタ＝[空欄×1, メラミン1×2]・空＝[]（メラミン1 が無ければその行なし）。`autoGroupName('beta', 20, [])` が「ベタ20」、`('flush', 25, ['フラッシュ25'])` が「フラッシュ25-2」。内訳の文字が「ベタ20（ラワン18×1 ＋ メラミン1×2）」「芯材15×1 ＋ メラミン1×2 ＋ ラワン4×2 ＝ 25」
@@ -1076,7 +1076,7 @@
 
 ### 保存と操作（store）
 
-### [ ] S-28 保存データ第3版と、読み込み・ひな形・見本・ファイルの移し替え
+### [~] S-28 保存データ第3版と、読み込み・ひな形・見本・ファイルの移し替え
 - 担当：engine-dev ／ 依存：E-67 ／ 仕様書：4（材料と材料グループの最後の項）・10・10.5
 - やること：`storage.ts`：`kidori.jobs.v3`（`version: 3`）に書き、v3 → v2 → v1 の順に読む（v2・v1 は書き換えない）。`sanitizeBoard` に `noCut`、`sanitizeFlushes` に `form`・`autoName`、core のあるフラッシュは `migrateFlushCores`（`settleStacks` の前。直した数に数えない）。ひな形は `{ version: 2 }` で書き、version 1 は `migrateFlushSpecCores`。`template.ts` の `MaterialSpec.noCut`・`FlushSpec`（core なし・`form`・`autoName`）と `templateOf`・`sameTemplate`・`createJob`。`sample.ts` は芯材15（木取りしない）を使う。`transfer/envelope.ts` の dataVersion 3。`transfer/fixtures/` に dataVersion 3 の見本のファイルを足す（17.6・17.7・17.9）
 - 完了の条件：v2 のキーだけにある見本（重ね切りの組の1枚にチェック済み）を読むと、芯材15（木取りしない）が足され、寸法表・木取り（見本で期待する値）・チェック・「部材が変わっています」なしが移し替える前と同じで、知らせ・直した数なし。保存すると v3 に書かれ v2 は1文字も変わらない。v3 があれば v2 は読まない。version 1 のひな形（core 15 のフラッシュ25）から作った新しい仕事に芯材15（木取りしない）とフラッシュ25（芯材15×1…）が入る。見本の厚みは 25 で期待する値が同じ。version 1 の共有・バックアップのファイル（fixtures）が同じ結果で取り込め、書き出したファイルは dataVersion 3、dataVersion 4 は「新しい版」の文言。仕事のコピーで `noCut`・`form`・`autoName` が残る
