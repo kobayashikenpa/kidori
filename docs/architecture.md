@@ -1908,8 +1908,9 @@ src/engine/
   types.ts               Job.stacking・StockKind.noTrim・SheetLayout.sheet.offcut・MaterialResult.offcutSheetCount・PackingResult.stacks
   packing/pairing.ts     （新）組の候補（pairCandidates）
   packing/offcuts.ts     （新）重ねた板の端材を手持ちの行にする（offcutStock）・重ねた板の番号（stackSheetNumbers）
-  packing/stack.ts       stackKey・stackLabel（「2枚重ね：メラミン1＋ラワン4」）。canStack は移し替えだけに残す。stackPlan は消す
-  packing/stock.ts       stackChoice の初期値（2つの材料のサイズがそろえばそのサイズ）
+  packing/stack.ts       stackKey・stackLabel（「2枚重ね：メラミン1＋ラワン4」）・stackPairName（「メラミン1＋ラワン18」）。canStack と stackPlan は以前のデータの移し替え（storage.ts の settleStacks・stacking の決定）だけに残す（木取りでは使わない）
+  packing/stock.ts       stackChoice の初期値（2つの材料のサイズがそろえばそのサイズ。片方が手持ちならもう片方のサイズ）。availableStackStock は消した（組の板は stackChoice のサイズで何枚でも）
+  flush.ts               defaultFlushStack は消した（材料グループの「重ねて切る」が無くなったため）
   packing/guillotine.ts  packOnStock：noTrim の行は端切り 0
   packing/pieces.ts      expandPieces は組を作らない（材料ごとの片だけ）
   packing/index.ts       packJob の流れ（18.4）・decideStacks（板が増えないかの確かめ。18.5）
@@ -1917,7 +1918,7 @@ src/engine/
   hints/saving.ts・hints/shortage.ts  今の仕事で決まった組のまま試す
   progress/frozen.ts     まとめの行（端材の1枚は枚数に数えない）・stockUsage に端材の行・layout.sheet.offcut を写しに残す
 src/store/
-  storage.ts             Job.stacking の移し替え・layout.sheet.offcut の検査・settleStacks の知らせをなくす
+  storage.ts             Job.stacking の移し替え・layout.sheet.offcut の検査・settleStacks の知らせ（sanitizeJobs の unstacked・「サイズがそろっていないので、重ね切りを外しました」）をなくす
   jobs.ts                setStacking・createJob（'on'）・copyJob／rekeyJob（stacking を写す）。validateFlush から stack の検査を外す
   sample.ts              見本の材料グループに stack を付けない（仕事の stacking は createJob の 'on'。8.4）。FlushSpec.stack は読むが使わない
 src/ui/
@@ -2006,7 +2007,7 @@ decideStacks(job, dims, expanded?): { accepted: StackPair[]; rejected: StackPair
 
 1. `expandPieces`：材料ごとの片を作る（**組は作らない**。固定した片・以前の木取り済みを引くのは今のまま。片の id の連番も今のまま）
 2. `pairCandidates` で組の候補を作り、`plan`（無ければ `decideStacks`。18.5）にある組だけを使う
-3. **重ねた板を並べる**：組ごとに、組の片（a の片。向きは組の行のサイズで決め直す）を `availableStackStock(job, [a, b])`（組の行のサイズ・固定した組の1枚を引く）で並べる。並べ方の選び方（`chooseWay`・`choose`）は今のまま。組の結果は `boardId: key`・`stack: { boardIds }`
+3. **重ねた板を並べる**：組ごとに、組の片（a の片。向きは組の行のサイズで決め直す）を組の行のサイズ（`stackChoice(job, [a, b])`。何枚でも。固定した組の1枚の片は `expandPieces` で引いてある）で並べる。並べ方の選び方（`chooseWay`・`choose`）は今のまま。組の結果は `boardId: key`・`stack: { boardIds }`
 4. **端材を手持ちの行にする**（`packing/offcuts.ts` の `offcutStock`）：重ねた板すべて（固定した組の1枚＝切り終わりを含む。計算した組の1枚）の `layout.scraps`（幅・長さとも 30mm 以上。今の `scrapsOf`）を、**a・b それぞれの材料の手持ちの行**にする
    - 1つの端材 → a の行 1枚 と b の行 1枚
    - 大きさ：短辺＝min(w, h)、長辺＝max(w, h)。木目：重ねた板の木目（組は3×6／4×8 なので長手。固定した1枚は `grain`）の方向が端材の長辺と同じなら `'long'`、違えば `'short'`（配置図が縦長なら h、横長なら w が板の長手方向）
