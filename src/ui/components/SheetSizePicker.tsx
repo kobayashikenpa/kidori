@@ -4,7 +4,7 @@
 // 重ね切りの組の行は 3×6・4×8 だけ（自由入力・手持ちの編集は出さない。仕様書 4・architecture.md 15.9）
 // 入らない部材がある（unplaced）ときは、サイズのボタンに「部材が収まらない」を出す（仕様書 9「手持ちの行の表示」。手持ちの行には出さない）
 // 重ねた板の端材から取った1枚は枚数に数えず、まとめの行と同じく「0枚（端材から 1枚）」で添える（第2.6版）
-// 第2.8版（仕様書 9.3）：手持ちを入れていない材料の行が重ねた板の端材を使うときは、「自由入力」を選ばれた表示にし、
+// 第2.8版（仕様書 9.3）：手持ちを入れていない材料の行に重ねた板の端材があるときは、「自由入力」を選ばれた表示にし、
 // 中に端材の行と「足りない分：4×8 ◯枚」と「手持ちを入れる」を出す。3×6・4×8 は押すと足りない分のサイズが変わる（選ばれた表示にはしない）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
@@ -45,8 +45,9 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
   const options = sizeChoices(target)
   const selected = selectedSize(target, choice)
   const isFree = selected === 'free'
-  // 端材を使っている（端材の行の1枚以上を採用）材料の行。手持ち（自由入力）で木取りしている行は今までどおり
-  const offcutFree = !isFree && !isStackTarget(target) && (usage?.offcuts.some((o) => o.used > 0) ?? false)
+  // 重ねた板の端材の行がある材料の行（端材はその材料の手持ちになる）。採用の有無では切り替えない（3×6・4×8 を押すたびに表示が変わらないように）。
+  // 手持ち（自由入力）で木取りしている行は今までどおり
+  const offcutFree = !isFree && !isStackTarget(target) && (usage?.offcuts.length ?? 0) > 0
   const freeShown = isFree || offcutFree
   const report = (r: { ok: boolean; message?: string }) => setError(r.ok ? null : (r.message ?? '変えられませんでした'))
 
