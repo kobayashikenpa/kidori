@@ -296,7 +296,6 @@ function BoardRemoveWarning({ job, ids }: { job: Job; ids: string[] }) {
 
 /**
  * 材料の追加（board が null）・編集。追加は下から出る編集の中に置く（第2.7版）。材料名と厚み・木取りしない。厚みは空欄から始め、入れないと追加できない。
- * 部材の編集の上に重ねて開くとき（MaterialEditSheet）にも使う
  */
 export function BoardForm({
   board,

@@ -1,5 +1,5 @@
 // 部材の編集シート：名前・板・W/H/D・枚数・厚みの寸法・木目・切り代・メモ
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { boardTokenLabel } from '../../engine/defaults'
 import { swapThicknessRef } from '../../engine/formula/usages'
@@ -16,10 +16,10 @@ import { fmt } from '../format'
 import { materialLabel, materialName, materialNameGroups } from '../materials'
 import { FormulaInput } from './FormulaInput'
 import { Help } from './Help'
-import { MaterialEditSheet, type MaterialEditTarget } from './MaterialEditSheet'
 import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
+import { SettingsScreen } from '../screens/SettingsScreen'
 
 /** 材料の欄の1段目で選んでいるもの（材料名、または材料グループ。何も選んでいなければ null） */
 type MaterialPick = { kind: 'name'; name: string } | { kind: 'group' } | null
@@ -53,10 +53,8 @@ export function PartEditor({ part, onClose }: Props) {
     return b ? { kind: 'name', name: materialName(b) } : null
   }
   const [pickState, setPick] = useState<MaterialPick>(pickFromDraft)
-  // 部材の編集の上に重ねて開いている、設定の材料・材料グループの編集（architecture.md 17.10）
-  const [materialEdit, setMaterialEdit] = useState<MaterialEditTarget | null>(null)
-  // 「＋ 材料グループを作る」で作った材料グループ。仕事に入ったあと（次の描画）で部材の下書きに選ぶ
-  const [createdGroup, setCreatedGroup] = useState<string | null>(null)
+  // 部材の編集の上に重ねて開いている設定の画面（第2.8版。仕様書 9.3）。閉じても下書きとスクロールの位置は残る
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // 材料・材料グループの表示名（式の {t:…} の名前と同じ）
   const thicknessName = (id: string | null): string => {
     const f = job.flushes.find((x) => x.id === id)
@@ -77,17 +75,9 @@ export function PartEditor({ part, onClose }: Props) {
     )
   }
 
-  useEffect(() => {
-    if (createdGroup === null || !job.flushes.some((f) => f.id === createdGroup)) return
-    setCreatedGroup(null)
-    // changeMaterial を通すので、式の厚みの置き換えと知らせも出る
-    changeMaterial({ flushId: createdGroup, boardId: null })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createdGroup, job])
-
   // 材料の欄の材料名ごとのまとまり（名前は最初に出てくる順、厚みは小さい順）
   const nameGroups = materialNameGroups(orderedBoards(job))
-  // 選んでいた材料名が無くなったら（「編集」で材料名を直したときなど）、下書きの今の材料から決め直す
+  // 選んでいた材料名が無くなったら（［設定］で材料名を直したときなど）、下書きの今の材料から決め直す
   const pick: MaterialPick =
     pickState?.kind === 'name' && !nameGroups.some((g) => g.name === pickState.name) ? pickFromDraft() : pickState
 
@@ -168,35 +158,27 @@ export function PartEditor({ part, onClose }: Props) {
 
         {cutting && (
           <div className="field">
-            <Help className="label" title="材料">
-              材料名と厚みで選びます。材料グループを選ぶと、木取りする中身ごとに木取りします（木取りしない材料は入れません）。「編集」で設定の材料・材料グループを直せます
-            </Help>
-            <div className="list-add" style={{ alignItems: 'center' }}>
-              <span className="mat-current" style={{ flex: 1, minWidth: 0 }}>
-                材料：
-                {draft.flushId !== undefined
-                  ? (() => {
-                      const f = job.flushes.find((x) => x.id === draft.flushId)
-                      return f ? `${f.name}（厚み ${fmt(flushThickness(f, job.boards))}mm）` : '未設定'
-                    })()
-                  : (() => {
-                      const cur = job.boards.find((x) => x.id === draft.boardId)
-                      return cur ? materialLabel(cur) : '未設定'
-                    })()}
-              </span>
-              <button
-                type="button"
-                className="btn"
-                aria-label="選んでいる材料を設定で編集"
-                aria-disabled={draft.flushId === undefined && draft.boardId === null}
-                onClick={() => {
-                  if (draft.flushId !== undefined) setMaterialEdit({ kind: 'group', id: draft.flushId })
-                  else if (draft.boardId !== null) setMaterialEdit({ kind: 'board', id: draft.boardId })
-                }}
-              >
-                編集
+            <div className="mat-head">
+              <Help className="label" title="材料">
+                材料名と厚みで選びます。材料グループを選ぶと、木取りする中身ごとに木取りします（木取りしない材料は入れません）。
+                ［設定］で設定の画面を開き、材料・材料グループ・調整寸法を足したり直したりできます。閉じると、書きかけの部材の編集に戻ります
+              </Help>
+              <button type="button" className="btn mat-settings" onClick={() => setSettingsOpen(true)}>
+                設定
               </button>
             </div>
+            <p className="mat-current">
+              材料：
+              {draft.flushId !== undefined
+                ? (() => {
+                    const f = job.flushes.find((x) => x.id === draft.flushId)
+                    return f ? `${f.name}（厚み ${fmt(flushThickness(f, job.boards))}mm）` : '未設定'
+                  })()
+                : (() => {
+                    const cur = job.boards.find((x) => x.id === draft.boardId)
+                    return cur ? materialLabel(cur) : '未設定'
+                  })()}
+            </p>
             <div className="mat-chips" role="group" aria-label="材料名">
               {nameGroups.map((g) => (
                 <button
@@ -248,13 +230,6 @@ export function PartEditor({ part, onClose }: Props) {
                     {f.name}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  className="mat-chip name add-group"
-                  onClick={() => setMaterialEdit({ kind: 'newGroup' })}
-                >
-                  ＋ 材料グループを作る
-                </button>
               </div>
             )}
             {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
@@ -421,14 +396,15 @@ export function PartEditor({ part, onClose }: Props) {
             </button>
           ))}
       </Sheet>
-      {materialEdit && (
-        <MaterialEditSheet
-          target={materialEdit}
-          onClose={(id) => {
-            setMaterialEdit(null)
-            if (id !== null) setCreatedGroup(id)
-          }}
-        />
+      {settingsOpen && (
+        <Sheet title="設定" closeText="×" onClose={() => setSettingsOpen(false)}>
+          <SettingsScreen initialTab="materials" embedded />
+          <div className="sheet-foot">
+            <button type="button" className="btn primary" onClick={() => setSettingsOpen(false)}>
+              完了
+            </button>
+          </div>
+        </Sheet>
       )}
     </>
   )

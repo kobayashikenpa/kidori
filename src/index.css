@@ -2179,9 +2179,21 @@ button.dim-name {
   max-width: 100%;
   overflow-wrap: anywhere;
 }
-.mat-chip.add-group {
-  border-style: dashed;
-  color: var(--accent);
+/* 材料の欄の見出しと［設定］ボタン（第2.8版） */
+.mat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mat-current {
+  margin: 0;
+}
+/* シートの「×」（閉じる） */
+.sheet-x {
+  min-width: 44px;
+  font-size: 20px;
+  line-height: 1;
 }
 .mat-step2 {
   padding: 8px;

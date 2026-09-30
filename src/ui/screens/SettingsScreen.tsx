@@ -1,5 +1,6 @@
-// 設定の画面：刃厚・耳落とし・切り代・切り方、調整寸法（逃げ・ほぞなど）の一覧、板の一覧、配色
-import { useState } from 'react'
+// 設定の画面：刃厚・耳落とし・切り代・切り方、調整寸法（逃げ・ほぞなど）の一覧、板の一覧、配色。
+// 部材の編集の［設定］からも重ねて開く（第2.8版。embedded：見出しを出さず、初めのタブは initialTab、開いたタブは覚えない）
+import { useId, useState } from 'react'
 import type { Settings } from '../../engine/types'
 import { updateSettings } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -16,11 +17,20 @@ import { loadTheme, saveTheme, type ThemeChoice } from '../theme'
 /** 切り代のよく使う値（暫定：未決事項 12） */
 const ALLOWANCE_PRESETS = [0, 5, 10]
 
-export function SettingsScreen() {
+interface Props {
+  /** 初めに開くタブ（無ければ最後に開いたタブ） */
+  initialTab?: SettingsTab
+  /** 部材の編集の上に重ねて開く（見出しはシートの題に任せる。開いたタブは覚えない） */
+  embedded?: boolean
+}
+
+export function SettingsScreen({ initialTab, embedded = false }: Props = {}) {
   const { job, run } = useCurrentJob()
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeChoice>(loadTheme)
-  const [tab, setTab] = useState<SettingsTab>(loadSettingsTab)
+  const [tab, setTab] = useState<SettingsTab>(() => initialTab ?? loadSettingsTab())
+  // タブの id（設定の画面と、部材の編集の上の設定の画面が同時にあっても重ならないように）
+  const uid = useId()
   const s = job.settings
 
   const set = (patch: Partial<Settings>) => {
@@ -30,24 +40,26 @@ export function SettingsScreen() {
 
   return (
     <section>
-      <h2>
-        <Help title="設定">
-          この仕事だけに効く設定です。新しい仕事は、いつも初めの設定から始まります（仕事をコピーしたときは、元の仕事の設定のまま）。
-        </Help>
-      </h2>
+      {!embedded && (
+        <h2>
+          <Help title="設定">
+            この仕事だけに効く設定です。新しい仕事は、いつも初めの設定から始まります（仕事をコピーしたときは、元の仕事の設定のまま）。
+          </Help>
+        </h2>
+      )}
       <div className="settings-tabs" role="tablist" aria-label="設定の種類">
         {SETTINGS_TABS.map((t) => (
           <button
             key={t.value}
             type="button"
             role="tab"
-            id={`settings-tab-${t.value}`}
+            id={`${uid}-tab-${t.value}`}
             aria-selected={tab === t.value}
-            aria-controls="settings-panel"
+            aria-controls={`${uid}-panel`}
             className={`pad-tab${tab === t.value ? ' on' : ''}`}
             onClick={() => {
               setTab(t.value)
-              saveSettingsTab(t.value)
+              if (!embedded) saveSettingsTab(t.value)
             }}
           >
             {t.value === 'groups' ? (
@@ -63,7 +75,7 @@ export function SettingsScreen() {
         ))}
       </div>
 
-      <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`}>
+      <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${tab}`}>
         {tab === 'basic' && (
           <>
             {error && <p className="msg err">{error}</p>}

@@ -1,14 +1,16 @@
 // 下から出る編集シート。背景を押すか「閉じる」で閉じる。
-// 重ねて開いたとき（部材の編集の上の MaterialEditSheet）は、Escape でいちばん上のシートだけを閉じる
+// 重ねて開いたとき（部材の編集の上の設定の画面など）は、Escape でいちばん上のシートだけを閉じる
 import { useEffect, useRef, type ReactNode } from 'react'
 
 interface Props {
   title: string
   onClose: () => void
   children: ReactNode
+  /** 閉じるボタンの文字（初めは「閉じる」。「×」なら読み上げは「閉じる」） */
+  closeText?: string
 }
 
-export function Sheet({ title, onClose, children }: Props) {
+export function Sheet({ title, onClose, children, closeText = '閉じる' }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -30,8 +32,13 @@ export function Sheet({ title, onClose, children }: Props) {
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-head">
           <h2>{title}</h2>
-          <button type="button" className="btn" onClick={onClose}>
-            閉じる
+          <button
+            type="button"
+            className={closeText === '閉じる' ? 'btn' : 'btn sheet-x'}
+            aria-label={closeText === '閉じる' ? undefined : '閉じる'}
+            onClick={onClose}
+          >
+            {closeText}
           </button>
         </div>
         <div className="sheet-body">{children}</div>

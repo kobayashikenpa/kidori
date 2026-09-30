@@ -94,15 +94,13 @@ interface FormProps {
   flush: Flush | null
   /** 保存したら保存した材料グループの id、やめたら null */
   done: (savedId: string | null) => void
-  /** 部材の編集の上に重ねて開くとき（MaterialEditSheet）：追加でも「やめる」「追加」を下に並べる */
-  overlay?: boolean
 }
 
 /**
  * 材料グループの追加（flush が null）・変更。初めの形（追加のときだけ）・中身（材料 × 枚数）・厚み・名前。
- * 設定の画面と、部材の編集の上に重ねて開く編集（MaterialEditSheet）で使う
+ * 設定の画面で使う（部材の編集の［設定］で重ねて開く設定の画面も同じ）
  */
-export function FlushForm({ flush, done, overlay = false }: FormProps) {
+export function FlushForm({ flush, done }: FormProps) {
   const { job, run } = useCurrentJob()
   const boards = orderedBoards(job)
   const noCutBoards = boards.filter((b) => b.noCut === true)
@@ -121,7 +119,7 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
   const [error, setError] = useState<string | null>(null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
-  const pre = flush ? `flush-edit-${flush.id}` : overlay ? 'flush-new' : 'flush-add'
+  const pre = flush ? `flush-edit-${flush.id}` : 'flush-add'
 
   const change = (next: FaceRow[], fm: GroupForm = form) => {
     setRows(next)
@@ -152,7 +150,7 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
     const r = run((j) => (flush ? updateFlush(j, flush.id, draft) : addFlush(j, draft, id)))
     if (!r.ok) return setError(r.message)
     closeKeyboard()
-    if (!flush && !overlay) {
+    if (!flush) {
       setForm('flush')
       const init = rowsOf('flush')
       setRows(init)
@@ -166,7 +164,7 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
 
   const fields = (
     <>
-      {!flush && !overlay && <span className="label">材料グループを追加</span>}
+      {!flush && <span className="label">材料グループを追加</span>}
       {!flush && (
         <div className="field" style={{ margin: 0 }}>
           <span className="label">初めの形</span>
@@ -285,7 +283,7 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
     </>
   )
 
-  if (flush || overlay) {
+  if (flush) {
     return (
       <>
         {fields}
@@ -294,7 +292,7 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
             やめる
           </button>
           <button type="button" className="btn primary" aria-disabled={!ready} onClick={save}>
-            {flush ? '変える' : '追加'}
+            変える
           </button>
         </div>
       </>
