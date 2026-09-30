@@ -1950,8 +1950,11 @@ button.dim-name {
 
 /* 手持ちの行の表示（第2.5版） */
 .stk-use.stk-unused {
-  color: var(--muted);
+  color: var(--err);
+  font-weight: 700;
 }
+.stk-use.stk-part,
 .stk-use.stk-all {
+  color: var(--accent);
   font-weight: 700;
 }
