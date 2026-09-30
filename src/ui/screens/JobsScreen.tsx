@@ -373,7 +373,7 @@ export function JobsScreen({ onOpened }: { onOpened: () => void }) {
           見本（本棚 W900）を追加
         </button>
         <Help className="lead" title="見本について">
-          使い方を試したいときだけ使ってください（今の設定で作ります。なくても困りません。あとで削除できます）
+          使い方を試したいときだけ使ってください（初めの設定で作ります。なくても困りません。あとで削除できます）
         </Help>
       </div>
     </section>
