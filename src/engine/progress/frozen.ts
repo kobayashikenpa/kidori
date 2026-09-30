@@ -165,6 +165,8 @@ export interface MaterialSummary {
    * 材料の行は、その材料をふつうに木取りする分だけ（重ね切りの組の1枚は組の行だけに数える。第2.1版）
    */
   sheetCount: number
+  /** 端材から取った1枚の数（第2.6版。材料の行だけ。sheetCount には入れない。組の行は 0） */
+  offcutCount: number
   /** 重ね切りの組の1枚の数。組の行は sheetCount と同じ、材料の行はいつも 0（第2.1版から材料の行に組の1枚を足さないため） */
   stackedCount: number
   /** 同じ1枚たちの歩留まり */
@@ -227,6 +229,8 @@ export function materialSizeCounts(
   return summaryRows(job, result, views).rows.map(({ summary, sheets }) => {
     const counts: (SizeCount & { area: number })[] = []
     for (const s of sheets) {
+      // 端材から取った1枚（第2.6版）は枚数に数えない
+      if (s.sheet?.offcut) continue
       const label = layoutSizeLabel(s)
       const c = counts.find((x) => x.label === label)
       if (c) c.count++
@@ -323,10 +327,13 @@ function summaryRows(
     const mine = views.filter((v) => v.sheet.boardId === boardId && !v.sheet.stackWith)
     if (computed || mine.length > 0) {
       const sheets = [...mine.filter((v) => !v.complete).map((v) => v.sheet.layout), ...(computed?.sheets ?? [])]
-      all.push(...sheets)
+      // 端材から取った1枚（第2.6版）は重ねた板の中なので、全体の歩留まりの板の面積に数えない
+      all.push(...sheets.map((s) => (s.sheet?.offcut ? { ...s, boardWidth: 0 } : s)))
+      const offcuts = sheets.filter((s) => s.sheet?.offcut).length
       const summary: MaterialSummary = {
         boardId,
-        sheetCount: sheets.length,
+        sheetCount: sheets.length - offcuts,
+        offcutCount: offcuts,
         stackedCount: 0,
         yieldRate: combineYield(sheets.map(areasOf)).yieldRate,
         completedCount: mine.filter((v) => v.complete).length,
@@ -341,6 +348,7 @@ function summaryRows(
         boardId: s.key,
         stack: { boardIds: [s.boardIds[0], s.boardIds[1]] },
         sheetCount: s.active.length,
+        offcutCount: 0,
         stackedCount: s.active.length,
         yieldRate: combineYield(s.active.map(areasOf)).yieldRate,
         completedCount: s.completed,

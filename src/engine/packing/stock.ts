@@ -107,7 +107,8 @@ export function availableStock(job: Pick<Job, 'boards' | 'frozenSheets'>, boardI
   if (!board) return []
   return subtractFrozen(
     stockKinds(board),
-    job.frozenSheets.filter((f) => f.boardId === boardId && !f.stackWith),
+    // 端材から取った1枚（第2.6版）は端材の行から引く（packJob）ので、ここでは引かない
+    job.frozenSheets.filter((f) => f.boardId === boardId && !f.stackWith && !f.layout.sheet?.offcut),
   )
 }
 

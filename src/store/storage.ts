@@ -652,6 +652,16 @@ function sanitizeRemovedBuiltIns(v: unknown, fx: Fixes): string[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
+/**
+ * 重ね切り（第2.6版）が無い仕事（第2.5.1版まで）の重ね切りを1回決める（architecture.md 18.8。未決事項 59）。
+ * 部材（枚数1以上）が使っている材料グループのうち、以前の決まりで重ねられた（canStack）のに「重ねて切る」を外していたものが
+ * 1つでもあれば 'off'、ほかは 'on'。直した数に数えない・知らせない
+ */
+function legacyStacking(boards: readonly Board[], flushes: readonly Flush[], parts: readonly LegacyPart[]): 'on' | 'off' {
+  const used = new Set(parts.filter((p) => p.quantity >= 1 && p.flushId !== undefined).map((p) => p.flushId))
+  return flushes.some((f) => used.has(f.id) && f.stack !== true && canStack(f, boards)) ? 'off' : 'on'
+}
+
 /** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
 function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
@@ -710,7 +720,7 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
     stackSheets: stacks.stackSheets,
-    stacking: v.stacking === 'off' ? 'off' : 'on',
+    stacking: v.stacking === 'on' || v.stacking === 'off' ? v.stacking : legacyStacking(boards, flushes, parts),
     ...(removedBuiltIns ? { removedBuiltIns } : {}),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),

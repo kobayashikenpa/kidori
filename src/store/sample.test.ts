@@ -15,7 +15,6 @@ import {
   newBoard,
   removeBoards,
   removeNiges,
-  updateFlush,
   updateSettings,
   type JobOp,
   type OpResult,
@@ -79,8 +78,7 @@ describe('sampleJob（見本は初期値の設定から作る。フラッシュ2
       expect(r.skipped).toEqual([])
     }
     // 重ね切りをオフにすると第1.7版の見本（S-14）の値
-    const { stack: _s, ...offDraft } = job.flushes[0]
-    const off = must(updateFlush(job, job.flushes[0].id, offDraft))
+    const off: Job = { ...job, stacking: 'off' }
     const r = packJob(off, computeDimensions(off))
     expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
       ['メラミン 1mm', 5],

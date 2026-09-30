@@ -19,6 +19,7 @@ const rows = (job: Job) => packJob(job, computeDimensions(job)).materials.map((m
 function legacy(edit?: (j: Record<string, unknown> & Job) => void): unknown {
   const j = JSON.parse(JSON.stringify(sampleGroupJob(true))) as Record<string, unknown> & Job
   delete (j as Partial<Job>).stackSheets
+  delete (j as Partial<Job>).stacking
   edit?.(j)
   return j
 }
