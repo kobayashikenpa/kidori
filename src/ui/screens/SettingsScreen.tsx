@@ -184,7 +184,7 @@ export function SettingsScreen({ initialTab, embedded = false }: Props = {}) {
             <h3>
               <Help title="調整寸法">
                 逃げ・ほぞなど、仕上がり寸法を伸ばしたり短くしたりする寸法です。式の中で足したり引いたりして使います（例：天地板.W
-                − 逃げ1、棚板.D + ほぞ15）。名前や寸法を変えると、使っている式もついてきます。
+                − 逃げ1、棚板.D + ほぞ15）。名前や寸法を変えると、それを使っている式も自動で変わります。
               </Help>
             </h3>
             <NigeEditor />
