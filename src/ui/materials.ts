@@ -24,3 +24,22 @@ export function materialRuns<T extends Pick<Board, 'material'>>(boards: readonly
   }
   return out
 }
+
+/**
+ * 材料名ごとにまとめる（第2.7版）。離れていても同じ材料名は1つにまとめる。
+ * 名前の並びは boards（orderedBoards）で最初に出てくる順、行の中の厚みは小さい順
+ */
+export function materialNameGroups<T extends Pick<Board, 'material' | 'thickness'>>(
+  boards: readonly T[],
+): { name: string; boards: T[] }[] {
+  const out: { name: string; boards: T[] }[] = []
+  for (const b of boards) {
+    const name = materialName(b)
+    const g = out.find((x) => x.name === name)
+    if (g) g.boards.push(b)
+    else out.push({ name, boards: [b] })
+  }
+  // 同じ厚みは元の並びのまま（安定な並べ替え）
+  for (const g of out) g.boards.sort((a, b) => a.thickness - b.thickness)
+  return out
+}

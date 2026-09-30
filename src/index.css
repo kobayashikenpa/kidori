@@ -2009,3 +2009,83 @@ button.dim-name {
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
+
+/* 材料のタブ：材料名ごとの1行と厚みのボタン（第2.7版） */
+.mat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mat-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mat-chip {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 44px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mat-thick {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.mat-nocut {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.mat-chip.nocut {
+  border: 2px dotted var(--muted);
+}
+.mat-chip.add {
+  border-style: dashed;
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 700;
+}
+.mat-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mat-chip.pick.on {
+  border-color: var(--err);
+  background: var(--err);
+  color: var(--surface);
+}
+.mat-chip.pick.on .mat-nocut {
+  color: var(--surface);
+}
+.mat-tick {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  font-size: 11px;
+}
+.mat-preset {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+}

@@ -18,8 +18,6 @@ interface Props<T extends { id: string }> {
   warning?: (item: T) => string | null
   /** 名前の横に出す印（木取りしない など。無ければ null） */
   badge?: (item: T) => ReactNode
-  /** 見出しでまとめる名前（材料名。隣り合う同じ名前の行を1つの見出しの下に並べる。並び順は変えない） */
-  groupOf?: (item: T) => string
   /** 上に置く追加の入力 */
   add: ReactNode
   /** 編集の形（done で一覧の形に戻す） */
@@ -40,7 +38,6 @@ export function SettingsList<T extends { id: string }>({
   usage,
   warning,
   badge,
-  groupOf,
   add,
   renderEdit,
   removeWarning,
@@ -211,16 +208,9 @@ export function SettingsList<T extends { id: string }>({
         </button>
       )}
       {selecting && <p className="lead" style={{ margin: 0 }}>削除する{kind}を選んでください（いくつでも選べます）。</p>}
-      {items.map((item, i) => {
-        const group = groupOf?.(item)
-        const head = group !== undefined && (i === 0 || groupOf?.(items[i - 1]) !== group)
-        return (
-          <Fragment key={item.id}>
-            {head && <h4 className="list-group-head">{group}</h4>}
-            {row(item)}
-          </Fragment>
-        )
-      })}
+      {items.map((item) => (
+        <Fragment key={item.id}>{row(item)}</Fragment>
+      ))}
       {selecting &&
         (bulkConfirm && chosen.length > 0 ? (
           <div id={`${idPrefix}-bulk-confirm`} className="card stack confirm" role="alertdialog" aria-label={`選んだ${kind}の削除の確認`}>
