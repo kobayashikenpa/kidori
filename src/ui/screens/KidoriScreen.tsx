@@ -1,6 +1,6 @@
 // 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
 // 入らない部材・計算できない部材の一覧、材料ごとに 固定した1枚 → 計算した1枚 の順で1枚ごとの配置図とチェックリスト（第1.8版）。
-// 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetChecklist）。
+// 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetPartChecklist）。
 // 重ね切り（第2.0版。architecture.md 12.8）：組の段は1つ目の材料の段の直後。組の1枚のチェックは stackWith を付けて両方の材料に数える
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
@@ -23,10 +23,11 @@ import {
   type StockUsage,
 } from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
-import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
+import { partCutProgress } from '../../engine/progress/partProgress'
+import { sheetPartChecklist, type SheetPartRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
 import { boardTokenLabel } from '../../engine/defaults'
-import { boardLabel, clearLegacyCut, newId, setPieceCheck, setStacking, updateSettings, type SheetTarget } from '../../store/jobs'
+import { boardLabel, clearLegacyCut, newId, setPartCheck, setStacking, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
@@ -117,7 +118,7 @@ const frozenEntry = (v: FrozenSheetView, name: string | null): SheetEntry => ({
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
-  const { result, compare, views, summaries, usage, sizeCounts, shortages } = useMemo(() => {
+  const { result, compare, views, summaries, usage, sizeCounts, shortages, progress } = useMemo(() => {
     const dims = computeDimensions(job)
     const result = packJob(job, dims)
     const views = frozenSheetViews(job, dims)
@@ -130,6 +131,8 @@ export function KidoriScreen() {
       sizeCounts: materialSizeCounts(job, result, views),
       // 手持ちが足りない材料の解決策（足りない材料が無ければ packJob を追加で呼ばない）
       shortages: stockShortage(job, dims, result),
+      // 部材ごとの切り出しの進み具合（第2.7版）
+      progress: partCutProgress(job),
     }
   }, [job])
   // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
@@ -147,17 +150,17 @@ export function KidoriScreen() {
       return
     }
   }, [job])
-  const toggle = (boardId: string, entry: SheetEntry, row: SheetChecklistRow, key: string, el: HTMLElement) => {
+  const toggle = (boardId: string, entry: SheetEntry, row: SheetPartRow, key: string, el: HTMLElement) => {
     // 計算した1枚は、ここで決めた id で固定される（押した行のキーが、固定した1枚の行のキーになる）
     const id = entry.target.kind === 'frozen' ? entry.target.sheetId : newId('sheet')
-    const after = `${id}:${row.pieceId}`
+    const after = `${id}:${row.partId}`
     const sec = document.querySelector<HTMLElement>(`[data-cl-key="${CSS.escape(`sec:${boardId}`)}"]`)
     const top = el.getBoundingClientRect().top
     anchor.current = {
       keys: [after, key, `sec:${boardId}`],
       tops: [top, top, sec?.getBoundingClientRect().top ?? 0],
     }
-    const r = run((j) => setPieceCheck(j, entry.target, row.pieceId, !row.done, new Date(), id))
+    const r = run((j) => setPartCheck(j, entry.target, row.partId, !row.done, new Date(), id))
     if (!r.ok) anchor.current = null
   }
   // 「切り終わり ◯枚」を開いている材料
@@ -398,6 +401,38 @@ export function KidoriScreen() {
         </div>
       )}
 
+      {progress.length > 0 && (
+        <div className="card kd-progress">
+          <h4>部材ごとの進み具合</h4>
+          <ul className="pp-list">
+            {progress.map((p) => {
+              const all = p.done >= p.total
+              return (
+                <li key={p.partId} className={`pp-row${all ? ' all' : ''}`}>
+                  <span className="pp-name">
+                    {p.name}
+                    {all && <span className="pp-all">切り終わり</span>}
+                  </span>
+                  <span
+                    className="pp-bar"
+                    role="progressbar"
+                    aria-label={`${p.name} の切り出し`}
+                    aria-valuemin={0}
+                    aria-valuemax={p.total}
+                    aria-valuenow={p.done}
+                  >
+                    <span className="pp-fill" style={{ width: `${(p.done / p.total) * 100}%` }} />
+                  </span>
+                  <span className="pp-count num">
+                    {p.done}/{p.total}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* ふつうの1枚の無い材料（組の1枚だけの材料）は、1枚ごとの段を出さない */}
       {sections.map((sec) => (
         <section key={sec.boardId} aria-label={sec.label}>
@@ -433,7 +468,7 @@ export function KidoriScreen() {
                   finished
                   label={sec.label}
                   size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
-                  rows={sheetChecklist(job, e.layout, e.checked)}
+                  rows={sheetPartChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
                 />
@@ -450,7 +485,7 @@ export function KidoriScreen() {
                   count={plainCount(sec.sheets)}
                   label={sec.label}
                   size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
-                  rows={sheetChecklist(job, e.layout, e.checked)}
+                  rows={sheetPartChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
                 />
@@ -535,9 +570,9 @@ interface SheetCardProps {
   label: string
   /** 手持ちの1枚の大きさ（「4×8」）。サイズを選んだ材料は null */
   size: string | null
-  rows: SheetChecklistRow[]
+  rows: SheetPartRow[]
   colorOf: (partId: string) => number
-  onToggle: (row: SheetChecklistRow, key: string, el: HTMLElement) => void
+  onToggle: (row: SheetPartRow, key: string, el: HTMLElement) => void
 }
 
 function SheetCard({ entry, no, count, finished = false, label, size, rows, colorOf, onToggle }: SheetCardProps) {
@@ -549,8 +584,9 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
   // 残りの材料（まだ切っていない部材の入っているもの）は、チェックのある1枚だけに出す
   const remaining =
     entry.view && entry.checked.length > 0 ? entry.view.progress.remaining.filter((q) => q.pieceIds.length > 0).map((q) => q.rect) : []
-  const rowKey = (r: SheetChecklistRow) =>
-    entry.target.kind === 'frozen' ? `${entry.target.sheetId}:${r.pieceId}` : `${entry.key}:${r.pieceId}`
+  // 押した行の位置を保つキー（1枚の id と部材。第2.7版）
+  const rowKey = (r: SheetPartRow) =>
+    entry.target.kind === 'frozen' ? `${entry.target.sheetId}:${r.partId}` : `${entry.key}:${r.partId}`
   return (
     <article className={finished ? 'card kd-sheet finished' : 'card kd-sheet'}>
       {drift.length > 0 && (
@@ -605,7 +641,7 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
         </span>
         <span>部材は右上から詰める・部材の寸法は木取り寸法</span>
       </p>
-      <SheetChecklist label={`${label} の ${entry.name ?? `${no}枚目`}`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
+      <SheetChecklist label={`${label} の ${entry.name ?? `${no}枚目`}`} rows={rows} checked={entry.checked} rowKey={rowKey} onToggle={onToggle} />
     </article>
   )
 }

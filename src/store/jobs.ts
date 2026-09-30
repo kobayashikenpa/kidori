@@ -839,6 +839,45 @@ export function setPieceCheck(
 }
 
 /**
+ * その1枚の、ある部材の片をまとめて付け外しする（第2.7版。architecture.md 19.6）。1回の操作（1回の保存）。
+ * 中身は setPieceCheck を片ごとに繰り返す（固定・切り終わり・固定の外れの決まりはそのまま）。
+ * - 付ける：まだ付いていない片だけ。計算した1枚は1つ目の片で id の1枚として固定し、2つ目からはその固定した1枚に付ける
+ * - 外す：付いている片をすべて外す。計算した1枚で外すは何もしない
+ * - その1枚にこの部材の片が無ければ断る。途中で1つでも断られたら、元の job のまま断る
+ */
+export function setPartCheck(
+  job: Job,
+  target: SheetTarget,
+  partId: string,
+  done: boolean,
+  now: Date = new Date(),
+  id: string = newId('sheet'),
+): OpResult {
+  let layout: SheetLayout
+  let checked: readonly string[] = []
+  if (target.kind === 'computed') {
+    layout = target.layout
+  } else {
+    const sheet = job.frozenSheets.find((f) => f.id === target.sheetId)
+    if (!sheet) return fail('固定した1枚が見つかりません')
+    layout = sheet.layout
+    checked = sheet.checked
+  }
+  const pieceIds = layout.placements.filter((p) => p.partId === partId).map((p) => p.pieceId)
+  if (pieceIds.length === 0) return fail('部材が見つかりません')
+  const todo = pieceIds.filter((pid) => checked.includes(pid) !== done)
+  let cur = job
+  let t = target
+  for (const pid of todo) {
+    const r = setPieceCheck(cur, t, pid, done, now, id)
+    if (!r.ok) return r
+    cur = r.job
+    if (t.kind === 'computed' && done) t = { kind: 'frozen', sheetId: id }
+  }
+  return ok(cur)
+}
+
+/**
  * 以前の版で付けた「木取り済み」（部材ごと）を外して、計算に戻す（第1.8版。architecture.md 11.9）。
  * ふつうの部材は checks.cut = false、フラッシュの部材は checks.cutByBoard[boardId] を消す（boardId は PackingResult.done の boardId）
  */

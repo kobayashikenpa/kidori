@@ -1396,14 +1396,6 @@ select.input {
   background: var(--err-soft);
   color: var(--err);
 }
-.sz-form {
-  background: var(--surface);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
 /* 部材の編集：厚みの寸法の自動表示 */
 .thick-auto {
@@ -1590,6 +1582,10 @@ select.input {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.cl-qty {
+  white-space: nowrap;
+  font-weight: 400;
 }
 .cl-size {
   flex: none;
@@ -1828,11 +1824,6 @@ button.dim-name {
 .stk {
   margin-top: 14px;
 }
-.stk-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 .stk-mat {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1940,12 +1931,6 @@ button.dim-name {
 }
 
 /* ---------- 設定の一覧の見出し（材料名ごと）・木取りしない の印（第2.5版） ---------- */
-.list-group-head {
-  margin: 10px 0 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-}
 .list-name .chip {
   margin-left: 8px;
   vertical-align: middle;
@@ -1994,4 +1979,219 @@ button.dim-name {
 .stk-offcut .stk-use {
   flex: 0 0 auto;
   min-height: 0;
+}
+
+/* 設定の画面のタブ（第2.7版）。幅 375px で4つが1行に収まる（長い名前は2行に折り返す） */
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0 12px;
+}
+.settings-tabs .pad-tab {
+  padding: 4px 2px;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+/* 材料のタブ：材料名ごとの1行と厚みのボタン（第2.7版） */
+.mat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mat-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mat-chip {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 44px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mat-thick {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.mat-nocut {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.mat-chip.nocut {
+  border: 2px dotted var(--muted);
+}
+.mat-chip.add {
+  border-style: dashed;
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 700;
+}
+.mat-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mat-chip.pick.on {
+  border-color: var(--err);
+  background: var(--err);
+  color: var(--surface);
+}
+.mat-chip.pick.on .mat-nocut {
+  color: var(--surface);
+}
+.mat-tick {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  font-size: 11px;
+}
+.mat-preset {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+/* 材料グループのタブ：1行に名前と厚み（第2.7版）。押すと中身と「編集」「削除」を開く */
+.list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.list-compact-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.list-compact-head .list-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.list-compact-sub {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.list-compact-arrow {
+  margin-left: auto;
+  font-size: 22px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.list-compact-arrow.open {
+  transform: rotate(90deg);
+}
+.list-compact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+/* 部材の編集の材料の欄（第2.7版）：1段目＝材料名・材料グループ、2段目＝厚み・材料グループの名前 */
+.mat-current {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mat-chip.name {
+  font-size: 15px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.mat-chip.add-group {
+  border-style: dashed;
+  color: var(--accent);
+}
+.mat-step2 {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--sunk);
+}
+
+/* 木取りの画面：部材ごとの進み具合（第2.7版） */
+.kd-progress {
+  margin-top: 14px;
+}
+.kd-progress h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.pp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) minmax(0, 1fr) 4.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.pp-name {
+  overflow-wrap: anywhere;
+}
+.pp-bar {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.pp-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.pp-row.all .pp-fill {
+  background: var(--muted);
+}
+.pp-count {
+  white-space: nowrap;
+  text-align: right;
+}
+.pp-all {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
 }

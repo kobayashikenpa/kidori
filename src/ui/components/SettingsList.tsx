@@ -18,8 +18,11 @@ interface Props<T extends { id: string }> {
   warning?: (item: T) => string | null
   /** 名前の横に出す印（木取りしない など。無ければ null） */
   badge?: (item: T) => ReactNode
-  /** 見出しでまとめる名前（材料名。隣り合う同じ名前の行を1つの見出しの下に並べる。並び順は変えない） */
-  groupOf?: (item: T) => string
+  /**
+   * 1行を短くする形（第2.7版。材料グループ）：閉じた行に名前とこの文（例：25mm）だけを出し、
+   * 押すとその下に使っている部材・注意と「編集」「削除」を開く（開けるのは1つだけ）
+   */
+  compact?: (item: T) => string
   /** 上に置く追加の入力 */
   add: ReactNode
   /** 編集の形（done で一覧の形に戻す） */
@@ -40,7 +43,7 @@ export function SettingsList<T extends { id: string }>({
   usage,
   warning,
   badge,
-  groupOf,
+  compact,
   add,
   renderEdit,
   removeWarning,
@@ -48,6 +51,8 @@ export function SettingsList<T extends { id: string }>({
   emptyText,
 }: Props<T>) {
   const [editId, setEditId] = useState<string | null>(null)
+  // 1行を短くする形で、中身を開いている行
+  const [openId, setOpenId] = useState<string | null>(null)
   const [removeId, setRemoveId] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState<string | null>(null)
   // 選んで削除：選ぶモードか・選んだ id・確認を出しているか
@@ -170,33 +175,70 @@ export function SettingsList<T extends { id: string }>({
         </div>
       )
     }
+    const warn = warning?.(item) ?? null
+    const actions = (
+      <div className="list-actions">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            cancelRemove()
+            setEditId(item.id)
+          }}
+        >
+          編集
+        </button>
+        <button type="button" className="btn danger" onClick={() => startRemove(item.id)}>
+          削除
+        </button>
+      </div>
+    )
+    if (compact) {
+      const open = openId === item.id
+      return (
+        <div key={item.id} className="card list-compact">
+          <button
+            type="button"
+            className="list-compact-head"
+            aria-expanded={open}
+            aria-controls={`${idPrefix}-body-${item.id}`}
+            onClick={() => setOpenId(open ? null : item.id)}
+          >
+            <span className="list-name">
+              {name}
+              {badge?.(item)}
+            </span>
+            <span className="list-compact-sub">{compact(item)}</span>
+            {warn && !open && <span className="chip warn">中身がありません</span>}
+            <span className={`list-compact-arrow${open ? ' open' : ''}`} aria-hidden="true">
+              ›
+            </span>
+          </button>
+          {open && (
+            <div id={`${idPrefix}-body-${item.id}`} className="list-compact-body">
+              <span className="lead" style={{ margin: 0 }}>
+                {usage(item)}
+              </span>
+              {warn && <span className="msg warn">{warn}</span>}
+              {actions}
+            </div>
+          )}
+        </div>
+      )
+    }
     return (
       <div key={item.id} className="card list-item">
         <div className="list-info">
           <span className="list-name">
-              {name}
-              {badge?.(item)}
-            </span>
+            {name}
+            {badge?.(item)}
+          </span>
           <span className="lead" style={{ margin: 0 }}>
             {usage(item)}
           </span>
-          {warning?.(item) && <span className="msg warn">{warning(item)}</span>}
+          {warn && <span className="msg warn">{warn}</span>}
         </div>
-        <div className="list-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              cancelRemove()
-              setEditId(item.id)
-            }}
-          >
-            編集
-          </button>
-          <button type="button" className="btn danger" onClick={() => startRemove(item.id)}>
-            削除
-          </button>
-        </div>
+        {actions}
       </div>
     )
   }
@@ -211,16 +253,9 @@ export function SettingsList<T extends { id: string }>({
         </button>
       )}
       {selecting && <p className="lead" style={{ margin: 0 }}>削除する{kind}を選んでください（いくつでも選べます）。</p>}
-      {items.map((item, i) => {
-        const group = groupOf?.(item)
-        const head = group !== undefined && (i === 0 || groupOf?.(items[i - 1]) !== group)
-        return (
-          <Fragment key={item.id}>
-            {head && <h4 className="list-group-head">{group}</h4>}
-            {row(item)}
-          </Fragment>
-        )
-      })}
+      {items.map((item) => (
+        <Fragment key={item.id}>{row(item)}</Fragment>
+      ))}
       {selecting &&
         (bulkConfirm && chosen.length > 0 ? (
           <div id={`${idPrefix}-bulk-confirm`} className="card stack confirm" role="alertdialog" aria-label={`選んだ${kind}の削除の確認`}>
