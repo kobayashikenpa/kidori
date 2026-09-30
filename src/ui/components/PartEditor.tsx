@@ -10,10 +10,10 @@ import { computeFinished } from '../../engine/dimensions/finished'
 import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
-import { addPart, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
+import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
-import { materialLabel, materialRuns } from '../materials'
+import { materialLabel, materialName, materialNameGroups } from '../materials'
 import { FormulaInput } from './FormulaInput'
 import { Help } from './Help'
 import { MaterialEditSheet, type MaterialEditTarget } from './MaterialEditSheet'
@@ -43,6 +43,12 @@ export function PartEditor({ part, onClose }: Props) {
   }
   // 材料を変えたときの厚みの置き換えの知らせ（仕様書 5.4・architecture.md 15.7）。before は置き換える前の下書きの式（元に戻す用）
   const [swapped, setSwapped] = useState<{ message: string; before: Part['expr'] } | null>(null)
+  // 材料の欄の1段目で選んでいるもの（材料名、または材料グループ）。画面の中だけの状態で、開いたときは下書きの材料から決める（第2.7版）
+  const [pick, setPick] = useState<{ kind: 'name'; name: string } | { kind: 'group' } | null>(() => {
+    if (draft.flushId !== undefined) return { kind: 'group' }
+    const b = job.boards.find((x) => x.id === draft.boardId)
+    return b ? { kind: 'name', name: materialName(b) } : null
+  })
   // 部材の編集の上に重ねて開いている、設定の材料・材料グループの編集（architecture.md 17.10）
   const [materialEdit, setMaterialEdit] = useState<MaterialEditTarget | null>(null)
   // 「＋ 材料グループを作る」で作った材料グループ。仕事に入ったあと（次の描画）で部材の下書きに選ぶ
@@ -74,6 +80,9 @@ export function PartEditor({ part, onClose }: Props) {
     changeMaterial({ flushId: createdGroup, boardId: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createdGroup, job])
+
+  // 材料の欄の材料名ごとのまとまり（名前は最初に出てくる順、厚みは小さい順）
+  const nameGroups = materialNameGroups(orderedBoards(job))
 
   // 入力中の内容で寸法を計算し直す（計算は engine に任せる）
   const draftJob = useMemo(
@@ -155,41 +164,19 @@ export function PartEditor({ part, onClose }: Props) {
             <Help className="label" title="材料">
               材料名と厚みで選びます。材料グループを選ぶと、木取りする中身ごとに木取りします（木取りしない材料は入れません）。「編集」で設定の材料・材料グループを直せます
             </Help>
-            <div className="list-add">
-              <select
-                id="part-board"
-                aria-label="材料"
-                className="input"
-                style={{ flex: 1, minWidth: 0 }}
-                value={draft.flushId !== undefined ? `flush:${draft.flushId}` : draft.boardId ? `board:${draft.boardId}` : ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === 'new-group') setMaterialEdit({ kind: 'newGroup' })
-                  else if (v.startsWith('flush:')) changeMaterial({ flushId: v.slice(6), boardId: null })
-                  else changeMaterial({ boardId: v.startsWith('board:') ? v.slice(6) : null, flushId: undefined })
-                }}
-              >
-                <option value="">（材料が未設定）</option>
-                {materialRuns(orderedBoards(job)).map((g) => (
-                  <optgroup key={`${g.name}-${g.boards[0].id}`} label={`材料：${g.name}`}>
-                    {g.boards.map((b) => (
-                      <option key={b.id} value={`board:${b.id}`}>
-                        {materialLabel(b)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-                {job.flushes.length > 0 && (
-                  <optgroup label="材料グループ">
-                    {job.flushes.map((f) => (
-                      <option key={f.id} value={`flush:${f.id}`}>
-                        {f.name}（厚み {fmt(flushThickness(f, job.boards))}mm）
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                <option value="new-group">＋ 材料グループを作る</option>
-              </select>
+            <div className="list-add" style={{ alignItems: 'center' }}>
+              <span className="mat-current" style={{ flex: 1, minWidth: 0 }}>
+                材料：
+                {draft.flushId !== undefined
+                  ? (() => {
+                      const f = job.flushes.find((x) => x.id === draft.flushId)
+                      return f ? `${f.name}（厚み ${fmt(flushThickness(f, job.boards))}mm）` : '未設定'
+                    })()
+                  : (() => {
+                      const cur = job.boards.find((x) => x.id === draft.boardId)
+                      return cur ? materialLabel(cur) : '未設定'
+                    })()}
+              </span>
               <button
                 type="button"
                 className="btn"
@@ -203,6 +190,66 @@ export function PartEditor({ part, onClose }: Props) {
                 編集
               </button>
             </div>
+            <div className="mat-chips" role="group" aria-label="材料名">
+              {nameGroups.map((g) => (
+                <button
+                  key={g.name}
+                  type="button"
+                  className="mat-chip name"
+                  aria-pressed={pick?.kind === 'name' && pick.name === g.name}
+                  onClick={() => setPick({ kind: 'name', name: g.name })}
+                >
+                  {g.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="mat-chip name"
+                aria-pressed={pick?.kind === 'group'}
+                onClick={() => setPick({ kind: 'group' })}
+              >
+                材料グループ
+              </button>
+            </div>
+            {pick?.kind === 'name' && (
+              <div className="mat-chips mat-step2" role="group" aria-label={`${pick.name} の厚み`}>
+                {(nameGroups.find((g) => g.name === pick.name)?.boards ?? []).map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`mat-chip${b.noCut === true ? ' nocut' : ''}`}
+                    aria-pressed={draft.flushId === undefined && draft.boardId === b.id}
+                    aria-label={b.noCut === true ? `${boardLabel(b)} 木取りしない` : boardLabel(b)}
+                    onClick={() => changeMaterial({ boardId: b.id, flushId: undefined })}
+                  >
+                    <span className="mat-thick">{fmt(b.thickness)}</span>
+                    {b.noCut === true && <span className="mat-nocut">木取りしない</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {pick?.kind === 'group' && (
+              <div className="mat-chips mat-step2" role="group" aria-label="材料グループ">
+                {job.flushes.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className="mat-chip name"
+                    aria-pressed={draft.flushId === f.id}
+                    onClick={() => changeMaterial({ flushId: f.id, boardId: null })}
+                  >
+                    {f.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="mat-chip name add-group"
+                  onClick={() => setMaterialEdit({ kind: 'newGroup' })}
+                >
+                  ＋ 材料グループを作る
+                </button>
+              </div>
+            )}
             {flush && <span className="hint">厚み {flushBreakdownText(flush)}</span>}
             {!board && <p className="msg warn">材料が未設定です。木取りの計算には材料が必要です</p>}
             {partIsNoCut(job, draft) && <p className="msg warn">木取りしない材料なので、木取りの計算には入りません</p>}

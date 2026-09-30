@@ -2138,3 +2138,24 @@ button.dim-name {
   gap: 6px;
   overflow-wrap: anywhere;
 }
+
+/* 部材の編集の材料の欄（第2.7版）：1段目＝材料名・材料グループ、2段目＝厚み・材料グループの名前 */
+.mat-current {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mat-chip.name {
+  font-size: 15px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.mat-chip.add-group {
+  border-style: dashed;
+  color: var(--accent);
+}
+.mat-step2 {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--sunk);
+}
