@@ -1,8 +1,9 @@
 // 画面の切り替え（下の5つのタブ）。仕事を開いていないときは「仕事」以外を押せない。
 // 第2.8版（仕様書 9.3）：一度開いた画面は消さずに隠し（React の Activity）、タブ・開いている段などをそのまま残す。
-// 画面ごとのスクロールの位置はメモリに覚えて、戻ったときに戻す（アプリを開いている間だけ）。別の仕事を開いたら一番上から
-import { Activity, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { useJobStore } from '../store/useJobStore'
+// 画面ごとのスクロールの位置はメモリに覚えて、戻ったときに戻す（アプリを開いている間だけ）。別の仕事を開いたら一番上から。
+// 隠れている画面は、隠したときの仕事のデータのまま止めておき（Freeze）、仕事が変わっても裏で計算し直さない。見えたときに最新のデータで計算する
+import { Activity, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { JobStoreContext, useJobStore } from '../store/useJobStore'
 import { DimensionScreen } from './screens/DimensionScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { KidoriScreen } from './screens/KidoriScreen'
@@ -19,6 +20,18 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'kidori', label: '木取り' },
   { id: 'settings', label: '設定' },
 ]
+
+/**
+ * 隠れている画面を止める。隠れている間は、隠したときの仕事のデータ（JobStoreContext の値）と画面の要素をそのまま返すので、
+ * 仕事が変わっても中の画面は描き直さない（木取りの計算などをしない）。見えているときは今の値で描く
+ */
+function Freeze({ visible, children }: { visible: boolean; children: ReactNode }) {
+  const value = useJobStore()
+  // 見える → 隠れるに変わったときだけ作り直す（隠れている間は同じ要素を返し、React が中を描き直さない）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const hidden = useMemo(() => <JobStoreContext.Provider value={value}>{children}</JobStoreContext.Provider>, [visible])
+  return visible ? <JobStoreContext.Provider value={value}>{children}</JobStoreContext.Provider> : hidden
+}
 
 export default function App() {
   const { job, state, saveError } = useJobStore()
@@ -62,7 +75,7 @@ export default function App() {
   const screen = (id: TabId, node: ReactNode) =>
     visited.has(id) ? (
       <Activity key={`${id}:${jobId ?? ''}`} mode={tab === id ? 'visible' : 'hidden'}>
-        {node}
+        <Freeze visible={tab === id}>{node}</Freeze>
       </Activity>
     ) : null
 
