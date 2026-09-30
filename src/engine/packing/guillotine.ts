@@ -282,10 +282,15 @@ export function packGuillotine(
   return { frame, unplaced: r.unplaced, sheets: r.sheets.map((sh) => ({ strips: sh.strips })) }
 }
 
-/** 手持ちの行ごとの使える範囲と帯の座標 */
+/** その行の端切り（端切りをしない行＝重ねた板の端材は 0。第2.6版） */
+export function rowTrim(k: Pick<StockKind, 'noTrim'>, trim: number): number {
+  return k.noTrim ? 0 : trim
+}
+
+/** 手持ちの行ごとの使える範囲と帯の座標（端切りをしない行は端切り 0） */
 export function sheetSpecs(stock: readonly StockKind[], trim: number, mode: StripMode): SheetSpec[] {
   return stock.map((k) => {
-    const usable = usableRect(k, trim, mode)
+    const usable = usableRect(k, rowTrim(k, trim), mode)
     return { stock: k, usable, frame: frameOf(mode, usable) }
   })
 }
@@ -313,7 +318,7 @@ export function packOnStock(
     const key = `${shape.s0}|${shape.s1}|${shape.grain}`
     let o = cache[k].get(key)
     if (!o) {
-      o = orientationsFor(shape, specs[k].stock, trim, mode)
+      o = orientationsFor(shape, specs[k].stock, rowTrim(specs[k].stock, trim), mode)
       cache[k].set(key, o)
     }
     return o

@@ -12,7 +12,7 @@
 import { round1 } from '../round'
 import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout } from '../types'
 import { buildCuts } from './cutOrder'
-import { packGuillotine, packOnStock, type StripMode } from './guillotine'
+import { packGuillotine, packOnStock, rowTrim, type StripMode } from './guillotine'
 import { expandPieces, type Piece, type Unplaced } from './pieces'
 import { scrapsOf } from './scraps'
 import { stackPlan, type StackPlan } from './stack'
@@ -77,20 +77,25 @@ function stockLayout(
     const size = { width: sh.stock.width, length: sh.stock.length }
     const placements = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
     const y = sheetYield(placements, size)
+    // 端切りをしない行（重ねた板の端材。第2.6版）は端切り 0
+    const t = rowTrim(sh.stock, trim)
     const layout: SheetLayout = {
       index: i + 1,
       boardWidth: size.width,
       boardLength: size.length,
       orientation,
-      trims: trimRects(size, trim, mode),
+      trims: trimRects(size, t, mode),
       usable: sh.frame.usable,
       placements,
-      cuts: buildCuts(sh, sh.frame, size, trim),
+      cuts: buildCuts(sh, sh.frame, size, t),
       scraps: scrapsOf(sh, sh.frame, kerf),
       usedArea: y.usedArea,
       yieldRate: y.yieldRate,
     }
-    if (sh.stock.stockId !== null) layout.sheet = { stockId: sh.stock.stockId, sizeKind: sh.stock.sizeKind, grain: sh.stock.grain }
+    if (sh.stock.stockId !== null) {
+      layout.sheet = { stockId: sh.stock.stockId, sizeKind: sh.stock.sizeKind, grain: sh.stock.grain }
+      if (sh.stock.offcut) layout.sheet.offcut = { source: sh.stock.offcut.source }
+    }
     return layout
   })
   return { mode, sheets, unplaced: g.unplaced, used: g.used }
