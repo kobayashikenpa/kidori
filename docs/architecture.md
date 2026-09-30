@@ -2300,3 +2300,30 @@ export function partCutProgress(job: Job): PartCutProgress[]
 ### 20.6 廃止したもの（第2.8版）
 
 - 17.10 の `MaterialEditSheet`（部材の編集の上に開く材料・材料グループの編集）と、部材の編集の材料の欄の「編集」「＋ 材料グループを作る」（19.5）。20.5 の［設定］ボタンに置き換えた
+
+## 21. 第2.9版の変更（端材と重ね切りの行の見せ方・取扱説明書の画像）— 決定（ui-dev・オーナー承認済み）
+
+仕様書 9.4。データの形・保存の版は変えない。engine は `OffcutUsage` に `width`・`length` を足し、`progress/offcutGroups.ts` を1つ足す（テストつき）。
+
+### 21.1 端材の表示（U-101）
+
+- `groupOffcuts(offcuts)`（engine）：`stockUsage` の端材の行を、短辺・長辺・重ねた板の番号が同じものどうし1行にまとめる（名前「端材 96×390 ×2枚（重ねた板4から）」、`count`・`used` は足し合わせ）。1枚でも使う行（`used`）と使わない行（`unused`）に分け、使わない行の枚数（`unusedCount`）を返す
+- `SheetSizePicker`：20.2 の判定を **端材を1枚以上使うか**（`usage.offcuts` のどれかの `used > 0`）に変える。使わなければ 3×6／4×8 の選ばれた表示のまま、下に「使わない端材 ◯枚」の1行だけ
+- `OffcutRows`（`StockEditor`。手持ちで木取りしている行でも同じ）：使う端材の行 → 「使わない端材 ◯枚」（押すと開く・閉じる。`aria-expanded`）
+
+### 21.2 重ねなかった組の行（U-102）
+
+- `KidoriScreen` のまとめの一覧：組の段 → `result.stacks.rejected` の組の行（1つ目の材料の並び）→ 材料の段
+- 行（`RejectedStackRow`）：組の名前・「重ねていません（重ねると材料が増えるため）」・`SheetSizePicker`（`target` は組の2つの材料、`choice` は `stackChoice`、比べる数字なし）。押すと `setRowSize` で組の行のサイズが変わり、`packJob` の確かめ（decide）で重ねられれば組の段に戻る
+- 「重ねなかった組」のお知らせのカードは消した（行で分かるため）
+
+### 21.3 そのほか（U-103・U-104）
+
+- `FlushForm`：「＋ 中身を足す」の行は `count: null` から。空欄のときは「空欄の枚数を入れてください」
+- `BoardEditor`：一番下に `.list-foot`（左「＋ 材料名を追加」・右「選んで削除」）。選んでいる間は出さない。材料グループ・調整寸法のタブ（`SettingsList`）は追加が入力の形なので今のまま
+
+### 21.4 取扱説明書の画像（U-105）
+
+- `scripts/manual-shots.mjs`（`npm run manual:shots`）：Vite の開発サーバーをスクリプトの中で立て、`puppeteer-core`（devDependencies）でパソコンの Chrome（`CHROME_PATH` で変えられる）を動かす。幅 375px・倍率2・ライトの配色。localStorage を空にして「見本（本棚 W900）を追加」を押してから撮る
+- 押すところの赤い枠は撮るときだけ足す CSS（`.shot-mark`）。木取りのまとめ・1枚の図は下のタブを隠して切り取る
+- 保存先は `docs/manual/images/01-jobs.png` 〜 `08-kidori-sheet.png`
