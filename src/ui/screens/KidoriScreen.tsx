@@ -7,6 +7,7 @@ import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
 import { stackKey, stackLabel } from '../../engine/packing/stack'
+import { stackedSheetId, stackSheetNumbers } from '../../engine/packing/offcuts'
 import { stackChoice, usesStock } from '../../engine/packing/stock'
 import { stockShortage } from '../../engine/hints/shortage'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
@@ -62,6 +63,8 @@ interface SheetEntry {
   progress: SheetProgress
   /** 固定した1枚なら表示用のまとめ */
   view: FrozenSheetView | null
+  /** 1枚の名前（重ねた板は「重ねた板1」）。ふつうの1枚は null（「◯枚目」で出す） */
+  name: string | null
 }
 
 /** 材料ごとの段（重ね切りの組の段もここに入る） */
@@ -88,7 +91,7 @@ const DRIFT_REASON: Record<FrozenSheetView['drift'][number]['reason'], string> =
   removed: '部材の削除・材料の変更',
 }
 
-const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
+const frozenEntry = (v: FrozenSheetView, name: string | null): SheetEntry => ({
   key: v.sheet.id,
   layout: v.sheet.layout,
   target: { kind: 'frozen', sheetId: v.sheet.id },
@@ -97,6 +100,7 @@ const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
   trim: v.sheet.trim,
   progress: v.progress,
   view: v,
+  name,
 })
 
 export function KidoriScreen() {
@@ -163,6 +167,7 @@ export function KidoriScreen() {
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
   // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
   const groupRows = summaries.materials.filter((m) => m.stack)
+  const stackNo = new Map(stackSheetNumbers(job, result.materials).map((x) => [x.id, x.number]))
   const plainOrder = [
     ...orderedBoards(job).map((b) => b.id),
     ...summaries.materials.filter((m) => !m.stack && !job.boards.some((b) => b.id === m.boardId)).map((m) => m.boardId),
@@ -184,7 +189,12 @@ export function KidoriScreen() {
         ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === boardId
         : v.sheet.boardId === boardId && !v.sheet.stackWith,
     )
-    const frozen = mine.filter((v) => !v.complete).map(frozenEntry)
+    // 重ねた板の名前「重ねた板1」（番号は engine の stackSheetNumbers）
+    const nameOf = (id: string): string | null => {
+      const n = pair ? stackNo.get(id) : undefined
+      return n === undefined ? null : `重ねた板${n}`
+    }
+    const frozen = mine.filter((v) => !v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id)))
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
       key: `c${boardId}:${sh.index}`,
       layout: sh,
@@ -196,6 +206,7 @@ export function KidoriScreen() {
       trim: s.trim,
       progress: sheetProgress(sh, s.kerf, []),
       view: null,
+      name: nameOf(stackedSheetId(boardId, sh)),
     }))
     return [
       {
@@ -212,7 +223,7 @@ export function KidoriScreen() {
         summary,
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
-        finished: mine.filter((v) => v.complete).map(frozenEntry),
+        finished: mine.filter((v) => v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id))),
         choice,
         stocked: choice !== null && usesStock(choice),
       },
@@ -533,7 +544,11 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
       <header className="kd-sheet-head">
         <span className="kd-sheet-no">
           {finished ? '切り終わり ' : ''}
-          {no}枚目<span className="kd-of"> / {count}枚</span>
+          {entry.name ?? (
+            <>
+              {no}枚目<span className="kd-of"> / {count}枚</span>
+            </>
+          )}
           {size && <span className="kd-of num">（{size}）</span>}
         </span>
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
@@ -541,7 +556,7 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
       <p className="band-note num">
         材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚
       </p>
-      <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
+      <SheetDiagram sheet={sheet} no={no} name={entry.name} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
       {remaining.length > 0 && (
         <p className="kd-remain num">
           残りの材料 {remaining.map((r) => `${fmt(r.w)}×${fmt(r.h)}`).join('・')}
@@ -572,7 +587,7 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
         </span>
         <span>部材は右上から詰める・部材の寸法は木取り寸法</span>
       </p>
-      <SheetChecklist label={`${label} の ${no}枚目`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
+      <SheetChecklist label={`${label} の ${entry.name ?? `${no}枚目`}`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
     </article>
   )
 }
