@@ -1541,6 +1541,46 @@ select.input {
   text-align: center;
   padding-bottom: 0;
 }
+/* 寸法表の［木取り］のタブ（第2.8版）：木取り寸法は木取りの色、右端は切り出しの進み具合 */
+.dim-tabs {
+  margin: 0 0 10px;
+}
+.dim-table thead th.c-cut {
+  color: var(--cut);
+  background: var(--cut-soft);
+}
+.dim-table td.c-cut {
+  background: var(--cut-soft);
+  padding: 0;
+}
+.dim-table td.c-cut .dim-cell {
+  color: var(--cut);
+}
+.dim-table td.c-cut.done,
+.dim-table td.c-cut.done .dim-cell {
+  background: var(--bg);
+  color: var(--muted);
+}
+.dim-table td.c-cut .dim-cell.on {
+  outline-color: var(--cut);
+}
+.dim-cell-none {
+  display: block;
+  padding: 0 3px;
+  color: var(--muted);
+}
+.dim-table .c-prog {
+  width: 3.6em;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.dim-table td.c-prog.all {
+  color: var(--muted);
+}
+.dim-explain.cut td {
+  background: var(--cut-soft);
+}
 /* 切り出しチェック（木取り画面・材料ごと） */
 .cl {
   margin-bottom: 10px;
