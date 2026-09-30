@@ -23,6 +23,7 @@ import {
   type StockUsage,
 } from '../../engine/progress/frozen'
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
+import { partCutProgress } from '../../engine/progress/partProgress'
 import { sheetPartChecklist, type SheetPartRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
 import { boardTokenLabel } from '../../engine/defaults'
@@ -117,7 +118,7 @@ const frozenEntry = (v: FrozenSheetView, name: string | null): SheetEntry => ({
 export function KidoriScreen() {
   const { job, run } = useCurrentJob()
   // 今の結果、3×6・4×8 の比較（材料のサイズの選択）、固定した1枚の表示用のまとめ。どれも仕事が変わったときだけ計算し直す
-  const { result, compare, views, summaries, usage, sizeCounts, shortages } = useMemo(() => {
+  const { result, compare, views, summaries, usage, sizeCounts, shortages, progress } = useMemo(() => {
     const dims = computeDimensions(job)
     const result = packJob(job, dims)
     const views = frozenSheetViews(job, dims)
@@ -130,6 +131,8 @@ export function KidoriScreen() {
       sizeCounts: materialSizeCounts(job, result, views),
       // 手持ちが足りない材料の解決策（足りない材料が無ければ packJob を追加で呼ばない）
       shortages: stockShortage(job, dims, result),
+      // 部材ごとの切り出しの進み具合（第2.7版）
+      progress: partCutProgress(job),
     }
   }, [job])
   // チェックを付け外しすると上の集計や1枚の並びが変わるので、押した行が画面の同じ位置に残るようにスクロールを戻す。
@@ -391,6 +394,36 @@ export function KidoriScreen() {
                   >
                     外す
                   </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {progress.length > 0 && (
+        <div className="card kd-progress">
+          <h4>部材ごとの進み具合</h4>
+          <ul className="pp-list">
+            {progress.map((p) => {
+              const all = p.done >= p.total
+              return (
+                <li key={p.partId} className={`pp-row${all ? ' all' : ''}`}>
+                  <span className="pp-name">{p.name}</span>
+                  <span
+                    className="pp-bar"
+                    role="progressbar"
+                    aria-label={`${p.name} の切り出し`}
+                    aria-valuemin={0}
+                    aria-valuemax={p.total}
+                    aria-valuenow={p.done}
+                  >
+                    <span className="pp-fill" style={{ width: `${(p.done / p.total) * 100}%` }} />
+                  </span>
+                  <span className="pp-count num">
+                    {p.done}/{p.total}
+                    {all && <span className="pp-all">切り終わり</span>}
+                  </span>
                 </li>
               )
             })}
