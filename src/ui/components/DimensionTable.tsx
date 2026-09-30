@@ -63,9 +63,14 @@ export function DimensionTable({ job, dims, onCheck, mode, progress }: Props) {
             <th scope="col" rowSpan={2} className="c-qty">
               枚数
             </th>
-            <th scope="colgroup" colSpan={4} className={`${col} c-group`}>
+            <th scope="colgroup" colSpan={cut ? 3 : 4} className={`${col} c-group`}>
               {cut ? '木取り寸法' : '仕上がり寸法'}
             </th>
+            {cut && (
+              <th scope="col" rowSpan={2} className="c-prog">
+                切り出し
+              </th>
+            )}
           </tr>
           <tr>
             {AXES.map((a) => (
@@ -73,11 +78,7 @@ export function DimensionTable({ job, dims, onCheck, mode, progress }: Props) {
                 {a}
               </th>
             ))}
-            {cut ? (
-              <th scope="col" className="c-cut c-prog">
-                切り出し
-              </th>
-            ) : (
+            {!cut && (
               <th scope="col" className="c-fin c-done">
                 完了
               </th>
