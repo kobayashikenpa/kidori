@@ -1591,6 +1591,10 @@ select.input {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.cl-qty {
+  white-space: nowrap;
+  font-weight: 400;
+}
 .cl-size {
   flex: none;
   white-space: nowrap;
