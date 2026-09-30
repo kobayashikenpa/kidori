@@ -6,7 +6,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
-import { stackKey, stackLabel } from '../../engine/packing/stack'
+import { stackKey, stackLabel, stackPairName } from '../../engine/packing/stack'
+import { stackedSheetId, stackSheetNumbers } from '../../engine/packing/offcuts'
 import { stackChoice, usesStock } from '../../engine/packing/stock'
 import { stockShortage } from '../../engine/hints/shortage'
 import { compareStandardSizes, type MaterialSizeComparison } from '../../engine/packing/sizes'
@@ -24,7 +25,8 @@ import {
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
-import { boardLabel, clearLegacyCut, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
+import { boardTokenLabel } from '../../engine/defaults'
+import { boardLabel, clearLegacyCut, newId, setPieceCheck, setStacking, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
@@ -35,6 +37,11 @@ import { StockShortageNotice } from '../components/StockShortageNotice'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 import { Help } from '../components/Help'
+
+const STACKING_OPTIONS: { value: 'on' | 'off'; label: string }[] = [
+  { value: 'on', label: 'オン' },
+  { value: 'off', label: 'オフ' },
+]
 
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
   noBoard: '材料が未設定',
@@ -56,6 +63,8 @@ interface SheetEntry {
   progress: SheetProgress
   /** 固定した1枚なら表示用のまとめ */
   view: FrozenSheetView | null
+  /** 1枚の名前（重ねた板は「重ねた板1」）。ふつうの1枚は null（「◯枚目」で出す） */
+  name: string | null
 }
 
 /** 材料ごとの段（重ね切りの組の段もここに入る） */
@@ -82,7 +91,18 @@ const DRIFT_REASON: Record<FrozenSheetView['drift'][number]['reason'], string> =
   removed: '部材の削除・材料の変更',
 }
 
-const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
+/** 端材から取った1枚（第2.6版）か。枚数に数えない */
+const isOffcut = (e: SheetEntry): boolean => e.layout.sheet?.offcut !== undefined
+/** 「◯枚目 / ◯枚」の番号は、端材から取った1枚・重ねた板を除いて振る */
+const plainCount = (list: SheetEntry[]): number => list.filter((e) => !e.name).length
+const plainNo = (list: SheetEntry[], e: SheetEntry): number => list.filter((x) => !x.name).indexOf(e) + 1
+/** 段の見出しの枚数。端材から取った1枚は「（端材から ◯枚）」で添える */
+const sheetCountText = (list: SheetEntry[]): string => {
+  const off = list.filter(isOffcut).length
+  return `${list.length - off}枚${off > 0 ? `（端材から ${off}枚）` : ''}`
+}
+
+const frozenEntry = (v: FrozenSheetView, name: string | null): SheetEntry => ({
   key: v.sheet.id,
   layout: v.sheet.layout,
   target: { kind: 'frozen', sheetId: v.sheet.id },
@@ -91,6 +111,7 @@ const frozenEntry = (v: FrozenSheetView): SheetEntry => ({
   trim: v.sheet.trim,
   progress: v.progress,
   view: v,
+  name,
 })
 
 export function KidoriScreen() {
@@ -153,6 +174,7 @@ export function KidoriScreen() {
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
   // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
   const groupRows = summaries.materials.filter((m) => m.stack)
+  const stackNo = new Map(stackSheetNumbers(job, result.materials).map((x) => [x.id, x.number]))
   const plainOrder = [
     ...orderedBoards(job).map((b) => b.id),
     ...summaries.materials.filter((m) => !m.stack && !job.boards.some((b) => b.id === m.boardId)).map((m) => m.boardId),
@@ -174,7 +196,20 @@ export function KidoriScreen() {
         ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === boardId
         : v.sheet.boardId === boardId && !v.sheet.stackWith,
     )
-    const frozen = mine.filter((v) => !v.complete).map(frozenEntry)
+    // 重ねた板の名前「重ねた板1」（番号は engine の stackSheetNumbers）
+    // 端材から取った1枚は「重ねた板1の端材（メラミン1）780×1800」（短辺×長辺）
+    const token = board ? boardTokenLabel(board) : (mine[0]?.label ?? '')
+    const nameOf = (id: string, layout: SheetLayout): string | null => {
+      const src = layout.sheet?.offcut?.source
+      if (!pair && src !== undefined) {
+        const a = Math.min(layout.boardWidth, layout.boardLength)
+        const b = Math.max(layout.boardWidth, layout.boardLength)
+        return `重ねた板${src}の端材（${token}）${fmt(a)}×${fmt(b)}`
+      }
+      const n = pair ? stackNo.get(id) : undefined
+      return n === undefined ? null : `重ねた板${n}`
+    }
+    const frozen = mine.filter((v) => !v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id, v.sheet.layout)))
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
       key: `c${boardId}:${sh.index}`,
       layout: sh,
@@ -186,6 +221,7 @@ export function KidoriScreen() {
       trim: s.trim,
       progress: sheetProgress(sh, s.kerf, []),
       view: null,
+      name: nameOf(stackedSheetId(boardId, sh), sh),
     }))
     return [
       {
@@ -202,7 +238,7 @@ export function KidoriScreen() {
         summary,
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
-        finished: mine.filter((v) => v.complete).map(frozenEntry),
+        finished: mine.filter((v) => v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id, v.sheet.layout))),
         choice,
         stocked: choice !== null && usesStock(choice),
       },
@@ -238,6 +274,19 @@ export function KidoriScreen() {
         />
       </div>
 
+      <div className="field">
+        <Help className="label" title="重ね切り（2枚重ね）">
+          材料グループの部材で、違う材料の同じ片を2枚重ねて1回で切ります（例：メラミン1＋ラワン4）。同じ材料どうしは重ねません。
+          重ねると材料が増えるときは重ねません。重ねた板の端材は、ほかの部材に使います。
+        </Help>
+        <Segmented
+          ariaLabel="重ね切り（2枚重ね）"
+          value={job.stacking}
+          options={STACKING_OPTIONS}
+          onChange={(v) => run((j) => setStacking(j, v))}
+        />
+      </div>
+
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
@@ -252,6 +301,20 @@ export function KidoriScreen() {
       )}
 
       <StockShortageNotice shortages={shortages} />
+
+      {result.stacks.rejected.length > 0 && (
+        <div className="card kd-issues warn" role="note">
+          <h4>重ねなかった組</h4>
+          <ul>
+            {result.stacks.rejected.map((p) => (
+              <li key={p.key}>
+                <b>{stackPairName(job, p.boardIds)}</b>
+                ：重ねると材料が増えるので、重ねずに木取りしています
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
@@ -342,7 +405,7 @@ export function KidoriScreen() {
             {sec.label}
             <span className="kd-h3-sub num">
               {sec.sheets.length > 0
-                ? `${sec.sheets.length}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
+                ? `${sheetCountText(sec.sheets)}${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
                 : sec.finished.length > 0
                   ? 'すべて切り終わり'
                   : '切り出す板はありません'}
@@ -365,11 +428,11 @@ export function KidoriScreen() {
                 <SheetCard
                   key={e.key}
                   entry={e}
-                  no={i + 1}
-                  count={sec.finished.length}
+                  no={e.name ? i + 1 : plainNo(sec.finished, e)}
+                  count={plainCount(sec.finished)}
                   finished
                   label={sec.label}
-                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
+                  size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -383,10 +446,10 @@ export function KidoriScreen() {
                 <SheetCard
                   key={e.key}
                   entry={e}
-                  no={i + 1}
-                  count={sec.sheets.length}
+                  no={e.name ? i + 1 : plainNo(sec.sheets, e)}
+                  count={plainCount(sec.sheets)}
                   label={sec.label}
-                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
+                  size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -421,20 +484,23 @@ interface MaterialRowProps {
 
 function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usage, comparison, bySize }: MaterialRowProps) {
   const n = summary.sheetCount
+  const off = summary.offcutCount
   return (
     <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
       <div className="kd-mat-name">{label}</div>
       <div className="kd-mat-nums">
         <span>
           <span className="kd-k">必要な材料</span>
-          <span className="kd-v num">{n}枚</span>
+          <span className="kd-v num">
+            {n}枚{off > 0 && <span className="kd-v-sub">（端材から {off}枚）</span>}
+          </span>
         </span>
         <span>
           <span className="kd-k">歩留まり</span>
-          <span className="kd-v num">{n > 0 ? pct(summary.yieldRate) : '―'}</span>
+          <span className="kd-v num">{n + off > 0 ? pct(summary.yieldRate) : '―'}</span>
         </span>
       </div>
-      {n > 0 && mode && (
+      {n + off > 0 && mode && (
         <div className="kd-mat-mode">
           切り方：<b>{cutModeLabel(mode)}</b>
           {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
@@ -496,7 +562,11 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
       <header className="kd-sheet-head">
         <span className="kd-sheet-no">
           {finished ? '切り終わり ' : ''}
-          {no}枚目<span className="kd-of"> / {count}枚</span>
+          {entry.name ?? (
+            <>
+              {no}枚目<span className="kd-of"> / {count}枚</span>
+            </>
+          )}
           {size && <span className="kd-of num">（{size}）</span>}
         </span>
         <span className="kd-sheet-yield num">歩留まり {pct(sheet.yieldRate)}</span>
@@ -504,7 +574,7 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
       <p className="band-note num">
         材料 {fmt(sheet.boardWidth)}×{fmt(sheet.boardLength)}・部材 {sheet.placements.length}枚
       </p>
-      <SheetDiagram sheet={sheet} no={no} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
+      <SheetDiagram sheet={sheet} no={no} name={entry.name} grain={grain} colorOf={colorOf} checked={entry.checked} remaining={remaining} />
       {remaining.length > 0 && (
         <p className="kd-remain num">
           残りの材料 {remaining.map((r) => `${fmt(r.w)}×${fmt(r.h)}`).join('・')}
@@ -535,7 +605,7 @@ function SheetCard({ entry, no, count, finished = false, label, size, rows, colo
         </span>
         <span>部材は右上から詰める・部材の寸法は木取り寸法</span>
       </p>
-      <SheetChecklist label={`${label} の ${no}枚目`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
+      <SheetChecklist label={`${label} の ${entry.name ?? `${no}枚目`}`} rows={rows} rowKey={rowKey} onToggle={onToggle} />
     </article>
   )
 }

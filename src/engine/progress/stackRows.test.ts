@@ -1,5 +1,6 @@
 // E-62：比較・手持ちの残り・足りないときの知らせと重ね切りの組の行（第2.3版。architecture.md 15.5）。
 // 組は手持ちを使わないので、手持ちの残り・足りないときの知らせには出ない（E-64。15.9）
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -19,7 +20,11 @@ function lauanTo48(job: Job): Job {
   job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
   return job
 }
-const usage = (job: Job) => stockUsage(job, packJob(job, computeDimensions(job)))
+/** 手持ちの行（端材の行は offcutRows.test.ts で確かめる） */
+const usage = (job: Job) =>
+  stockUsage(job, packJob(job, computeDimensions(job), allStacks(job)))
+    .filter((u) => u.rows.length > 0)
+    .map(({ boardId, rows }) => ({ boardId, rows }))
 const shortage = (job: Job) => stockShortage(job, computeDimensions(job))
 
 describe('compareStandardSizes と組の行', () => {
@@ -39,7 +44,7 @@ describe('compareStandardSizes と組の行', () => {
     const g = c.find((x) => x.boardId === KEY)!
     // 4×8 の比較は、組の設定を 4×8 にした仕事の組の枚数と同じ
     const as48 = { ...job, stackSheets: [{ ...job.stackSheets[0], sizeKind: 'shihachi' as const, width: 1220, length: 2440 }] }
-    const real48 = packJob(as48, computeDimensions(as48)).materials.find((m) => m.boardId === KEY)!.sheetCount
+    const real48 = packJob(as48, computeDimensions(as48), allStacks(as48)).materials.find((m) => m.boardId === KEY)!.sheetCount
     expect(g.options.map((o) => o.sheetCount)).toEqual([5, real48])
     // 元の仕事は変えない
     expect(job.stackSheets[0].sizeKind).toBe('saburoku')
@@ -63,7 +68,7 @@ describe('stockUsage と組の行', () => {
 
   it('組の固定した1枚（切り終わりを含む）は材料の行で数えない', () => {
     const job = withStock(sampleGroupJob(true), MELAMINE_1_ID, [['3×6', 2]])
-    const g = packJob(job, computeDimensions(job)).materials.find((m) => m.boardId === KEY)!
+    const g = packJob(job, computeDimensions(job), allStacks(job)).materials.find((m) => m.boardId === KEY)!
     const f = freezeSheet(job, MELAMINE_1_ID, g.mode, g.sheets[0], 'f', new Date('2026-09-28T00:00:00Z'), LAUAN_4_ID)
     f.checked = g.sheets[0].placements.map((p) => p.pieceId)
     f.completedAt = '2026-09-28T00:00:00.000Z'
@@ -76,7 +81,7 @@ describe('materialSizeCounts と組の行', () => {
   it('組の行は組の1枚（3×6 ×5）、ラワン 4 の行はふつうの1枚（4×8 ×1）だけ', () => {
     const job = lauanTo48(sampleGroupJob(true))
     const dims = computeDimensions(job)
-    const r = packJob(job, dims)
+    const r = packJob(job, dims, allStacks(job, dims))
     expect(materialSizeCounts(job, r, frozenSheetViews(job, dims))).toEqual([
       { boardId: KEY, bySize: [{ label: '3×6', count: 5 }] },
       { boardId: LAUAN_4_ID, bySize: [{ label: '4×8', count: 1 }] },

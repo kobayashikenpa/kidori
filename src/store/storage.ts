@@ -115,8 +115,6 @@ interface Fixes {
    * 読んでいるデータの版。第1版には逃げ・メモ・チェックが無いのが当たり前なので、無くても直した数に数えない
    */
   version: DataVersion
-  /** 読み込むときに重ね切りを外したフラッシュの名前（サイズがそろわない組。15.9）。知らせに出す */
-  unstacked: string[]
 }
 
 const isNonNegative = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -314,48 +312,30 @@ function standardSize(sizeKind: BoardSizeKind): Pick<StackSheet, 'sizeKind' | 'w
 }
 
 /**
- * 組の設定（第2.3版）と、重ね切りを外すフラッシュ（architecture.md 15.6・15.9）。組は 3×6／4×8 だけ（仕様書 4）。
- * - stackSheets が無い仕事（第2.2版まで）は1回移し替える：stackPlan の組ごとに、a・b がどちらも手持ちを使わず、
- *   大きさ・木目がそろい（第2.2版の決まり）、a か b が 3×6／4×8 なら、その大きさで組の行を作る。
- *   それ以外（そろわない・手持ちで重ねていた・共通の大きさが自由入力）は、その組で重ねていたフラッシュの重ね切りを外す
- * - stackSheets がある仕事は、組の行の手持ちを外す。自由入力の行は消す。行が手持ち（stockOn）か自由入力で、
- *   その組を重ねているフラッシュがあれば、そのフラッシュの重ね切りを外す
- * どちらも壊れていたわけではないので直した数に数えない（知らせは外したフラッシュの名前で出す）。固定した組の1枚は変えない（切った記録）
+ * 組の設定（第2.3版。architecture.md 15.6・15.9・18.7）。組は 3×6／4×8 だけ（仕様書 4）。
+ * - stackSheets が無い仕事（第2.2版まで）は1回移し替える：以前の決まりの組（stackPlan）ごとに、a・b がどちらも手持ちを使わず、
+ *   大きさ・木目がそろい（第2.2版の決まり）、a か b が 3×6／4×8 なら、その大きさで組の行を作る
+ * - stackSheets がある仕事は、組の行の手持ちを外す。自由入力の行は消す
+ * 第2.6版：サイズがそろわないことを理由に重ね切りを外して知らせることはしない（材料グループの stack はそのまま残す。
+ * 行の無い組の大きさは stackChoice の初期値）。壊れていたわけではないので直した数に数えない。固定した組の1枚は変えない（切った記録）
  */
-function settleStacks(
-  boards: Board[],
-  flushes: Flush[],
-  rows: StackSheet[] | null,
-): { stackSheets: StackSheet[]; flushes: Flush[]; unstacked: string[] } {
+function settleStacks(boards: Board[], flushes: Flush[], rows: StackSheet[] | null): StackSheet[] {
   const byId = new Map(boards.map((b) => [b.id, b]))
-  const off = new Set<string>()
   const stackSheets: StackSheet[] = []
-  const groups = stackPlan({ boards, flushes }).groups
   if (rows === null) {
-    for (const g of groups) {
+    for (const g of stackPlan({ boards, flushes }).groups) {
       const a = byId.get(g.boardIds[0])!
       const b = byId.get(g.boardIds[1])!
       const size = !usesStock(a) && !usesStock(b) && sameStockSize(a, b) ? (standardSize(a.sizeKind) ?? standardSize(b.sizeKind)) : null
       if (size) stackSheets.push({ boardIds: [a.id, b.id], ...size })
-      else for (const id of g.flushIds) off.add(id)
     }
   } else {
     for (const row of rows) {
       const size = standardSize(row.sizeKind)
       if (size) stackSheets.push({ boardIds: row.boardIds, ...size })
-      if (!size || usesStock(row)) {
-        for (const g of groups) if (samePair(g.boardIds, row.boardIds)) for (const id of g.flushIds) off.add(id)
-      }
     }
   }
-  const unstacked: string[] = []
-  const next = flushes.map((f) => {
-    if (!off.has(f.id)) return f
-    unstacked.push(f.name)
-    const { stack: _stack, ...rest } = f
-    return rest
-  })
-  return { stackSheets, flushes: next, unstacked }
+  return stackSheets
 }
 
 const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1
@@ -404,9 +384,9 @@ function sanitizeFlushes(v: unknown, boards: readonly Board[], fx: Fixes): Legac
     }
     const flush: LegacyFlush = { id: x.id, name, faces }
     if (isPositive(x.core)) flush.core = x.core
-    // 重ね切り（第2.0版）：true で canStack のときだけ残す。それ以外で stack があれば外して数える
-    // （以前の芯材は木取りしない中身になるので、芯材を移す前の中身で判定しても答えは同じ）
-    if (x.stack === true && canStack(flush, boards)) flush.stack = true
+    // 重ね切り（第2.0版〜第2.5版）：true なら残す（第2.6版からは計算では見ず、仕事の重ね切りの移し替えだけに使う。18.8）。
+    // true 以外の値は外して数える
+    if (x.stack === true) flush.stack = true
     else if (x.stack !== undefined) fx.count++
     if (GROUP_FORMS.includes(x.form as GroupForm)) flush.form = x.form as GroupForm
     else if (x.form !== undefined) fx.count++
@@ -535,7 +515,7 @@ function readCut(v: unknown): CutStep | null {
 }
 
 /** 固定した1枚の写し。数（幅・長さ・長方形）が数でない・片が無い・片の id が重なるなど、形が壊れていれば null */
-function readLayout(v: unknown): SheetLayout | null {
+function readLayout(v: unknown, fx: Fixes): SheetLayout | null {
   if (!isRecord(v)) return null
   if (!isNum(v.boardWidth) || !isNum(v.boardLength) || v.boardWidth <= 0 || v.boardLength <= 0) return null
   if (v.orientation !== 'portrait' && v.orientation !== 'landscape') return null
@@ -571,6 +551,11 @@ function readLayout(v: unknown): SheetLayout | null {
     (sh.grain === 'long' || sh.grain === 'short')
   ) {
     layout.sheet = { stockId: sh.stockId, sizeKind: sh.sizeKind as BoardSizeKind, grain: sh.grain }
+    // 重ねた板の端材から取った1枚（第2.6版）：source が 1 以上の整数でなければ offcut だけ外す（直した数に数える）
+    if (sh.offcut !== undefined) {
+      if (isRecord(sh.offcut) && isCount(sh.offcut.source)) layout.sheet.offcut = { source: sh.offcut.source }
+      else fx.count++
+    }
   }
   return layout
 }
@@ -588,7 +573,7 @@ function sanitizeFrozenSheets(v: unknown, fallbackDate: string, fx: Fixes): Froz
   }
   const out: FrozenSheet[] = []
   for (const raw of v) {
-    const layout = isRecord(raw) ? readLayout(raw.layout) : null
+    const layout = isRecord(raw) ? readLayout(raw.layout, fx) : null
     const modeOk = isRecord(raw) && (raw.mode === 'vertical' || raw.mode === 'horizontal')
     if (!isRecord(raw) || !layout || !modeOk || !isId(raw.id) || !isId(raw.boardId) || out.some((f) => f.id === raw.id)) {
       fx.count++
@@ -652,6 +637,16 @@ function sanitizeRemovedBuiltIns(v: unknown, fx: Fixes): string[] | undefined {
   return out.length > 0 ? out : undefined
 }
 
+/**
+ * 重ね切り（第2.6版）が無い仕事（第2.5.1版まで）の重ね切りを1回決める（architecture.md 18.8。未決事項 59）。
+ * 部材（枚数1以上）が使っている材料グループのうち、以前の決まりで重ねられた（canStack）のに「重ねて切る」を外していたものが
+ * 1つでもあれば 'off'、ほかは 'on'。直した数に数えない・知らせない
+ */
+function legacyStacking(boards: readonly Board[], flushes: readonly Flush[], parts: readonly LegacyPart[]): 'on' | 'off' {
+  const used = new Set(parts.filter((p) => p.quantity >= 1 && p.flushId !== undefined).map((p) => p.flushId))
+  return flushes.some((f) => used.has(f.id) && f.stack !== true && canStack(f, boards)) ? 'off' : 'on'
+}
+
 /** 仕事。id が読めない仕事は外す（null）。以前の版の形（部材ごとの逃げ）が残っていてもよい */
 function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   if (!isRecord(v) || !isId(v.id)) return null
@@ -674,13 +669,12 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
   boards.splice(0, boards.length, ...moved.boards)
   const boardIds = new Set(boards.map((b) => b.id))
   // 重ね切りの組の設定（第2.3版）。無い仕事（第2.2版まで）だけ1回移し替える。組は 3×6／4×8 だけ（15.9）
-  const stacks = settleStacks(
+  const stackSheets = settleStacks(
     boards,
     moved.flushes,
     v.stackSheets === undefined ? null : sanitizeStackSheets(v.stackSheets, boards, fx),
   )
-  const flushes = stacks.flushes
-  if (stacks.unstacked.length > 0) fx.unstacked.push(...stacks.unstacked)
+  const flushes = moved.flushes
   const flushIds = new Set(flushes.map((f) => f.id))
   const parts: LegacyPart[] = []
   if (!Array.isArray(v.parts)) fx.count++
@@ -709,7 +703,8 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
     flushes,
     parts,
     frozenSheets: sanitizeFrozenSheets(v.frozenSheets, fallbackDate, fx),
-    stackSheets: stacks.stackSheets,
+    stackSheets,
+    stacking: v.stacking === 'on' || v.stacking === 'off' ? v.stacking : ((v.stacking !== undefined && fx.count++), legacyStacking(boards, flushes, parts)),
     ...(removedBuiltIns ? { removedBuiltIns } : {}),
     createdAt: pick(v.createdAt, isDate, fallbackDate, fx),
     updatedAt: pick(v.updatedAt, isDate, fallbackDate, fx),
@@ -723,8 +718,8 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
 export function sanitizeJobs(
   list: readonly unknown[],
   version: DataVersion = DATA_VERSION,
-): { jobs: Job[]; fixes: number; changed: string[]; unstacked: string[] } {
-  const fx: Fixes = { count: 0, version, unstacked: [] }
+): { jobs: Job[]; fixes: number; changed: string[] } {
+  const fx: Fixes = { count: 0, version }
   const jobs: Job[] = []
   const changed: string[] = []
   for (const raw of list) {
@@ -738,15 +733,12 @@ export function sanitizeJobs(
     jobs.push(addMissingBuiltIns(m.job, newId))
     if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
-  return { jobs, fixes: fx.count, changed, unstacked: [...new Set(fx.unstacked)] }
+  return { jobs, fixes: fx.count, changed }
 }
 
-/** 移し替えで寸法が変わった部材・重ね切りを外したフラッシュの知らせ（「。」でつなぐ）。無ければ null */
-export function changedMessage(changed: readonly string[], unstacked: readonly string[] = []): string | null {
-  const out: string[] = []
-  if (changed.length > 0) out.push(`以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`)
-  if (unstacked.length > 0) out.push(`サイズがそろっていないので、重ね切りを外しました：${unstacked.join('、')}`)
-  return out.length > 0 ? out.join('。') : null
+/** 移し替えで寸法が変わった部材の知らせ。無ければ null（第2.6版で「重ね切りを外しました」の知らせはなくした。architecture.md 18.7） */
+export function changedMessage(changed: readonly string[]): string | null {
+  return changed.length > 0 ? `以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）` : null
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
@@ -856,7 +848,7 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   const { jobs, fixes } = sanitized
   const currentJobId = current !== null && jobs.some((j) => j.id === current) ? current : null
-  const notice = changedMessage(sanitized.changed, sanitized.unstacked)
+  const notice = changedMessage(sanitized.changed)
   if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId }, ...(notice ? { message: notice } : {}) }
   const canSave = backupBroken(storage, raw, now)
   const repaired = canSave

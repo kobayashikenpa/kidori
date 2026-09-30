@@ -196,7 +196,7 @@ describe('clearLegacyCut（以前の木取り済みを外す）', () => {
 
   it('見本（重ね切りオフ）：棚板の メラミン 1 の完了を外すと packJob に棚板が戻る（ラワン 4 の完了は残る）', () => {
     const on = sampleJob(NOW)
-    const job0 = { ...on, flushes: on.flushes.map(({ stack: _s, ...f }) => f) }
+    const job0: Job = { ...on, flushes: on.flushes.map(({ stack: _s, ...f }) => f), stacking: 'off' }
     const mel = job0.boards.find((b) => b.material === 'メラミン' && b.thickness === 1)!.id
     const lau = job0.boards.find((b) => b.material === 'ラワン' && b.thickness === 4)!.id
     const tana = job0.parts.find((p) => p.name === '棚板')!.id

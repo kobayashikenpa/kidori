@@ -7,7 +7,7 @@ import type { LegacyFlush } from '../engine/migrate/flushCore'
 import { canStack, cutFaces, stackKey, stackPlan } from '../engine/packing/stack'
 import { frozenDemand, frozenSheetViews, materialSummaries } from '../engine/progress/frozen'
 import { findStackSheet, stackChoice, usesStock } from '../engine/packing/stock'
-import type { Board, CutStep, Flush, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
+import type { Board, CutStep, Job, MaterialResult, Part, PartGrain, Rect, SheetLayout, StackSheet } from '../engine/types'
 import { defaultSettings } from '../engine/defaults'
 import { setPieceCheck, type OpResult } from './jobs'
 import { sanitizeJobs } from './storage'
@@ -126,6 +126,7 @@ function randomJob(r: Rand, seed: number, bigger = false, legacy = false): Job {
     parts,
     frozenSheets: [],
     stackSheets,
+    stacking: flushes.some((f) => f.stack === true) ? 'on' : 'off',
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
   }
@@ -217,7 +218,8 @@ function checkJob(job: Job) {
     const own = (v: (typeof views)[number]) =>
       row.stack ? v.sheet.stackWith !== undefined && stackKey(v.sheet.boardId, v.sheet.stackWith.boardId) === id : !v.sheet.stackWith && v.sheet.boardId === id
     const count =
-      views.filter((v) => !v.complete && own(v)).length +
+      // 端材から取った1枚（第2.6版）は枚数に数えない
+      views.filter((v) => !v.complete && own(v) && !v.sheet.layout.sheet?.offcut).length +
       r.materials.filter((m) => m.boardId === id && (row.stack ? m.stack !== undefined : m.stack === undefined)).reduce((n, m) => n + m.sheetCount, 0)
     expect(row.sheetCount, id).toBe(count)
     expect(row.stackedCount, id).toBe(row.stack ? row.sheetCount : 0)
@@ -279,13 +281,9 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
           const sheet = pickOne(r, job.frozenSheets)
           const p = pickOne(r, sheet.layout.placements).pieceId
           job = ok(setPieceCheck(job, { kind: 'frozen', sheetId: sheet.id }, p, !sheet.checked.includes(p), NOW))
-        } else if (job.flushes.length > 0) {
-          // 重ね切りのオン・オフ（条件に合うときだけオン）
-          const i = int(r, 0, job.flushes.length - 1)
-          const f = job.flushes[i]
-          const { stack: _s, ...rest } = f
-          const next: Flush = f.stack ? rest : canStack(f, job.boards) ? { ...f, stack: true } : f
-          job = { ...job, flushes: job.flushes.map((x, j) => (j === i ? next : x)) }
+        } else {
+          // 重ね切りのオン・オフ（第2.6版：仕事ごと）
+          job = { ...job, stacking: job.stacking === 'on' ? 'off' : 'on' }
         }
         checkJob(job)
       }
@@ -296,7 +294,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         }
       }
       expect(job.frozenSheets).toEqual([])
-      job = { ...job, flushes: start.flushes }
+      job = { ...job, stacking: start.stacking }
       expect(packJob(job, computeDimensions(job))).toEqual(first)
     }
     expect(frozenStacks).toBeGreaterThan(20)
@@ -315,7 +313,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
     }
   })
 
-  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は配置が変わらない。そろわない組は重ね切りを外し、第2.2版と同じ配置（S-23）', () => {
+  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は組の行になる。重ね切りは外さない。重ねない仕事は第2.2版と同じ配置（S-23・S-32）', () => {
     // v22StackGolden.json は第2.2版（コミット dc8e29d）の packJob の結果の要約（legacy の乱数の仕事 150 件）
     const table = golden as Record<string, string[]>
     let unchanged = 0
@@ -325,7 +323,8 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       const legacyJob = randomJob(rng(seed), seed, false, true)
       const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
       delete raw.stackSheets
-      const { jobs, fixes, unstacked } = sanitizeJobs([raw])
+      delete raw.stacking
+      const { jobs, fixes } = sanitizeJobs([raw])
       expect(fixes).toBe(0)
       const job = jobs[0]
       // 第2.2版の組を3つに分ける：3×6／4×8 でそろう・自由入力でそろう・そろわない
@@ -342,10 +341,10 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         expect(x.sizeKind).not.toBe('custom')
         expect([x.width, x.length, x.grain]).toEqual([a.width, a.length, a.grain])
       }
-      // それ以外の組のフラッシュは重ね切りが外れ、名前を知らせる
-      const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
-      expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
-      expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
+      // 仕事の重ね切り：部材が使っている材料グループで、以前の決まりで重ねられたのに外していたものがあれば off（18.8）
+      const used = new Set(legacyJob.parts.filter((p) => p.quantity >= 1).map((p) => p.flushId))
+      const wantOff = job.flushes.some((f) => used.has(f.id) && f.stack !== true && canStack(f, job.boards))
+      expect(job.stacking).toBe(wantOff ? 'off' : 'on')
       // 芯材（core）は 芯材◯（木取りしない）の材料と中身の先頭に移る（第2.5版）。戻すと第2.2版と同じ
       const cores = new Map(job.boards.filter((b) => b.noCut).map((b) => [b.id, b.thickness]))
       const back = job.flushes.map(({ form: _f, autoName: _a, ...f }) => ({
@@ -353,23 +352,21 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         core: cores.get(f.faces[0].boardId),
         faces: f.faces.slice(1),
       }))
-      expect(back.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      expect(back).toEqual(legacyJob.flushes)
       expect(dropAddedBuiltIns(job, legacyJob).boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
-      if (unstacked.length > 0) unstackedJobs++
+      if (kinds.some((k) => k.kind !== 'standard')) unstackedJobs++
       const r = checkJob(job)
-      if (kinds.some((k) => k.kind === 'custom')) {
-        // 第2.2版では自由入力の大きさで重ねていた組：重ねなくなるので配置が変わる
-        expect(r.materials.some((m) => m.stack && kinds.some((k) => k.kind === 'custom' && m.boardId === k.g.key))).toBe(false)
-        customCommon++
-      } else {
-        // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
+      if (kinds.some((k) => k.kind === 'custom')) customCommon++
+      if (kinds.length === 0 && r.materials.every((m) => !m.stack)) {
+        // 第2.6版：組も端材も変わるので、第2.2版と同じ配置になるのは、第2.2版でも今も重ねていない仕事だけ。
         // 第2.5版（E-68）で帯の並べ方（同じ幅を優先）を変えたので、第2.2版と比べるのは第2.4版までの並べ方で並べた結果
-        const old = packJob(job, computeDimensions(job), undefined, { sameWidthFirst: false })
+        // 重ねない仕事なので組は使わない（plan は空）。並べ方を変えると確かめ（decideStacks）の結果が変わりうるため（E-79 で組のサイズの初期値が変わり seed 114 で起きた）
+        const old = packJob(job, computeDimensions(job), [], { sameWidthFirst: false })
         expect(digest(old), `seed ${seed}`).toEqual(table[`s${seed}`])
         unchanged++
       }
     }
-    expect(unchanged).toBeGreaterThan(50)
+    expect(unchanged).toBeGreaterThan(3)
     expect(unstackedJobs).toBeGreaterThan(3)
     // 自由入力どうしでそろう組は乱数ではほぼ出ない（stackStorage.test.ts で確かめる）
     expect(customCommon).toBeGreaterThanOrEqual(0)

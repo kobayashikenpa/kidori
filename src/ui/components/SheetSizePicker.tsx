@@ -3,6 +3,7 @@
 // 3×6・4×8 は setRowSize、自由入力は setRowStockMode（＝その行の手持ちで木取り）。自由入力を選んでいる行の下に、その行の手持ちの編集。
 // 重ね切りの組の行は 3×6・4×8 だけ（自由入力・手持ちの編集は出さない。仕様書 4・architecture.md 15.9）
 // 入らない部材がある（unplaced）ときは、サイズのボタンに「部材が収まらない」を出す（仕様書 9「手持ちの行の表示」。手持ちの行には出さない）
+// 重ねた板の端材から取った1枚は枚数に数えず、まとめの行と同じく「0枚（端材から 1枚）」で添える（第2.6版）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { StockUsage } from '../../engine/progress/frozen'
@@ -11,7 +12,7 @@ import { setRowSize, setRowStockMode, type SizeTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { pct } from '../format'
 import { selectedSize, sizeChoices } from '../sheetSize'
-import { StockEditor } from './StockEditor'
+import { OffcutRows, StockEditor } from './StockEditor'
 
 const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4×8' }
 
@@ -28,6 +29,11 @@ interface Props {
   current: MaterialResult | null
   /** その行の stockUsage */
   usage: StockUsage | null
+}
+
+/** 端材から取った1枚の数（0 なら出さない）。ボタンが狭いので枚数の下の行に出す */
+function OffcutCount({ n }: { n: number }) {
+  return n > 0 ? <span className="sz-off num">（端材から {n}枚）</span> : null
 }
 
 export function SheetSizePicker({ target, choice, label, compare, current, usage }: Props) {
@@ -66,7 +72,8 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
               {o && compare && (
                 <>
                   <span className="sz-n num">{o.sheetCount}枚</span>
-                  <span className="sz-y num">{o.sheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
+                  <OffcutCount n={o.offcutSheetCount} />
+                  <span className="sz-y num">{o.sheetCount + o.offcutSheetCount > 0 ? pct(o.yieldRate) : '―'}</span>
                   <span className="sz-tags">
                     {o.unplacedCount > 0 && <span className="sz-tag err">部材が収まらない</span>}
                     {compare.fewer === kind && <span className="sz-tag ok">枚数が少ない</span>}
@@ -83,7 +90,8 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
             {isFree && current ? (
               <>
                 <span className="sz-n num">{current.sheetCount}枚</span>
-                <span className="sz-y num">{current.sheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
+                <OffcutCount n={current.offcutSheetCount} />
+                <span className="sz-y num">{current.sheetCount + current.offcutSheetCount > 0 ? pct(current.yieldRate) : '―'}</span>
                 <span className="sz-tags">
                   {current.unplaced.length > 0 && <span className="sz-tag err">部材が収まらない</span>}
                 </span>
@@ -95,7 +103,17 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         )}
       </div>
       {error && <p className="msg err">{error}</p>}
-      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} />}
+      {isFree ? (
+        <StockEditor target={target} choice={choice} label={label} usage={usage} />
+      ) : (
+        usage &&
+        usage.offcuts.length > 0 && (
+          // サイズを選んでいる行でも、重ねた板の端材の行があれば行の下に出す（読むだけ。第2.6版）
+          <div className="stk-mat" role="group" aria-label={`${label} の端材`}>
+            <OffcutRows usage={usage} />
+          </div>
+        )
+      )}
     </div>
   )
 }

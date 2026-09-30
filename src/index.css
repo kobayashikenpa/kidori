@@ -1363,6 +1363,12 @@ select.input {
 .sz-y {
   font-size: 13px;
 }
+/* 端材から取った1枚の数（第2.6版。「0枚（端材から 1枚）」の括弧の部分） */
+.sz-off {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--muted);
+}
 .sz-muted {
   color: var(--muted);
   margin-top: 6px;
@@ -1957,4 +1963,35 @@ button.dim-name {
 .stk-use.stk-all {
   color: var(--accent);
   font-weight: 700;
+}
+
+/* 端材から取った1枚の枚数（第2.6版。まとめの材料の行の「0枚（端材から 1枚）」） */
+.kd-v-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* 重ねた板の端材の行（第2.6版。読むだけ） */
+.stk-row.stk-offcut {
+  border: 1px dashed var(--line);
+}
+.stk-offcut-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+  font-size: 14px;
+}
+.stk-row.stk-offcut {
+  padding: 6px 8px;
+}
+.stk-offcut .stk-foot {
+  align-items: center;
+}
+.stk-offcut .stk-offcut-name {
+  font-weight: 400;
+}
+.stk-offcut .stk-use {
+  flex: 0 0 auto;
+  min-height: 0;
 }

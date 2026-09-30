@@ -1,13 +1,12 @@
 // 設定の画面の材料グループの一覧（第2.5版。仕様書 4「材料と材料グループ」・architecture.md 17.10）。
 // コードの名前は Flush のまま（画面の言葉だけ「材料グループ」「中身」。17章の対応表）。
 // 追加のときは初めの形（フラッシュ／ベタ／空）を選び、中身は engine の defaultGroupFaces、名前は autoGroupName
-// （autoName の間は中身についてくる。手で書き換えたら外す）。厚み・重ね切りの判定は engine（flushBreakdown・canStack）
+// （autoName の間は中身についてくる。手で書き換えたら外す）。厚みは engine（flushBreakdown）。
+// 第2.6版：重ね切りは木取りの画面で仕事ごとに切り替える（材料グループごとの重ね切りの選択は無い。architecture.md 18.9）
 import { useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
-import { canStack } from '../../engine/packing/stack'
 import {
   autoGroupName,
-  defaultFlushStack,
   defaultGroupFaces,
   flushBreakdown,
   flushBreakdownText,
@@ -40,7 +39,7 @@ export function FlushEditor() {
         usage={(f) => {
           const b = flushBreakdown(job, f.id)
           const users = flushesUsages(job, [f.id]).parts
-          return `${b ? `厚み ${flushBreakdownText(b)}` : ''}${f.stack ? '　重ね切り' : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
+          return `${b ? `厚み ${flushBreakdownText(b)}` : ''}　${users.length > 0 ? `使っている部材：${users.join('・')}` : '使っている部材なし'}`
         }}
         warning={(f) => ((flushBreakdown(job, f.id)?.faces.length ?? 0) === 0 ? '中身がありません（編集で選んでください）' : null)}
         add={<FlushForm flush={null} done={() => {}} />}
@@ -98,7 +97,7 @@ interface FormProps {
 }
 
 /**
- * 材料グループの追加（flush が null）・変更。初めの形（追加のときだけ）・中身（材料 × 枚数）・厚み・名前・重ねて切る。
+ * 材料グループの追加（flush が null）・変更。初めの形（追加のときだけ）・中身（材料 × 枚数）・厚み・名前。
  * 設定の画面と、部材の編集の上に重ねて開く編集（MaterialEditSheet）で使う
  */
 export function FlushForm({ flush, done, overlay = false }: FormProps) {
@@ -117,28 +116,20 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
   // 名前が中身についてくるか（追加のとき、または自動の名前の材料グループ。手で書き換えたら外す）
   const [nameAuto, setNameAuto] = useState(flush ? flush.autoName === true : true)
   const [name, setName] = useState(flush?.name ?? '')
-  // 新しい材料グループは、重ねられる中身なら初期オン（defaultFlushStack）。変更のときは保存した値
-  const [stack, setStack] = useState(() => (flush ? flush.stack === true : defaultFlushStack(toFaces(rows), job.boards)))
-  // 利用者がチェックを押したか（押していない新しい材料グループは、中身が重ねられるようになったらオンにする）
-  const [stackTouched, setStackTouched] = useState(flush !== null)
   const [error, setError] = useState<string | null>(null)
   // 追加の欄は入れ直すたびに作り直して、打ちかけの数字を消す
   const [round, setRound] = useState(0)
   const pre = flush ? `flush-edit-${flush.id}` : overlay ? 'flush-new' : 'flush-add'
 
-  const stackable = (rs: readonly FaceRow[]) => canStack({ faces: toFaces(rs) }, job.boards)
-  const change = (next: FaceRow[], fm: GroupForm = form, touched = stackTouched) => {
+  const change = (next: FaceRow[], fm: GroupForm = form) => {
     setRows(next)
-    if (!stackable(next)) setStack(false)
-    else if (!touched) setStack(defaultFlushStack(toFaces(next), job.boards))
     if (nameAuto) setName(autoName(fm, next))
     setError(null)
   }
   const setRow = (key: number, p: Partial<FaceRow>) => change(rows.map((r) => (r.key === key ? { ...r, ...p } : r)))
   const chooseForm = (fm: GroupForm) => {
     setForm(fm)
-    setStackTouched(false)
-    change(rowsOf(fm), fm, false)
+    change(rowsOf(fm), fm)
   }
 
   const preview = draftBreakdown(job, rows)
@@ -152,7 +143,8 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
       faces: rows.map((r) => ({ boardId: r.boardId ?? '', count: r.count ?? 0 })),
       form,
       ...(nameAuto || name.trim() === '' ? { autoName: true as const } : {}),
-      ...(stack && stackable(rows) ? { stack: true as const } : {}),
+      // 以前の版の材料グループの重ね切り（stack）は計算では見ないが、前の版のアプリのために消さない（新しくは付けない。18.8）
+      ...(flush?.stack === true ? { stack: true as const } : {}),
     }
     const id = flush?.id ?? newId('flush')
     const r = run((j) => (flush ? updateFlush(j, flush.id, draft) : addFlush(j, draft, id)))
@@ -164,8 +156,6 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
       setRows(init)
       setName('')
       setNameAuto(true)
-      setStack(defaultFlushStack(toFaces(init), job.boards))
-      setStackTouched(false)
       setError(null)
       setRound((n) => n + 1)
     }
@@ -263,30 +253,6 @@ export function FlushForm({ flush, done, overlay = false }: FormProps) {
       {preview && (
         <p className="thick-auto" style={{ margin: 0 }}>
           厚み {flushBreakdownText(preview)}
-        </p>
-      )}
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={stack}
-        aria-disabled={!stackable(rows)}
-        aria-describedby={stackable(rows) ? undefined : `${pre}-stack-why`}
-        className={`opt-check${stack ? ' on' : ''}`}
-        onClick={() => {
-          if (!stackable(rows)) return
-          setStack((v) => !v)
-          setStackTouched(true)
-          setError(null)
-        }}
-      >
-        <span className="check-box" aria-hidden="true">
-          {stack ? '✓' : ''}
-        </span>
-        <span>重ねて切る（2枚重ね）</span>
-      </button>
-      {!stackable(rows) && (
-        <p id={`${pre}-stack-why`} className="lead" style={{ margin: 0 }}>
-          木取りする中身が2種類で、枚数が同じときに選べます
         </p>
       )}
       <div className="field" style={{ margin: 0 }}>

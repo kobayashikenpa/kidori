@@ -1,6 +1,7 @@
 // E-58 → E-61 → 第2.3版の追補で書き直し（E-64。architecture.md 15.9）：重ね切りの組は 3×6／4×8 だけ。
 // 組の行に手持ち・自由入力が残っていても木取りは見ない。組は選んだサイズで足りるだけ使い、組の noStock は出ない。
 // 材料の手持ちは、その材料をふつうに木取りする片だけに使う（組の分を引かない）
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -10,11 +11,12 @@ import { stockUsage } from '../progress/frozen'
 import type { Job, MaterialResult } from '../types'
 import { packJob } from './index'
 import { stackKey, stackPlan } from './stack'
-import { availableStackStock, stackChoice } from './stock'
+import { stackChoice } from './stock'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
-const run = (job: Job) => packJob(job, computeDimensions(job))
+/** 組はすべて重ねる（組の配置の確かめ。板が増えないかの確かめは stackDecide.test.ts） */
+const run = (job: Job) => packJob(job, computeDimensions(job), allStacks(job))
 const find = (ms: MaterialResult[], id: string) => ms.find((m) => m.boardId === id)
 
 function sample(melamine: StockRowDraft[] | null, lauan: StockRowDraft[] | null): Job {
@@ -43,9 +45,10 @@ describe('stackChoice は 3×6／4×8 だけ（E-64）', () => {
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
   })
 
-  it('組の行が無ければ 4×8', () => {
+  it('組の行が無く、2つの材料のサイズがそろわなければ 4×8（第2.6版）', () => {
     const job = sampleGroupJob(true)
     job.stackSheets = []
+    job.boards = job.boards.map((b) => (b.id === MELAMINE_1_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
     expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'shihachi', width: 1220, length: 2440, grain: 'long' })
   })
 
@@ -61,11 +64,9 @@ describe('stackChoice は 3×6／4×8 だけ（E-64）', () => {
     expect(stackChoice(job, PAIR).grain).toBe('long')
   })
 
-  it('組の手持ちは選んだサイズ1行（枚数 無限）', () => {
+  it('組の行に手持ちが残っていても、組のサイズは選んだ 3×6（手持ちは返さない）', () => {
     const job = withLeftoverStackStock(sampleGroupJob(true), [['3×6', 1]])
-    expect(availableStackStock(job, PAIR)).toEqual([
-      { stockId: null, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: Infinity },
-    ])
+    expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
   })
 })
 
@@ -117,7 +118,7 @@ describe('重ね切りの組の木取りは手持ちを使わない（E-64）', 
 describe('手持ちの残り・足りないときに組の行は出ない（E-64）', () => {
   it('組の行に手持ちが残っていても stockUsage に組の行は出ない。ラワン 4 の手持ちは背板の1枚だけ数える', () => {
     const job = withStock(withLeftoverStackStock(sampleGroupJob(true), [['3×6', 6]]), LAUAN_4_ID, [['3×6', 1]])
-    expect(stockUsage(job, run(job))).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
+    expect(stockUsage(job, run(job)).map(({ boardId, rows }) => ({ boardId, rows }))).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
   })
 
   it('組の行に手持ち 3×6 ×1 が残っていても stockShortage は []', () => {

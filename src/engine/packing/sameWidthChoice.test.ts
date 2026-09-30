@@ -32,6 +32,7 @@ function job(parts: Part[], cutMode: CutMode = 'vertical', board: Partial<Board>
     parts,
     frozenSheets: [],
     stackSheets: [],
+    stacking: 'on',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }

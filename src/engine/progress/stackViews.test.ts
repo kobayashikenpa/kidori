@@ -65,12 +65,12 @@ describe('固定した組の1枚・まとめ（E-52）', () => {
       [LAUAN_4_ID, 1, 0, 0],
     ])
     const [v] = frozenSheetViews(job, computeDimensions(job))
-    expect(v.label).toBe('メラミン1＋ラワン4（重ね切り）')
+    expect(v.label).toBe('2枚重ね：メラミン1＋ラワン4')
     expect(v.complete).toBe(true)
     expect(v.drift).toEqual([])
 
     // その後に重ね切りをオフにしても固定した組の1枚は残り、メラミン 1 のふつうの結果は4枚
-    const off: Job = { ...job, flushes: job.flushes.map(({ stack: _s, ...f }) => f) }
+    const off: Job = { ...job, flushes: job.flushes.map(({ stack: _s, ...f }) => f), stacking: 'off' }
     const r = packJob(off, computeDimensions(off))
     expect(r.materials.map((m) => [m.boardId, m.sheetCount])).toEqual([[MELAMINE_1_ID, 4], [LAUAN_4_ID, 5]])
     expect(off.frozenSheets).toHaveLength(1)
@@ -114,7 +114,7 @@ describe('固定した組の1枚・まとめ（E-52）', () => {
     expect(frozenSheetViews(changed, computeDimensions(changed))[0].drift.map((d) => d.reason)).toEqual(['removed'])
     const gone: Job = { ...job, boards: job.boards.filter((b) => b.id !== LAUAN_4_ID) }
     const v = frozenSheetViews(gone, computeDimensions(gone))[0]
-    expect(v.label).toBe('メラミン1＋ラワン4（重ね切り）')
+    expect(v.label).toBe('2枚重ね：メラミン1＋ラワン4')
     expect(v.boardExists).toBe(false)
   })
 
@@ -148,13 +148,14 @@ describe('サイズの比較・お知らせ（E-52）', () => {
     expect(c[0].stack).toEqual({ boardIds: [MELAMINE_1_ID, LAUAN_4_ID] })
   })
 
-  it('お知らせの組の表示名は「メラミン1＋ラワン4（重ね切り）」（天板 910×610 が 1820 に2枚入る切り代 8mm で 4枚 → 2枚）', () => {
+  it('お知らせの組の表示名は「2枚重ね：メラミン1＋ラワン4」（天板 910×610 が 1820 に2枚入る切り代 8mm で 4枚 → 2枚）', () => {
     const job = flushJob()
     job.flushes[0].stack = true
-    // 組の設定は 3×6（第2.3版。無ければ 4×8 で並ぶ）
+    job.stacking = 'on'
+    // 組の設定は 3×6（第2.3版）
     job.stackSheets = [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' }]
     expect(findSavingHints(job).map((h) => h.message)).toEqual([
-      '切り代を 8mm にすると、メラミン1＋ラワン4（重ね切り） が 2 枚減ります（4枚 → 2枚）',
+      '切り代を 8mm にすると、2枚重ね：メラミン1＋ラワン4 が 2 枚減ります（4枚 → 2枚）',
     ])
   })
 })

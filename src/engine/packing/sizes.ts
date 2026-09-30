@@ -1,8 +1,7 @@
 // 材料のサイズの比較（仕様書 9「材料のサイズの選択」）：材料ごとに 3×6 と 4×8 の両方で木取りし、枚数・歩留まりを並べる
-import { BOARD_SIZES, type Board, type DimensionResult, type Job, type StackSheet } from '../types'
+import { BOARD_SIZES, type Board, type DimensionResult, type Job, type StackPair, type StackSheet } from '../types'
 import { round1 } from '../round'
-import { packJob } from './index'
-import { stackPlan } from './stack'
+import { decideStacks, packJob } from './index'
 
 export type StandardSize = 'saburoku' | 'shihachi'
 
@@ -12,7 +11,10 @@ export interface SizeSummary {
   width: number
   /** 長辺（mm） */
   length: number
+  /** 必要な板の枚数（端材から取った1枚は数えない。第2.6版） */
   sheetCount: number
+  /** 重ねた板の端材から取った1枚の数（第2.6版。まとめの「（端材から ◯枚）」と同じ） */
+  offcutSheetCount: number
   /** その材料の歩留まり */
   yieldRate: number
   /** 入らない部材の数 */
@@ -26,7 +28,7 @@ export interface MaterialSizeComparison {
   stack?: { boardIds: [string, string] }
   /** 3×6、4×8 の順 */
   options: [SizeSummary, SizeSummary]
-  /** 枚数が少ない方。入らない部材が出るサイズ・枚数 0 のサイズがあれば比べない。同じ枚数なら null */
+  /** 枚数が少ない方。入らない部材が出るサイズ・使う板が無い（枚数 0 で端材からも 0）サイズがあれば比べない。同じ枚数なら null */
   fewer: StandardSize | null
   /** 歩留まりが高い方（小数第1位の % で比べる）。比べない条件は fewer と同じ。同じなら null */
   higher: StandardSize | null
@@ -35,7 +37,8 @@ export interface MaterialSizeComparison {
 /** 3×6・4×8 のどちらが枚数が少ないか・歩留まりが高いか（画面の「枚数が少ない」「歩留まりが高い」の印） */
 export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pick<MaterialSizeComparison, 'fewer' | 'higher'> {
   const [a, b] = options
-  const fits = (o: SizeSummary) => o.unplacedCount === 0 && o.sheetCount > 0
+  // 端材から取った1枚だけで足りる（0枚・端材から1枚）サイズも比べる（第2.6版）
+  const fits = (o: SizeSummary) => o.unplacedCount === 0 && o.sheetCount + o.offcutSheetCount > 0
   if (!fits(a) || !fits(b)) return { fewer: null, higher: null }
   const ya = round1(a.yieldRate * 100)
   const yb = round1(b.yieldRate * 100)
@@ -51,10 +54,10 @@ export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pi
  * 手持ちを使わずそのサイズにする（どの行でも 3×6・4×8 の本当の枚数・歩留まりを並べる。仕様書 9）。
  * 組の行が無い組（4×8 で計算する組）も、そのサイズの行を入れる
  */
-function withAllRows(job: Job, kind: StandardSize): Job {
+function withAllRows(job: Job, kind: StandardSize, pairs: readonly StackPair[]): Job {
   const [width, length] = BOARD_SIZES[kind]
   const size = { sizeKind: kind, width, length, grain: 'long' as const }
-  const stackSheets = stackPlan(job).groups.map((g): StackSheet => ({ boardIds: [g.boardIds[0], g.boardIds[1]], ...size }))
+  const stackSheets = pairs.map((g): StackSheet => ({ boardIds: [g.boardIds[0], g.boardIds[1]], ...size }))
   return {
     ...job,
     boards: job.boards.map((b): Board => {
@@ -69,11 +72,15 @@ function withAllRows(job: Job, kind: StandardSize): Job {
  * 材料・組ごとに 3×6 と 4×8 で木取りした結果を返す。材料の並びと対象は packJob(job, dims).materials と同じ
  * （片か入らない部材のある材料・組だけ）。切り方・刃厚・端切り・切り代は今の設定のまま。
  * 材料の数によらず packJob を2回だけ呼ぶ。元の仕事は変えない。手持ちで木取りする行も 3×6・4×8 にして比べる（手持ちは使わない）。
- * 重ね切り（第2.3版。architecture.md 15.5）：組はサイズで決まらないので、組の行も同じサイズにした写しで比べる（boardId が stackKey）
+ * 重ね切り（第2.3版。architecture.md 15.5）：組はサイズで決まらないので、組の行も同じサイズにした写しで比べる（boardId が stackKey）。
+ * 第2.6版：組は今の仕事で決まった組（decideStacks の accepted）のまま
  */
 export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialSizeComparison[] {
   const kinds: StandardSize[] = ['saburoku', 'shihachi']
-  const results = kinds.map((kind) => ({ kind, materials: packJob(withAllRows(job, kind), dims).materials }))
+  // 第2.6版（architecture.md 18.5）：今の仕事で決まった組（accepted）のまま比べる（確かめはやり直さない）。組の行も同じサイズにする
+  const { accepted } = decideStacks(job, dims)
+  const plan = accepted.map((p) => p.key)
+  const results = kinds.map((kind) => ({ kind, materials: packJob(withAllRows(job, kind, accepted), dims, plan).materials }))
   // 対象と並びは、サイズによらず expandPieces で決まる（部材のある材料・板の登録順）ので、3×6 の結果に合わせる
   return results[0].materials.map((m): MaterialSizeComparison => {
     const options = results.map(({ kind, materials }): SizeSummary => {
@@ -84,6 +91,7 @@ export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialS
         width,
         length,
         sheetCount: r?.sheetCount ?? 0,
+        offcutSheetCount: r?.offcutSheetCount ?? 0,
         yieldRate: r?.yieldRate ?? 0,
         unplacedCount: r?.unplaced.length ?? 0,
       }

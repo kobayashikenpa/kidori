@@ -1,3 +1,4 @@
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -5,11 +6,13 @@ import { frozenDemand } from '../progress/frozen'
 import type { FrozenSheet, Job, SheetLayout } from '../types'
 import { packJob } from './index'
 import { expandPieces } from './pieces'
-import { stackKey, stackPlan } from './stack'
+import { pairCandidates } from './pairing'
+import { stackKey } from './stack'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const pct = (r: number) => Math.round(r * 1000) / 10
-const run = (job: Job) => packJob(job, computeDimensions(job))
+/** 組はすべて重ねる（組の配置の確かめ。板が増えないかの確かめは stackDecide.test.ts） */
+const run = (job: Job) => packJob(job, computeDimensions(job), allStacks(job))
 const names = (s: SheetLayout) => s.placements.map((p) => p.name)
 
 function frozen(layout: SheetLayout, stackWith?: boolean): FrozenSheet {
@@ -55,12 +58,13 @@ describe('重ね切りの木取り（E-51）', () => {
 
   it('組の片の id は重ならない（a の表面材の番号）', () => {
     const job = sampleGroupJob(true)
-    const e = expandPieces(job, computeDimensions(job))
-    const g = e.groups.find((x) => x.stack?.key === KEY)!
-    expect(g.board.id).toBe(MELAMINE_1_ID)
-    expect(g.pieces).toHaveLength(16)
-    expect(new Set(g.pieces.map((p) => p.pieceId)).size).toBe(16)
-    expect(g.pieces.filter((p) => p.partId === 'part-gawa').map((p) => p.pieceId)).toEqual([
+    const [c] = pairCandidates(job, expandPieces(job, computeDimensions(job)))
+    expect(c.key).toBe(KEY)
+    expect(c.boardIds[0]).toBe(MELAMINE_1_ID)
+    const pieces = c.pairs.map((p) => p.a)
+    expect(pieces).toHaveLength(16)
+    expect(new Set(pieces.map((p) => p.pieceId)).size).toBe(16)
+    expect(pieces.filter((p) => p.partId === 'part-gawa').map((p) => p.pieceId)).toEqual([
       'part-gawa#1', 'part-gawa#2', 'part-gawa#3', 'part-gawa#4',
     ])
   })
@@ -102,9 +106,9 @@ describe('重ね切りの木取り（E-51）', () => {
 
   it('plan を渡すと、その組だけ重ねる（空の plan なら重ねない）', () => {
     const job = sampleGroupJob(true)
-    const r = packJob(job, computeDimensions(job), { groups: [] })
+    const r = packJob(job, computeDimensions(job), [])
     expect(r.materials.map((m) => [m.boardId, m.sheetCount])).toEqual([[MELAMINE_1_ID, 5], [LAUAN_4_ID, 6]])
-    expect(packJob(job, computeDimensions(job), stackPlan(job)).materials[0].boardId).toBe(KEY)
+    expect(packJob(job, computeDimensions(job), [KEY]).materials[0].boardId).toBe(KEY)
   })
 
   it('stackWith 付きの固定した1枚（側板×2）があると両方の材料から引き、組が4枚', () => {

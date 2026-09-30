@@ -7,17 +7,19 @@
 // （横切り優先は長手も端切りするので、縦切り優先でしか入らない片がありうる）
 // 手持ちの材料（第2.2版。architecture.md 14.5）：stockOn の材料は、固定した1枚を引いた手持ち（availableStock）で並べる。
 // 1枚ごとにその大きさで端切り・切る順番・端材・歩留まりを出し、sheet を付ける。入らない片は noStock
-// 重ね切りの組（第2.3版。architecture.md 15.4）：組は組の行のサイズの設定（stackChoice）で並べる。
-// 組の手持ちは availableStackStock（材料の手持ちから引かない）。組に置けなかった片は組の noStock（a・b に回さない。未決事項 42）
+// 重ね切り（第2.6版。architecture.md 18.4）：組（材料グループの同じ部材の、違う材料の片の対）を先に、組の行のサイズ
+// （stackChoice。3×6／4×8 だけ。手持ちは使わない）で重ねた板に並べる。重ねた板の端材を上下の材料の手持ちの行にしてから、
+// 残りの片を材料ごとに並べる（端材の行を先に使う）。重ねる組は decideStacks（材料が増える組は重ねない。18.5）
 import { round1 } from '../round'
-import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout } from '../types'
+import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout, StackPair } from '../types'
 import { buildCuts } from './cutOrder'
-import { packGuillotine, packOnStock, type StripMode } from './guillotine'
-import { expandPieces, type Piece, type Unplaced } from './pieces'
+import { packGuillotine, packOnStock, rowTrim, type StripMode } from './guillotine'
+import { offcutStock, stackSheetNumbers } from './offcuts'
+import { pairCandidates, remainingRuns, type PairCandidate } from './pairing'
+import { expandPieces, groupRuns, type ExpandResult, type Piece, type Unplaced } from './pieces'
 import { scrapsOf } from './scraps'
-import { stackPlan, type StackPlan } from './stack'
 import { sheetOrientation, trimRects, usableRect } from './sheet'
-import { availableStackStock, availableStock, usesStock, type StockKind } from './stock'
+import { availableStock, sameStockSize, stackChoice, usesStock, type StockKind } from './stock'
 import { combineYield, sheetYield } from './yield'
 
 export { MIN_SCRAP } from './scraps'
@@ -77,20 +79,25 @@ function stockLayout(
     const size = { width: sh.stock.width, length: sh.stock.length }
     const placements = sh.strips.flatMap((s) => s.items.map((it) => it.placement))
     const y = sheetYield(placements, size)
+    // 端切りをしない行（重ねた板の端材。第2.6版）は端切り 0
+    const t = rowTrim(sh.stock, trim)
     const layout: SheetLayout = {
       index: i + 1,
       boardWidth: size.width,
       boardLength: size.length,
       orientation,
-      trims: trimRects(size, trim, mode),
+      trims: trimRects(size, t, mode),
       usable: sh.frame.usable,
       placements,
-      cuts: buildCuts(sh, sh.frame, size, trim),
+      cuts: buildCuts(sh, sh.frame, size, t),
       scraps: scrapsOf(sh, sh.frame, kerf),
       usedArea: y.usedArea,
       yieldRate: y.yieldRate,
     }
-    if (sh.stock.stockId !== null) layout.sheet = { stockId: sh.stock.stockId, sizeKind: sh.stock.sizeKind, grain: sh.stock.grain }
+    if (sh.stock.stockId !== null) {
+      layout.sheet = { stockId: sh.stock.stockId, sizeKind: sh.stock.sizeKind, grain: sh.stock.grain }
+      if (sh.stock.offcut) layout.sheet.offcut = { source: sh.stock.offcut.source }
+    }
     return layout
   })
   return { mode, sheets, unplaced: g.unplaced, used: g.used }
@@ -153,23 +160,55 @@ function chooseWay<L extends Layout>(fixed: boolean | undefined, run: (sameWidth
   return preferSameWidth(same, old) ? same : old
 }
 
+/** 重ねる組の key の一覧（第2.6版。packJob の plan） */
+export type StackPlanFixed = readonly string[]
+
+/** 組の片の向き・配置に使う材料（a に組の行のサイズ（3×6／4×8）をかぶせる。手持ちは使わない） */
+function stackBoard(job: Job, a: Board, boardIds: readonly [string, string]): Board {
+  const c = stackChoice(job, boardIds)
+  const { stockOn: _on, stock: _stock, ...base } = a
+  return { ...base, sizeKind: c.sizeKind, width: c.width, length: c.length, grain: c.grain }
+}
+
+/** 端材の行から、その材料の固定した端材の1枚の分を引く（大きさ・木目がそろう最初の行から1枚。そろう行が無ければ引かない） */
+function subtractFrozenOffcuts(job: Job, boardId: string, rows: readonly StockKind[]): StockKind[] {
+  const out = rows.map((r) => ({ ...r }))
+  for (const f of job.frozenSheets) {
+    if (f.boardId !== boardId || f.stackWith || !f.layout.sheet?.offcut) continue
+    const size = { width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain }
+    const k = out.find((x) => x.count >= 1 && sameStockSize(x, size))
+    if (k) k.count -= 1
+  }
+  return out.filter((r) => r.count >= 1)
+}
+
+/** 1つの材料の結果と、比べに使う数（入らない片の数・端材を除いた1枚） */
+interface MaterialRun {
+  result: MaterialResult
+  unplacedPieces: number
+}
+
 /**
- * 木取りの計算。plan は重ねる組（初期値は今の仕事の stackPlan）。
- * 組の結果は boardId: stackKey・stack 付き（material・thickness は a）。全体の歩留まりは組の1枚を2枚（a と b）として数える
+ * 木取りの計算を組み立てる（第2.6版。architecture.md 18.4）。ex・cands は packJob の中で1回だけ作る。
+ * 組の結果（重ねた板）は key ごとに、材料の結果は「その材料の端材の行」ごとに変わるので、呼ぶ側で使い回せるように分けている
  */
-export function packJob(
-  job: Job,
-  dims: DimensionResult,
-  plan: StackPlan = stackPlan(job),
-  options: PackOptions = {},
-): PackingResult {
-  const { kerf, trim, cutMode } = job.settings
-  const fixedWay = options.sameWidthFirst
-  const { groups, skipped, done } = expandPieces(job, dims, plan)
-  const partOrder = new Map(job.parts.map((p, i) => [p.id, i]))
+class Packer {
+  private stackCache = new Map<string, MaterialResult>()
+  private readonly partOrder: Map<string, number>
+
+  readonly job: Job
+  readonly ex: ExpandResult
+  readonly fixedWay: boolean | undefined
+
+  constructor(job: Job, ex: ExpandResult, fixedWay: boolean | undefined) {
+    this.job = job
+    this.ex = ex
+    this.fixedWay = fixedWay
+    this.partOrder = new Map(job.parts.map((p, i) => [p.id, i]))
+  }
 
   /** 入らない部材（部材ごとに1つ）。片の理由は reason */
-  const unplacedOf = (known: Unplaced[], pieces: Piece[], reason: Unplaced['reason']): Unplaced[] => {
+  private unplacedOf(known: Unplaced[], pieces: Piece[], reason: Unplaced['reason']): Unplaced[] {
     const all: Unplaced[] = [...known]
     const extra: Unplaced[] = []
     for (const p of pieces) {
@@ -178,39 +217,222 @@ export function packJob(
       }
     }
     // 手持ちが足りない部材は部材の並びにする（並べた順は大きさの順のため）
-    if (reason === 'noStock') extra.sort((a, b) => (partOrder.get(a.partId) ?? 0) - (partOrder.get(b.partId) ?? 0))
+    if (reason === 'noStock') extra.sort((a, b) => (this.partOrder.get(a.partId) ?? 0) - (this.partOrder.get(b.partId) ?? 0))
     return [...all, ...extra]
   }
 
-  const materials: MaterialResult[] = []
-  // 並びは expandPieces のまま（材料の保存の並び。組は a の材料の直後）
-  for (const g of groups) {
-    const { board, stack, pieces, unplaced } = g
-    let chosen: Layout
-    let reason: Unplaced['reason'] = 'tooLarge'
-    if (usesStock(board)) {
-      // 手持ち（固定した1枚を引いた残り）。組は組の手持ち、材料は材料の手持ち
-      const stock = stack ? availableStackStock(job, stack.boardIds) : availableStock(job, board.id)
-      chosen = chooseWay(fixedWay, (way) => choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode, way)))
-      reason = 'noStock'
-    } else {
-      // 配置で入らなかった片（通常は起きない）も「入らない部材」に加える
-      chosen = chooseWay(fixedWay, (way) => choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode, way)))
-    }
+  /** 組の重ねた板（組の行のサイズで並べる。組の片はどれも組の行に入る向きがある） */
+  stack(c: PairCandidate): MaterialResult {
+    const hit = this.stackCache.get(c.key)
+    if (hit) return hit
+    const { kerf, trim, cutMode } = this.job.settings
+    const a = this.job.boards.find((b) => b.id === c.boardIds[0])!
+    const board = stackBoard(this.job, a, c.boardIds)
+    const pieces = c.pairs.map((p) => p.a)
+    const chosen = chooseWay(this.fixedWay, (way) => choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode, way)))
     const result: MaterialResult = {
-      boardId: stack?.key ?? board.id,
-      material: board.material,
-      thickness: board.thickness,
+      boardId: c.key,
+      material: a.material,
+      thickness: a.thickness,
       mode: chosen.mode,
       sheets: chosen.sheets,
       sheetCount: chosen.sheets.length,
+      offcutSheetCount: 0,
       yieldRate: combineYield(chosen.sheets.map(areasOf)).yieldRate,
-      unplaced: unplacedOf(unplaced, chosen.unplaced, reason),
+      unplaced: this.unplacedOf([], chosen.unplaced, 'tooLarge'),
+      stack: { boardIds: [c.boardIds[0], c.boardIds[1]] },
     }
-    if (stack) result.stack = { boardIds: [stack.boardIds[0], stack.boardIds[1]] }
-    materials.push(result)
+    this.stackCache.set(c.key, result)
+    return result
   }
 
-  const total = combineYield(materials.flatMap((m) => m.sheets.flatMap((s) => (m.stack ? [areasOf(s), areasOf(s)] : [areasOf(s)]))))
-  return { materials, totalYieldRate: total.yieldRate, skipped, done }
+  /** 採った組の重ねた板（組の並び） */
+  stacks(accepted: readonly PairCandidate[]): MaterialResult[] {
+    return accepted.map((c) => this.stack(c))
+  }
+
+  /** 端材の行（材料ごと。固定した組の1枚と、採った組の計算した1枚から） */
+  offcuts(stackResults: readonly MaterialResult[]): Map<string, StockKind[]> {
+    return offcutStock(stackSheetNumbers(this.job, stackResults))
+  }
+
+  /**
+   * 材料 boardIds のふつうの片（採った組の片を除いた残り）を、材料の手持ち ＋ 端材の行 で並べる。
+   * 端材の行が無く、手持ちで木取りしない材料は、今までどおり選んだサイズで並べる
+   */
+  materials(boardIds: ReadonlySet<string> | null, accepted: readonly PairCandidate[], offcuts: Map<string, StockKind[]>): MaterialRun[] {
+    const { kerf, trim, cutMode } = this.job.settings
+    const offcutRows = new Map<string, StockKind[]>()
+    for (const [id, rows] of offcuts) {
+      if (boardIds && !boardIds.has(id)) continue
+      const left = subtractFrozenOffcuts(this.job, id, rows)
+      if (left.length > 0) offcutRows.set(id, left)
+    }
+    const runs = remainingRuns(
+      boardIds ? this.ex.runs.filter((r) => boardIds.has(r.boardId)) : this.ex.runs,
+      accepted.filter((c) => !boardIds || boardIds.has(c.boardIds[0]) || boardIds.has(c.boardIds[1])),
+    )
+    const out: MaterialRun[] = []
+    for (const g of groupRuns(this.job, runs, new Set(offcutRows.keys()))) {
+      const { board, pieces, unplaced } = g
+      const extra = offcutRows.get(board.id)
+      let chosen: Layout
+      const reason: Unplaced['reason'] = usesStock(board) ? 'noStock' : 'tooLarge'
+      if (usesStock(board) || extra) {
+        // 手持ち（固定した1枚を引いた残り）＋ 重ねた板の端材の行（入る一番小さい行から使うので、入れば端材が先）
+        const stock = [...availableStock(this.job, board.id), ...(extra ?? [])]
+        chosen = chooseWay(this.fixedWay, (way) => choose(cutMode, (mode) => stockLayout(pieces, stock, trim, kerf, mode, way)))
+      } else {
+        chosen = chooseWay(this.fixedWay, (way) => choose(cutMode, (mode) => layout(pieces, board, trim, kerf, mode, way)))
+      }
+      const offcutSheets = chosen.sheets.filter((s) => s.sheet?.offcut).length
+      const tooLargePieces = runs
+        .filter((r) => r.boardId === board.id && unplaced.some((u) => u.partId === r.partId))
+        .reduce((n, r) => n + r.count, 0)
+      out.push({
+        result: {
+          boardId: board.id,
+          material: board.material,
+          thickness: board.thickness,
+          mode: chosen.mode,
+          sheets: chosen.sheets,
+          sheetCount: chosen.sheets.length - offcutSheets,
+          offcutSheetCount: offcutSheets,
+          yieldRate: combineYield(chosen.sheets.map(areasOf)).yieldRate,
+          unplaced: this.unplacedOf(unplaced, chosen.unplaced, reason),
+        },
+        unplacedPieces: tooLargePieces + chosen.unplaced.length,
+      })
+    }
+    return out
+  }
+}
+
+/** 材料 1つの比べる数：入らない片の数・板の枚数（その材料を含む重ねた板 ＋ 材料の1枚。端材の1枚を除く）・使う板の面積 */
+interface MaterialCount {
+  unplaced: number
+  sheets: number
+  area: number
+}
+
+/** 採った組 accepted のときの、材料 boardId の数（固定した1枚はどちらでも同じなので数えない） */
+function countOf(packer: Packer, boardId: string, accepted: readonly PairCandidate[]): MaterialCount {
+  const mine = accepted.filter((c) => c.boardIds.includes(boardId))
+  const stacks = packer.stacks(mine)
+  let sheets = 0
+  let area = 0
+  let unplaced = 0
+  for (const st of stacks) {
+    for (const s of st.sheets) {
+      sheets++
+      area += s.boardWidth * s.boardLength
+    }
+  }
+  for (const m of packer.materials(new Set([boardId]), mine, packer.offcuts(stacks))) {
+    unplaced += m.unplacedPieces
+    for (const s of m.result.sheets) {
+      if (s.sheet?.offcut) continue
+      sheets++
+      area += s.boardWidth * s.boardLength
+    }
+  }
+  return { unplaced, sheets, area: round1(area) }
+}
+
+/**
+ * after が before より悪くない（architecture.md 18.5）。比べる順（おまかせの比べ方と同じ考え）：
+ * 入らない片が減るなら採る・増えるなら採らない → 同じなら枚数が減るなら採る・増えるなら採らない → 同じなら面積が増えなければ採る。
+ * 入らない片が減るときは、その片を置くぶん枚数が増えることがある（重ねないと手持ちが足りない・どの板にも入らない片を、
+ * 重ねた板の端材に置けるとき）。入らない片が同じなら、重ねないときより枚数は増えない
+ */
+function notWorse(after: MaterialCount, before: MaterialCount): boolean {
+  if (after.unplaced !== before.unplaced) return after.unplaced < before.unplaced
+  if (after.sheets !== before.sheets) return after.sheets < before.sheets
+  return after.area <= before.area
+}
+
+/**
+ * 板が増えないかの確かめ（第2.6版。architecture.md 18.5。未決事項 57）。重ねない状態から、候補の組を並びの順に1つずつ足し、
+ * その組の a・b の材料がどちらも足す前より悪くならなければ採る。足すたびに確かめるので、どの材料も重ねないときより悪くならない
+ */
+function decide(packer: Packer, cands: readonly PairCandidate[]): { accepted: PairCandidate[]; rejected: PairCandidate[] } {
+  const accepted: PairCandidate[] = []
+  const rejected: PairCandidate[] = []
+  const current = new Map<string, MaterialCount>()
+  const now = (id: string) => {
+    let c = current.get(id)
+    if (!c) {
+      c = countOf(packer, id, accepted)
+      current.set(id, c)
+    }
+    return c
+  }
+  for (const c of cands) {
+    const before = c.boardIds.map(now)
+    const trial = [...accepted, c]
+    const after = c.boardIds.map((id) => countOf(packer, id, trial))
+    if (after.every((x, i) => notWorse(x, before[i]))) {
+      accepted.push(c)
+      c.boardIds.forEach((id, i) => current.set(id, after[i]))
+    } else {
+      rejected.push(c)
+    }
+  }
+  return { accepted, rejected }
+}
+
+/**
+ * 重ねる組を決める（第2.6版。architecture.md 18.5）：組の候補のうち、重ねても材料が増えない組（accepted）と、
+ * 重ねると 入らない片・枚数・（枚数が同じなら）面積 のどれかが増えるので重ねない組（rejected）。組の並び
+ */
+export function decideStacks(job: Job, dims: DimensionResult, expanded?: ExpandResult): { accepted: StackPair[]; rejected: StackPair[] } {
+  const ex = expanded ?? expandPieces(job, dims)
+  const d = decide(new Packer(job, ex, undefined), pairCandidates(job, ex))
+  const pair = (c: PairCandidate): StackPair => ({ key: c.key, boardIds: [c.boardIds[0], c.boardIds[1]] })
+  return { accepted: d.accepted.map(pair), rejected: d.rejected.map(pair) }
+}
+
+/**
+ * 木取りの計算（第2.6版。architecture.md 18.4）。
+ * 1. 材料ごとの片（expandPieces）→ 2. 組の候補（pairCandidates）のうち plan（重ねる組の key。無ければ decideStacks で決める）の組
+ * → 3. 重ねた板を並べる → 4. 重ねた板の端材を a・b の手持ちの行にする → 5. 残りの片を材料の手持ち ＋ 端材の行で並べる。
+ * 組の結果は boardId: stackKey・stack 付き（material・thickness は a）。材料の sheetCount は端材の1枚を除いた枚数。
+ * 全体の歩留まりは、重ねた板を2枚（a と b）、端材の1枚は板の面積に数えない（重ねた板の中なので）
+ */
+export function packJob(job: Job, dims: DimensionResult, plan?: StackPlanFixed, options: PackOptions = {}): PackingResult {
+  const ex = expandPieces(job, dims)
+  const cands = pairCandidates(job, ex)
+  const packer = new Packer(job, ex, options.sameWidthFirst)
+  const keys = plan === undefined ? null : new Set(plan)
+  const accepted = keys ? cands.filter((c) => keys.has(c.key)) : decide(packer, cands).accepted
+  const rejected = cands.filter((c) => !accepted.includes(c))
+
+  const stackResults = packer.stacks(accepted)
+  const plain = packer.materials(null, accepted, packer.offcuts(stackResults)).map((m) => m.result)
+
+  // 並び：材料の保存の並び。組は a の材料の直後（組の並び）
+  const materials: MaterialResult[] = []
+  for (const b of job.boards) {
+    const m = plain.find((x) => x.boardId === b.id)
+    if (m) materials.push(m)
+    for (const s of stackResults) if (s.stack!.boardIds[0] === b.id) materials.push(s)
+  }
+
+  const total = combineYield(
+    materials.flatMap((m) =>
+      m.sheets.flatMap((s) => {
+        if (m.stack) return [areasOf(s), areasOf(s)]
+        if (s.sheet?.offcut) return [{ usedArea: s.usedArea, boardArea: 0 }]
+        return [areasOf(s)]
+      }),
+    ),
+  )
+  const pair = (c: PairCandidate): StackPair => ({ key: c.key, boardIds: [c.boardIds[0], c.boardIds[1]] })
+  return {
+    materials,
+    totalYieldRate: total.yieldRate,
+    skipped: ex.skipped,
+    done: ex.done,
+    stacks: { accepted: accepted.map(pair), rejected: rejected.map(pair) },
+  }
 }

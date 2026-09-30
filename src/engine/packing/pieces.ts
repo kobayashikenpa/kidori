@@ -4,8 +4,7 @@ import { demandKey, frozenDemand } from '../progress/frozen'
 import { round1 } from '../round'
 import type { Board, BoardGrain, DimensionResult, Job, PackingResult, Part, PartDimensions, UnplacedReason } from '../types'
 import { usableSides, type StripMode } from './sheet'
-import { stackPlan, type StackGroup, type StackPlan } from './stack'
-import { stackChoice, usesStock } from './stock'
+import { usesStock } from './stock'
 
 /**
  * 板の辺に対する片の向き（置き方＝縦長／横長によらない）。x：短辺（妻手）方向の大きさ、y：長辺（長手）方向の大きさ。
@@ -60,6 +59,25 @@ export interface BoardPieces {
   unplaced: Unplaced[]
 }
 
+/**
+ * 1つの部材の、1つの材料から切る片の並び（第2.6版。組を作る前の形）。片の id は `${partId}#${start + 1}` 〜 `${partId}#${start + count}`
+ */
+export interface PieceRun {
+  partId: string
+  name: string
+  boardId: string
+  /** 片の id の連番の始まり（この値 + 1 が最初の片） */
+  start: number
+  /** 片の数（固定した片・木取り済みを引いた残り。1以上） */
+  count: number
+  shape: PieceShape
+  sizeLabel: string
+  /** 材料グループの部材なら、その材料グループ */
+  flushId?: string
+  /** 部材の中身の並び（材料グループの部材で、木取りする中身の並び。材料を直接選んだ部材は 0） */
+  faceOrder: number
+}
+
 export interface ExpandResult {
   /** 板の登録順。片も入らない部材もない板は含めない */
   groups: BoardPieces[]
@@ -67,6 +85,8 @@ export interface ExpandResult {
   skipped: PackingResult['skipped']
   /** 木取り済み（checks.cut。フラッシュは表面材ごとの checks.cutByBoard）で除いた部材 */
   done: PackingResult['done']
+  /** 部材・材料ごとの片の並び（第2.6版。部材の並び → 中身の並び。組を作る前の形） */
+  runs: PieceRun[]
 }
 
 function fmt(v: number): string {
@@ -101,29 +121,15 @@ function targetsOf(job: Job, part: Part | undefined, d: PartDimensions): Target[
  * 片の id の連番は部材ごとの通し番号（表面材をまたいで続ける。固定した片のぶんも番号を取っておく）。
  * 固定した1枚（第1.8版）の片の数は、部材（表面材）の枚数から数だけで引く（寸法は見ない。0 未満にはしない）。
  * 引いて 0 になった部材（表面材）は片にせず、done にも skipped にも入れない。
- * 重ね切り（第2.0版。architecture.md 12.4）：plan の組のフラッシュの部材は、残りの枚数から
- * 重ねる数＝min(a の残り, b の残り) だけ組の“材料”に入れ（片の id は a の番号）、差はそれぞれの材料にふつうに入れる。
- * 組の片の向きは組の行のサイズの設定（stackChoice。第2.3版）で決める
+ * 第2.6版（architecture.md 18.4 の 1）：組は作らない（材料ごとの片だけ）。組は pairing.ts の pairCandidates で runs から作る
  */
-export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = stackPlan(job)): ExpandResult {
+export function expandPieces(job: Job, dims: DimensionResult): ExpandResult {
   const boardById = new Map(job.boards.map((b) => [b.id, b]))
   const partById = new Map(job.parts.map((p) => [p.id, p]))
-  const byBoard = new Map<string, BoardPieces>()
-  const byStack = new Map<string, BoardPieces>()
   const skipped: ExpandResult['skipped'] = []
   const done: ExpandResult['done'] = []
+  const runs: PieceRun[] = []
   const frozen = frozenDemand(job)
-  const groupOf = new Map<string, StackGroup>()
-  for (const g of plan.groups) for (const f of g.flushIds) groupOf.set(f, g)
-  /** 組の片の向き・配置に使う材料（a に組の行のサイズの設定をかぶせる） */
-  const stackBoard = (a: Board, boardIds: readonly [string, string]): Board => {
-    const c = stackChoice(job, boardIds)
-    const { stockOn: _on, stock: _stock, ...base } = a
-    const board: Board = { ...base, sizeKind: c.sizeKind, width: c.width, length: c.length, grain: c.grain }
-    if (c.stockOn) board.stockOn = true
-    if (c.stock) board.stock = c.stock
-    return board
-  }
 
   for (const d of dims.parts) {
     if (d.quantity < 1) continue
@@ -186,59 +192,47 @@ export function expandPieces(job: Job, dims: DimensionResult, plan: StackPlan = 
     const sizeLabel = `${fmt(s0)}×${fmt(s1)}`
     const partGrain = part?.grain ?? 'any'
     const shape: PieceShape = { s0, s1, grain: partGrain === a0 ? 0 : partGrain === a1 ? 1 : 'any' }
-    // stock：手持ちで並べる（第2.2版）。向きは手持ちの行ごとに決め直すので、選んだサイズに入らなくても片にする
-    const place = (g: BoardPieces, board: Board, from: number, count: number, stock: boolean) => {
-      const orientations = orientationsOn(board, shape, job)
-      if (orientations.length === 0 && !stock) {
-        if (!g.unplaced.some((u) => u.partId === d.partId)) g.unplaced.push({ partId: d.partId, name: d.name, reason: 'tooLarge' })
-        return
-      }
-      for (let i = 1; i <= count; i++) {
-        g.pieces.push({ pieceId: `${d.partId}#${from + i}`, partId: d.partId, name: d.name, sizeLabel, orientations, shape })
-      }
-    }
-    // 重ね切り：a・b の両方に残りがあるぶんだけ組に入れる
-    const flushId = part?.flushId
-    const stacked = (boardIds: readonly [string, string]) => {
-      const ra = rest.find((r) => r.board.id === boardIds[0])
-      const rb = rest.find((r) => r.board.id === boardIds[1])
-      return ra && rb ? { ra, rb, n: Math.min(ra.quantity, rb.quantity) } : null
-    }
-    const group = flushId === undefined ? undefined : groupOf.get(flushId)
-    const pair = group ? stacked(group.boardIds) : null
-    if (group && pair && pair.n > 0) {
-      let g = byStack.get(group.key)
-      if (!g) {
-        g = { board: stackBoard(pair.ra.board, group.boardIds), stack: { key: group.key, boardIds: group.boardIds }, pieces: [], unplaced: [] }
-        byStack.set(group.key, g)
-      }
-      place(g, g.board, pair.ra.start, pair.n, usesStock(g.board))
-      pair.ra.used = pair.n
-      pair.rb.used = pair.n
-    }
-
-    for (const { board, quantity, start, used } of rest) {
-      if (quantity - used <= 0) continue
-      let g = byBoard.get(board.id)
-      if (!g) {
-        g = { board, pieces: [], unplaced: [] }
-        byBoard.set(board.id, g)
-      }
-      place(g, board, start + used, quantity - used, usesStock(board))
-    }
+    rest.forEach((r, i) => {
+      const run: PieceRun = { partId: d.partId, name: d.name, boardId: r.board.id, start: r.start, count: r.quantity, shape, sizeLabel, faceOrder: i }
+      if (part?.flushId !== undefined) run.flushId = part.flushId
+      runs.push(run)
+    })
   }
 
-  // 並び：材料の保存の並び。組は a の材料の直後（plan の並び）
+  return { groups: groupRuns(job, runs), skipped, done, runs }
+}
+
+/**
+ * 片の並びを材料ごとの片にする（材料の保存の並び。片も入らない部材もない材料は含めない）。
+ * 手持ちで木取りする材料（と stockBoards の材料＝端材の行がある材料。第2.6版）は、向きを手持ちの行ごとに決め直すので、
+ * 選んだサイズに入らなくても片にする。それ以外で選んだサイズに入らない部材は unplaced（tooLarge）
+ */
+export function groupRuns(job: Job, runs: readonly PieceRun[], stockBoards: ReadonlySet<string> = new Set()): BoardPieces[] {
+  const boardById = new Map(job.boards.map((b) => [b.id, b]))
+  const byBoard = new Map<string, BoardPieces>()
+  for (const r of runs) {
+    const board = boardById.get(r.boardId)
+    if (!board) continue
+    let g = byBoard.get(board.id)
+    if (!g) {
+      g = { board, pieces: [], unplaced: [] }
+      byBoard.set(board.id, g)
+    }
+    const orientations = orientationsOn(board, r.shape, job)
+    if (orientations.length === 0 && !usesStock(board) && !stockBoards.has(board.id)) {
+      if (!g.unplaced.some((u) => u.partId === r.partId)) g.unplaced.push({ partId: r.partId, name: r.name, reason: 'tooLarge' })
+      continue
+    }
+    for (let i = 1; i <= r.count; i++) {
+      g.pieces.push({ pieceId: `${r.partId}#${r.start + i}`, partId: r.partId, name: r.name, sizeLabel: r.sizeLabel, orientations, shape: r.shape })
+    }
+  }
   const groups: BoardPieces[] = []
   for (const b of job.boards) {
     const g = byBoard.get(b.id)
     if (g) groups.push(g)
-    for (const sg of plan.groups) {
-      const x = sg.boardIds[0] === b.id ? byStack.get(sg.key) : undefined
-      if (x) groups.push(x)
-    }
   }
-  return { groups, skipped, done }
+  return groups
 }
 
 /**

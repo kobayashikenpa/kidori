@@ -100,7 +100,7 @@ export interface Board extends SheetChoice {
 
 /**
  * 重ね切りの組の行のサイズの設定（第2.3版）。組は2つの材料で決まる（違うフラッシュでも同じ2つの材料なら1つの組）。
- * 行が無い組は 4×8（packing/stock.ts の stackChoice）
+ * 行が無い組は、2つの材料の行のサイズがそろえばそのサイズ、違えば 4×8。片方が手持ちならもう片方のサイズ、両方が手持ちなら 4×8（第2.6版。packing/stock.ts の stackChoice）
  */
 export interface StackSheet extends SheetChoice {
   /** 組の2つの材料（a・b。材料の保存の並び）。探すときは並びを問わない */
@@ -189,8 +189,8 @@ export interface Flush {
    */
   faces: FlushFace[]
   /**
-   * 表面材を重ねて切る（第2.0版）。オンのときだけ true を持つ（オフは持たない）。
-   * 木取りする中身がちょうど2つで枚数が同じとき（packing/stack.ts の canStack）だけ持てる
+   * 表面材を重ねて切る（第2.0版〜第2.5版）。第2.6版からは計算では見ない（仕事ごとの Job.stacking に置き換え。
+   * 以前のデータの移し替えだけに使う。architecture.md 18.7・18.8）。前の版のアプリのため、保存データからは消さない
    */
   stack?: true
   /** 初めの形（第2.5版）。無ければ 'flush'（以前のデータ） */
@@ -221,6 +221,11 @@ export interface Job {
    * 読み込むときに最初の材料を自動で足すが、ここにあるものは足し直さない。無い・空なら省略
    */
   removedBuiltIns?: string[]
+  /**
+   * 重ね切り（第2.6版。仕事ごと。architecture.md 18.7）。'on' なら材料グループの部材の、違う材料の同じ片を2枚重ねて切る。
+   * 読み込んだあとはいつもある（無い以前のデータは読み込むときに1回決める。18.8）。新しい仕事は 'on'
+   */
+  stacking: 'on' | 'off'
   /** ISO 文字列 */
   createdAt: string
   updatedAt: string
@@ -357,7 +362,13 @@ export interface SheetLayout {
   /** 歩留まり 0〜1 */
   yieldRate: number
   /** 手持ちで木取りした1枚（第2.2版）：使った手持ちの行と木目。サイズを選んだ材料では持たない */
-  sheet?: { stockId: string; sizeKind: BoardSizeKind; grain: BoardGrain }
+  sheet?: {
+    stockId: string
+    sizeKind: BoardSizeKind
+    grain: BoardGrain
+    /** 重ねた板の端材から取った1枚（第2.6版）。source は「重ねた板◯」の番号（計算した・固定したときのもの） */
+    offcut?: { source: number }
+  }
 }
 
 /**
@@ -373,8 +384,10 @@ export interface MaterialResult {
   /** 実際に使った切り方（おまかせなら選ばれたほう） */
   mode: 'vertical' | 'horizontal'
   sheets: SheetLayout[]
-  /** 必要な板の枚数 */
+  /** 必要な板の枚数。第2.6版から、端材から取った1枚（sheet.offcut あり）は数えない */
   sheetCount: number
+  /** 端材から取った1枚の数（第2.6版） */
+  offcutSheetCount: number
   /** この材料全体の歩留まり */
   yieldRate: number
   /** 板に入らない部材 */
@@ -402,6 +415,14 @@ export interface PackingResult {
    * フラッシュの部材（第1.5版）は完了にした表面材ごとに1行（quantity＝表面材の枚数×部材の枚数、boardId＝表面材）
    */
   done: { partId: string; name: string; quantity: number; boardId: string | null }[]
+  /** 重ね切りの組（第2.6版）。accepted は重ねた組、rejected は重ねると材料が増えるので重ねなかった組（組の並び） */
+  stacks: { accepted: StackPair[]; rejected: StackPair[] }
+}
+
+/** 重ね切りの組（第2.6版）：2つの違う材料（a・b は材料の保存の並び）。key は stackKey(a, b) */
+export interface StackPair {
+  key: string
+  boardIds: [string, string]
 }
 
 // ---------- 切りながら進める木取り（第1.8版） ----------

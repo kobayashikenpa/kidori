@@ -15,7 +15,7 @@ const NOW = new Date('2026-09-27T09:00:00.000Z')
 /** 見本（第1.7版と同じ、重ね切りオフ）。第2.1版から見本のフラッシュ25 は重ね切りオンなので外す（ここはふつうの1枚の確かめ） */
 function sample(): Job {
   const job = sampleJob(NOW)
-  return { ...job, flushes: job.flushes.map(({ stack: _s, ...f }) => f) }
+  return { ...job, flushes: job.flushes.map(({ stack: _s, ...f }) => f), stacking: 'off' }
 }
 const boardId = (job: Job, material: string, thickness: number) =>
   job.boards.find((b) => b.material === material && b.thickness === thickness)!.id

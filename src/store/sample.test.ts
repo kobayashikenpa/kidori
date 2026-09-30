@@ -15,7 +15,6 @@ import {
   newBoard,
   removeBoards,
   removeNiges,
-  updateFlush,
   updateSettings,
   type JobOp,
   type OpResult,
@@ -63,8 +62,9 @@ describe('sampleJob（見本は初期値の設定から作る。フラッシュ2
     for (const name of ['側板', '天地板', '棚板']) expect(partOf(job, name).flushId).toBe(job.flushes[0].id)
     expect(partOf(job, '背板').boardId).toBe(boardOf(job, 'ラワン', 4)[0].id)
 
-    // 見本が足したフラッシュ25 は重ね切りオン（第2.1版）：組 5枚・ラワン 4 のふつうの1枚は背板の1枚
-    expect(job.flushes[0].stack).toBe(true)
+    // 見本は仕事の重ね切りがオン（第2.6版。createJob の 'on'。フラッシュ25 に stack は付けない）：組 5枚・ラワン 4 のふつうの1枚は背板の1枚
+    expect(job.stacking).toBe('on')
+    expect(job.flushes[0].stack).toBeUndefined()
     const mel = boardOf(job, 'メラミン', 1)[0].id
     const lauan = boardOf(job, 'ラワン', 4)[0].id
     for (const cutMode of ['vertical', 'horizontal', 'auto'] as const) {
@@ -79,8 +79,7 @@ describe('sampleJob（見本は初期値の設定から作る。フラッシュ2
       expect(r.skipped).toEqual([])
     }
     // 重ね切りをオフにすると第1.7版の見本（S-14）の値
-    const { stack: _s, ...offDraft } = job.flushes[0]
-    const off = must(updateFlush(job, job.flushes[0].id, offDraft))
+    const off: Job = { ...job, stacking: 'off' }
     const r = packJob(off, computeDimensions(off))
     expect(r.materials.map((m) => [boardLabel(m), m.sheetCount])).toEqual([
       ['メラミン 1mm', 5],
@@ -130,7 +129,7 @@ describe('sampleJob（見本は初期値の設定から作る。フラッシュ2
       ['逃げ', 1],
     ])
     expect(orderedBoards(sample).map(boardLabel)).toEqual(['芯材 15mm', ...defaultBoards(() => 'x').map(boardLabel)])
-    expect(sample.flushes.map((f) => [f.name, flushThickness(f, sample.boards), f.stack])).toEqual([['フラッシュ25', 25, true]])
+    expect(sample.flushes.map((f) => [f.name, flushThickness(f, sample.boards), f.stack])).toEqual([['フラッシュ25', 25, undefined]])
     expect(partOf(sample, '棚板').expr.W).toBe('天地板.W - {n:nige-1}')
   })
 

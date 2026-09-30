@@ -1,7 +1,7 @@
 // 見本（本棚 W900・フラッシュ25 と ラワン4 だけで作る）を、初期値の設定から作る（仕様書 4「設定の引き継ぎ（第2.5.1版）」、architecture.md 8.4）
 import { NIGE_DEFAULT_NAME } from '../engine/defaults'
 import { eq1 } from '../engine/round'
-import { canStack, cutFaces } from '../engine/packing/stack'
+import { cutFaces } from '../engine/packing/stack'
 import { BOARD_SIZES, type Board, type Flush, type Job, type Part, type StackSheet } from '../engine/types'
 import { createJob, newId } from './jobs'
 
@@ -30,8 +30,8 @@ function part(p: Partial<Part> & Pick<Part, 'name' | 'expr'>): Part {
 /**
  * 見本を作る。追加するたびに新しい仕事（id は新しく）。
  * - いつも初期値の設定から（createJob。第2.5.1版：最後に使った設定は引き継がない）
- * - 見本で使うものを足す：材料 芯材15（木取りしない）、フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。重ね切りオン＝第2.1版、
- *   form: flush・自動の名前＝第2.5版）。メラミン1・ラワン4・逃げ1 は初期値にあるものを使う（念のため、無ければ足す）
+ * - 見本で使うものを足す：材料 芯材15（木取りしない）、フラッシュ25（芯材15×1・メラミン1×2・ラワン4×2。form: flush・自動の名前＝第2.5版。
+ *   第2.6版から材料グループに stack は付けない。重ね切りは仕事の stacking＝createJob の 'on'。architecture.md 8.4・18.8）。メラミン1・ラワン4・逃げ1 は初期値にあるものを使う（念のため、無ければ足す）
  * - 見本で使う材料は 3×6（未決事項 24）。フラッシュ25 の重ね切りの組の設定も 3×6（第2.3版）
  * - 側板・天地板・棚板はフラッシュ25、背板はラワン4（第1.7版。ラワン・シナベニヤは使わない＝仕様書 4 の文言。以前の見本のランバー 18mm・ベニヤ 4mm の板を使わない意味）。
  *   芯材15 は木取りしない材料なので、木取りの画面には出ない（第2.5版）。厚みは式の厚み（{t:…}）で書く
@@ -64,8 +64,6 @@ export function sampleJob(now: Date = new Date()): Job {
       { boardId: boardFor('メラミン', 1), count: 2 },
       { boardId: boardFor('ラワン', 4), count: 2 },
     ],
-    // 重ね切りは初期オン（第2.1版。仕様書 4）
-    stack: true,
     form: 'flush',
     autoName: true,
   }
@@ -104,8 +102,8 @@ export function sampleJob(now: Date = new Date()): Job {
   // 重ね切りの組（第2.3版）の設定も 3×6（見本の期待値＝組 3×6 で5枚を変えないため。未決事項 24 と同じ考え）。
   // 組の a・b は材料の保存の並び
   const stackSheets: StackSheet[] = []
-  if (canStack(flush, boards)) {
-    const ids = cutFaces(flush, boards).map((f) => f.boardId)
+  const ids = cutFaces(flush, boards).map((f) => f.boardId)
+  if (ids.length === 2) {
     const order = (id: string) => boards.findIndex((b) => b.id === id)
     const pair: [string, string] = order(ids[0]) < order(ids[1]) ? [ids[0], ids[1]] : [ids[1], ids[0]]
     stackSheets.push({ boardIds: pair, ...sheet })

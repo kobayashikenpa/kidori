@@ -64,6 +64,8 @@ export function flushJob(): Job {
     ],
     frozenSheets: [],
     stackSheets: [],
+    // 第2.6版：重ね切りは仕事ごと。このテストの見本は以前の結果を変えないよう重ねない
+    stacking: 'off',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
@@ -119,6 +121,8 @@ export function sampleGroupJob(stack = false): Job {
     frozenSheets: [],
     // 見本の組（メラミン 1＋ラワン 4）の設定は 3×6（第2.3版。store の見本と同じ）
     stackSheets: [{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...sheet }],
+    // 第2.6版：重ね切りは仕事ごと（stack が true の見本だけ重ねる）
+    stacking: stack ? 'on' : 'off',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }

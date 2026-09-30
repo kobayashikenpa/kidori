@@ -221,7 +221,9 @@ describe('見本（芯材15 は木取りしない材料）', () => {
       ['メラミン', 2],
       ['ラワン', 2],
     ])
-    expect(f).toMatchObject({ stack: true, form: 'flush', autoName: true })
+    expect(f).toMatchObject({ form: 'flush', autoName: true })
+    expect(f.stack).toBeUndefined()
+    expect(job.stacking).toBe('on')
     expect(flushThickness(f, job.boards)).toBe(25)
     const s = results(job).summary
     expect((s[0] as unknown[][]).map((x) => x.slice(1))).toEqual([
@@ -307,6 +309,8 @@ describe('共有・バックアップのファイル（dataVersion 3）', () => 
     expect(r.notice).toBeUndefined()
     expect(r.job.boards.find((b) => b.material === '芯材')!.noCut).toBe(true)
     expect(r.job.flushes[0]).toMatchObject({ name: 'フラッシュ25', form: 'flush', autoName: true, stack: true })
+    // 第2.6版：stacking の無い以前のファイルは読み込むときに決める（重ね切りをしていたので 'on'）
+    expect(r.job.stacking).toBe('on')
     const s = results(r.job).summary
     expect(s[1]).toBe(86.4)
   })

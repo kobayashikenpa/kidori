@@ -123,6 +123,8 @@ interface CoreSpec {
   count: number
   /** 面積（新しい1枚を選ぶときに小さいほうから） */
   area: number
+  /** 重ねた板の端材の行（第2.6版。新しい1枚を選ぶときに、ほかの行より先に使う。未決事項 62） */
+  offcut?: boolean
   frame: Frame
 }
 
@@ -139,7 +141,8 @@ interface CoreSheet {
  * 3. なければ、残りの幅がある板に新しい帯を作る
  * 4. それもなければ、幅が収まり残りの長さに入る（幅の広い）最初の帯に置く
  *    （sameWidthFirst が false なら第2.4版までと同じく 3 の前に、同じ幅に限らず置く）
- * 5. それもなければ新しい板を出す：残りの枚数が 1 以上で、その片が入る行のうち面積が一番小さい行（同じなら登録順で前）
+ * 5. それもなければ新しい板を出す：残りの枚数が 1 以上で、その片が入る行のうち面積が一番小さい行（同じなら登録順で前）。
+ *    ただし重ねた板の端材の行（offcut）は、いつもほかの行より先に使う（端材の中で面積の小さい順。決定（オーナー）。未決事項 62）
  * 計算量は 片の数 × 帯の数 ＋ 片の数 × 行の数
  */
 function packCore(
@@ -168,6 +171,9 @@ function packCore(
   items.sort((a, b) => b.key.pw - a.key.pw || b.key.qh - a.key.qh || a.idx - b.idx)
 
   const caps = specs.map((sp) => ({ p: round1(sp.frame.pCap), q: round1(sp.frame.qCap) }))
+  // 新しい1枚を選ぶ順：端材の行 → ほかの行、それぞれ面積が小さい順（同じなら登録順）
+  const rank = (k: number) => (specs[k].offcut ? 0 : 1)
+  const order = specs.map((_, k) => k).sort((a, b) => rank(a) - rank(b) || specs[a].area - specs[b].area || a - b)
   const used = specs.map(() => 0)
   const sheets: WorkSheet[] = []
   const unplaced: Piece[] = []
@@ -216,8 +222,6 @@ function packCore(
       if (sheets.some((sh) => openStrip(sh, piece, tries[sh.spec]))) continue
     }
     let placed = false
-    // 新しい1枚：入る行のうち面積が一番小さい行（同じなら登録順）
-    const order = specs.map((_, k) => k).sort((a, b) => specs[a].area - specs[b].area || a - b)
     for (const k of order) {
       if (specs[k].count - used[k] < 1 || tries[k].length === 0) continue
       const sh: WorkSheet = { spec: k, strips: [], pEnd: 0 }
@@ -282,10 +286,15 @@ export function packGuillotine(
   return { frame, unplaced: r.unplaced, sheets: r.sheets.map((sh) => ({ strips: sh.strips })) }
 }
 
-/** 手持ちの行ごとの使える範囲と帯の座標 */
+/** その行の端切り（端切りをしない行＝重ねた板の端材は 0。第2.6版） */
+export function rowTrim(k: Pick<StockKind, 'noTrim'>, trim: number): number {
+  return k.noTrim ? 0 : trim
+}
+
+/** 手持ちの行ごとの使える範囲と帯の座標（端切りをしない行は端切り 0） */
 export function sheetSpecs(stock: readonly StockKind[], trim: number, mode: StripMode): SheetSpec[] {
   return stock.map((k) => {
-    const usable = usableRect(k, trim, mode)
+    const usable = usableRect(k, rowTrim(k, trim), mode)
     return { stock: k, usable, frame: frameOf(mode, usable) }
   })
 }
@@ -293,7 +302,7 @@ export function sheetSpecs(stock: readonly StockKind[], trim: number, mode: Stri
 /**
  * 手持ちの材料で帯詰め（第2.2版。architecture.md 14.4）。1枚ごとにその大きさの使える範囲で並べる。
  * 片の向きは手持ちの行ごとに piece.shape から決め直す（shape の無い片は piece.orientations を使う）。
- * 新しい1枚は、残りが1以上でその片が入る行のうち面積が一番小さい行（同じなら登録順）。
+ * 新しい1枚は、残りが1以上でその片が入る行のうち面積が一番小さい行（同じなら登録順）。重ねた板の端材の行（offcut）は、いつもほかの行より先（第2.6版）。
  * サイズを選んだ材料（1行・無限）なら packGuillotine と同じ配置になる
  */
 export function packOnStock(
@@ -313,14 +322,14 @@ export function packOnStock(
     const key = `${shape.s0}|${shape.s1}|${shape.grain}`
     let o = cache[k].get(key)
     if (!o) {
-      o = orientationsFor(shape, specs[k].stock, trim, mode)
+      o = orientationsFor(shape, specs[k].stock, rowTrim(specs[k].stock, trim), mode)
       cache[k].set(key, o)
     }
     return o
   }
   const core = packCore(
     pieces,
-    specs.map((sp) => ({ count: sp.stock.count, area: sp.stock.width * sp.stock.length, frame: sp.frame })),
+    specs.map((sp) => ({ count: sp.stock.count, area: sp.stock.width * sp.stock.length, frame: sp.frame, offcut: !!sp.stock.offcut })),
     kerf,
     orient,
     sameWidthFirst,
