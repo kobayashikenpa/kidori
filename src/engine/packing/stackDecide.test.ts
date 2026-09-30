@@ -22,7 +22,8 @@ const area = (r: PackingResult, id: string) =>
 
 describe('decideStacks', () => {
   it('組の行 4×8・ラワン4 の材料の行 3×6 で、重ねると ラワン4 が1枚増える組は rejected、結果は重ね切りオフと同じ', () => {
-    const job = stackJob([groupPart('天板', FLUSH25, 600, 100, 1), boardPart('棚', L4, 800, 700, 2)])
+    // 棚（長手 300・妻手 900。木目は長手）は重ねた板 4×8 の端材（幅 762）に入らず、3×6 の新しい板が要る（E-78 で端材を先に使うようになったので形を変えた）
+    const job = stackJob([groupPart('天板', FLUSH25, 600, 450, 1), boardPart('棚', L4, 300, 900, 1)])
     job.stackSheets = [{ boardIds: [MEL, L4], ...S48 }]
     const dims = computeDimensions(job)
     // すべて重ねると ラワン4 が 2枚（オフは 1枚）
