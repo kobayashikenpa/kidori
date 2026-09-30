@@ -2277,3 +2277,17 @@ button.dim-name {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* 木取り：重ねなかった組の行（第2.9版） */
+.kd-mat-rejected {
+  border-left-style: dashed;
+}
+.kd-mat-note {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--warn);
+}
+.kd-mat-rejected .sz-opt {
+  min-height: 48px;
+  justify-content: center;
+}
