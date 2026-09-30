@@ -409,7 +409,10 @@ export function KidoriScreen() {
               const all = p.done >= p.total
               return (
                 <li key={p.partId} className={`pp-row${all ? ' all' : ''}`}>
-                  <span className="pp-name">{p.name}</span>
+                  <span className="pp-name">
+                    {p.name}
+                    {all && <span className="pp-all">切り終わり</span>}
+                  </span>
                   <span
                     className="pp-bar"
                     role="progressbar"
@@ -422,7 +425,6 @@ export function KidoriScreen() {
                   </span>
                   <span className="pp-count num">
                     {p.done}/{p.total}
-                    {all && <span className="pp-all">切り終わり</span>}
                   </span>
                 </li>
               )

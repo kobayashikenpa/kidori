@@ -50,7 +50,15 @@ export function SettingsScreen() {
               saveSettingsTab(t.value)
             }}
           >
-            {t.label}
+            {t.value === 'groups' ? (
+              <>
+                材料
+                <wbr />
+                グループ
+              </>
+            ) : (
+              t.label
+            )}
           </button>
         ))}
       </div>
