@@ -6,7 +6,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
-import { stackKey, stackLabel, stackPairName } from '../../engine/packing/stack'
+import { stackKey, stackLabel } from '../../engine/packing/stack'
 import { stackedSheetId, stackSheetNumbers } from '../../engine/packing/offcuts'
 import { stackChoice, usesStock } from '../../engine/packing/stock'
 import { stockShortage } from '../../engine/hints/shortage'
@@ -25,7 +25,7 @@ import {
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { partCutProgress } from '../../engine/progress/partProgress'
 import { sheetPartChecklist, type SheetPartRow } from '../../engine/progress/sheetChecklist'
-import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
+import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout, StackPair } from '../../engine/types'
 import { boardTokenLabel } from '../../engine/defaults'
 import { boardLabel, clearLegacyCut, newId, setPartCheck, setStacking, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -249,6 +249,22 @@ export function KidoriScreen() {
     ]
   })
 
+  // まとめの一覧の行：重ね切りの組の段 → 重ねなかった組の行（第2.9版。組の並びは1つ目の材料の並び）→ 材料の段
+  const rankOf = (id: string) => {
+    const i = plainOrder.indexOf(id)
+    return i < 0 ? plainOrder.length : i
+  }
+  const rejectedRows = result.stacks.rejected
+    .filter((p) => boardOf(p.boardIds[0]) && boardOf(p.boardIds[1]))
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => rankOf(a.p.boardIds[0]) - rankOf(b.p.boardIds[0]) || a.i - b.i)
+    .map(({ p }) => ({ rejected: p }))
+  const summaryRows: (Section | { rejected: StackPair })[] = [
+    ...sections.filter((sec) => sec.stack),
+    ...rejectedRows,
+    ...sections.filter((sec) => !sec.stack),
+  ]
+
   return (
     <section>
       <h2>
@@ -306,20 +322,6 @@ export function KidoriScreen() {
 
       <StockShortageNotice shortages={shortages} />
 
-      {result.stacks.rejected.length > 0 && (
-        <div className="card kd-issues warn" role="note">
-          <h4>重ねなかった組</h4>
-          <ul>
-            {result.stacks.rejected.map((p) => (
-              <li key={p.key}>
-                <b>{stackPairName(job, p.boardIds)}</b>
-                ：重ねると材料が増えるので、重ねずに木取りしています
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
           <div className="kd-total">
@@ -327,7 +329,10 @@ export function KidoriScreen() {
             <span className="kd-total-value num">{pct(summaries.totalYieldRate)}</span>
           </div>
           <ul className="kd-mats">
-            {sections.map((sec) => (
+            {summaryRows.map((sec) =>
+              'rejected' in sec ? (
+                <RejectedStackRow key={sec.rejected.key} label={stackLabel(job, sec.rejected.boardIds)} pair={sec.rejected.boardIds} />
+              ) : (
               <MaterialRow
                 key={sec.boardId}
                 label={sec.label}
@@ -342,7 +347,8 @@ export function KidoriScreen() {
                 comparison={compare.find((c) => c.boardId === sec.boardId) ?? null}
                 bySize={sec.stocked ? (sizeCounts.find((c) => c.boardId === sec.boardId)?.bySize ?? []) : null}
               />
-            ))}
+              ),
+            )}
           </ul>
         </div>
       )}
@@ -557,6 +563,24 @@ function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usa
           usage={usage}
         />
       )}
+    </li>
+  )
+}
+
+/**
+ * 重ねなかった組の行（第2.9版。仕様書 9.4）：重ねると材料が増えるので重ねなかった組（result.stacks.rejected）。
+ * 組の行のサイズ（3×6・4×8）は残して押せるようにする（setRowSize の組の行）。重ねられるサイズにすれば、また重ねる。
+ * 重ねていないので、比べる数字は出さない
+ */
+function RejectedStackRow({ label, pair }: { label: string; pair: [string, string] }) {
+  const { job } = useCurrentJob()
+  return (
+    <li className="kd-mat kd-mat-stack kd-mat-rejected">
+      <div className="kd-mat-name">{label}</div>
+      <p className="kd-mat-note" role="note">
+        重ねていません（重ねると材料が増えるため）
+      </p>
+      <SheetSizePicker target={pair} choice={stackChoice(job, pair)} label={label} compare={null} current={null} usage={null} />
     </li>
   )
 }

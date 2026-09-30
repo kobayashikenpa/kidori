@@ -240,11 +240,17 @@ export function FlushForm({ flush, done }: FormProps) {
           空欄の行の材料を選んでください（選ばないと{flush ? '変えられません' : '追加できません'}）
         </p>
       )}
+      {rows.some((r) => r.count === null) && (
+        <p className="msg warn" style={{ margin: 0 }}>
+          空欄の枚数を入れてください（入れないと{flush ? '変えられません' : '追加できません'}）
+        </p>
+      )}
       <button
         type="button"
         className="btn"
         onClick={() => {
-          change([...rows, { key: nextKey, boardId: null, count: 1 }])
+          // 枚数は空欄から（第2.9版。仕様書 9.4）。入れるまで追加・変更できない
+          change([...rows, { key: nextKey, boardId: null, count: null }])
           setNextKey((n) => n + 1)
         }}
       >
