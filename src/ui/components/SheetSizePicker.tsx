@@ -138,7 +138,12 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         </div>
       ) : (
         // サイズを選んでいて端材を使わない行は「使わない端材 ◯枚」の1行だけ（押すと開く。第2.9版）
-        <OffcutRows usage={usage} />
+        usage &&
+        usage.offcuts.length > 0 && (
+          <div className="stk-mat" role="group" aria-label={`${label} の端材`}>
+            <OffcutRows usage={usage} />
+          </div>
+        )
       )}
     </div>
   )

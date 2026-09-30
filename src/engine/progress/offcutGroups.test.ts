@@ -39,6 +39,20 @@ describe('groupOffcuts', () => {
     expect(g.unused.map((x) => x.label)).toEqual(['端材 96.5×390（重ねた板4から）', '端材 96×390（重ねた板4から）'])
   })
 
+  it('同じ行で3枚中3枚使うと used が 3（採用）', () => {
+    const g = groupOffcuts([row('a', 96, 390, 4, 1), row('b', 96, 390, 4, 1), row('c', 96, 390, 4, 1)])
+    expect(g.used.map((x) => [x.label, x.count, x.used])).toEqual([['端材 96×390 ×3枚（重ねた板4から）', 3, 3]])
+    expect(g.usedCount).toBe(3)
+    expect(g.unusedCount).toBe(0)
+  })
+
+  it('3枚中2枚使う行の余り1枚は unusedCount に数えない（使う行に残る）', () => {
+    const g = groupOffcuts([row('a', 96, 390, 4, 1), row('b', 96, 390, 4, 0), row('c', 96, 390, 4, 1)])
+    expect(g.used.map((x) => [x.count, x.used])).toEqual([[3, 2]])
+    expect(g.unused).toEqual([])
+    expect(g.unusedCount).toBe(0)
+  })
+
   it('端材が無ければ空', () => {
     expect(groupOffcuts([])).toEqual({ used: [], unused: [], usedCount: 0, unusedCount: 0 })
   })
