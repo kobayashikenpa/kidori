@@ -339,8 +339,10 @@ function countOf(packer: Packer, boardId: string, accepted: readonly PairCandida
 }
 
 /**
- * after が before より悪くない。比べる順（おまかせの比べ方と同じ考え）：入らない片が少なければ採る・多ければ採らない →
- * 同じなら枚数が少なければ採る・多ければ採らない → 同じなら面積が増えなければ採る
+ * after が before より悪くない（architecture.md 18.5）。比べる順（おまかせの比べ方と同じ考え）：
+ * 入らない片が減るなら採る・増えるなら採らない → 同じなら枚数が減るなら採る・増えるなら採らない → 同じなら面積が増えなければ採る。
+ * 入らない片が減るときは、その片を置くぶん枚数が増えることがある（重ねないと手持ちが足りない・どの板にも入らない片を、
+ * 重ねた板の端材に置けるとき）。入らない片が同じなら、重ねないときより枚数は増えない
  */
 function notWorse(after: MaterialCount, before: MaterialCount): boolean {
   if (after.unplaced !== before.unplaced) return after.unplaced < before.unplaced
