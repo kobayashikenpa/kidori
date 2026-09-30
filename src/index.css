@@ -1976,6 +1976,16 @@ button.dim-name {
   align-self: center;
   font-size: 14px;
 }
+.stk-row.stk-offcut {
+  padding: 6px 8px;
+}
+.stk-offcut .stk-foot {
+  align-items: center;
+}
+.stk-offcut .stk-offcut-name {
+  font-weight: 400;
+}
 .stk-offcut .stk-use {
   flex: 0 0 auto;
+  min-height: 0;
 }
