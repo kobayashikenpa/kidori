@@ -1373,6 +1373,11 @@ select.input {
   color: var(--muted);
   margin-top: 6px;
 }
+/* 端材を使う材料の行の「足りない分：4×8 ◯枚」（第2.8版） */
+.sz-short {
+  margin: 0;
+  font-size: 14px;
+}
 .sz-tags {
   display: flex;
   flex-direction: column;
@@ -1535,6 +1540,49 @@ select.input {
 .dim-table thead th.c-group {
   text-align: center;
   padding-bottom: 0;
+}
+/* 寸法表の［木取り］のタブ（第2.8版）：木取り寸法は木取りの色、右端は切り出しの進み具合 */
+.dim-tabs {
+  margin: 0 0 10px;
+}
+.dim-table thead th.c-cut {
+  color: var(--cut);
+  background: var(--cut-soft);
+}
+.dim-table td.c-cut {
+  background: var(--cut-soft);
+  padding: 0;
+}
+.dim-table td.c-cut .dim-cell {
+  color: var(--cut);
+}
+.dim-table td.c-cut.done,
+.dim-table td.c-cut.done .dim-cell {
+  background: var(--bg);
+  color: var(--muted);
+}
+.dim-table td.c-cut .dim-cell.on {
+  outline-color: var(--cut);
+}
+.dim-cell-none {
+  display: block;
+  padding: 0 3px;
+  color: var(--muted);
+}
+.dim-table .c-prog {
+  width: 3.6em;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.dim-table thead th.c-prog {
+  vertical-align: bottom;
+}
+.dim-table td.c-prog.all {
+  color: var(--muted);
+}
+.dim-explain.cut td {
+  background: var(--cut-soft);
 }
 /* 切り出しチェック（木取り画面・材料ごと） */
 .cl {
@@ -2134,9 +2182,21 @@ button.dim-name {
   max-width: 100%;
   overflow-wrap: anywhere;
 }
-.mat-chip.add-group {
-  border-style: dashed;
-  color: var(--accent);
+/* 材料の欄の見出しと［設定］ボタン（第2.8版） */
+.mat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mat-current {
+  margin: 0;
+}
+/* シートの「×」（閉じる） */
+.sheet-x {
+  min-width: 44px;
+  font-size: 20px;
+  line-height: 1;
 }
 .mat-step2 {
   padding: 8px;

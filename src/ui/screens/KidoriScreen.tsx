@@ -1,7 +1,7 @@
 // 木取りの画面：材料（材料名＋厚み）ごとの必要な材料の枚数・歩留まり・切り方、全体の歩留まり、
 // 入らない部材・計算できない部材の一覧、材料ごとに 固定した1枚 → 計算した1枚 の順で1枚ごとの配置図とチェックリスト（第1.8版）。
 // 計算はすべて engine（computeDimensions → packJob・frozenSheetViews・materialSummaries・sheetPartChecklist）。
-// 重ね切り（第2.0版。architecture.md 12.8）：組の段は1つ目の材料の段の直後。組の1枚のチェックは stackWith を付けて両方の材料に数える
+// 重ね切り（第2.0版。architecture.md 12.8）：組の段は材料の段より前（第2.8版）。組の1枚のチェックは stackWith を付けて両方の材料に数える
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
@@ -175,7 +175,7 @@ export function KidoriScreen() {
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
 
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
-  // 重ね切りの組の段は、組の1つ目の材料の段の直後（1つ目の材料が無ければ最後）
+  // 重ね切りの組の段は、すべて材料の段より前（第2.8版）。組どうしは1つ目の材料の並び（1つ目の材料が無い組は組の最後）
   const groupRows = summaries.materials.filter((m) => m.stack)
   const stackNo = new Map(stackSheetNumbers(job, result.materials).map((x) => [x.id, x.number]))
   const plainOrder = [
@@ -183,8 +183,9 @@ export function KidoriScreen() {
     ...summaries.materials.filter((m) => !m.stack && !job.boards.some((b) => b.id === m.boardId)).map((m) => m.boardId),
   ]
   const order = [
-    ...plainOrder.flatMap((id) => [id, ...groupRows.filter((g) => g.stack?.boardIds[0] === id).map((g) => g.boardId)]),
+    ...plainOrder.flatMap((id) => groupRows.filter((g) => g.stack?.boardIds[0] === id).map((g) => g.boardId)),
     ...groupRows.filter((g) => !plainOrder.includes(g.stack?.boardIds[0] ?? '')).map((g) => g.boardId),
+    ...plainOrder,
   ]
   const sections: Section[] = order.flatMap((boardId) => {
     const summary = summaries.materials.find((m) => m.boardId === boardId)

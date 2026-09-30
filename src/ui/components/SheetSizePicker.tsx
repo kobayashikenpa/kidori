@@ -4,6 +4,8 @@
 // 重ね切りの組の行は 3×6・4×8 だけ（自由入力・手持ちの編集は出さない。仕様書 4・architecture.md 15.9）
 // 入らない部材がある（unplaced）ときは、サイズのボタンに「部材が収まらない」を出す（仕様書 9「手持ちの行の表示」。手持ちの行には出さない）
 // 重ねた板の端材から取った1枚は枚数に数えず、まとめの行と同じく「0枚（端材から 1枚）」で添える（第2.6版）
+// 第2.8版（仕様書 9.3）：手持ちを入れていない材料の行に重ねた板の端材があるときは、「自由入力」を選ばれた表示にし、
+// 中に端材の行と「足りない分：4×8 ◯枚」と「手持ちを入れる」を出す。3×6・4×8 は押すと足りない分のサイズが変わる（選ばれた表示にはしない）
 import { useState } from 'react'
 import type { MaterialSizeComparison, SizeSummary, StandardSize } from '../../engine/packing/sizes'
 import type { StockUsage } from '../../engine/progress/frozen'
@@ -11,7 +13,7 @@ import { BOARD_SIZES, type MaterialResult, type SheetChoice } from '../../engine
 import { setRowSize, setRowStockMode, type SizeTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { pct } from '../format'
-import { selectedSize, sizeChoices } from '../sheetSize'
+import { isStackTarget, selectedSize, sizeChoices } from '../sheetSize'
 import { OffcutRows, StockEditor } from './StockEditor'
 
 const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4×8' }
@@ -43,6 +45,10 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
   const options = sizeChoices(target)
   const selected = selectedSize(target, choice)
   const isFree = selected === 'free'
+  // 重ねた板の端材の行がある材料の行（端材はその材料の手持ちになる）。採用の有無では切り替えない（3×6・4×8 を押すたびに表示が変わらないように）。
+  // 手持ち（自由入力）で木取りしている行は今までどおり
+  const offcutFree = !isFree && !isStackTarget(target) && (usage?.offcuts.length ?? 0) > 0
+  const freeShown = isFree || offcutFree
   const report = (r: { ok: boolean; message?: string }) => setError(r.ok ? null : (r.message ?? '変えられませんでした'))
 
   const choose = (kind: StandardSize) => {
@@ -54,7 +60,7 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
   const kinds = options.filter((o): o is StandardSize => o !== 'free')
   const optionOf = (kind: StandardSize): SizeSummary | null => compare?.options.find((o) => o.kind === kind) ?? null
   const chooseFree = () => {
-    if (isFree) return
+    if (freeShown) return
     report(run((j) => setRowStockMode(j, target, true)))
   }
 
@@ -67,7 +73,13 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         {kinds.map((kind) => {
           const o = optionOf(kind)
           return (
-            <button key={kind} type="button" className="sz-opt" aria-pressed={selected === kind} onClick={() => choose(kind)}>
+            <button
+              key={kind}
+              type="button"
+              className="sz-opt"
+              aria-pressed={!offcutFree && selected === kind}
+              onClick={() => choose(kind)}
+            >
               <span className="sz-name">{SIZE_NAME[kind]}</span>
               {o && compare && (
                 <>
@@ -85,9 +97,9 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
           )
         })}
         {options.includes('free') && (
-          <button type="button" className="sz-opt" aria-pressed={isFree} onClick={chooseFree}>
+          <button type="button" className="sz-opt" aria-pressed={freeShown} onClick={chooseFree}>
             <span className="sz-name">自由入力</span>
-            {isFree && current ? (
+            {freeShown && current ? (
               <>
                 <span className="sz-n num">{current.sheetCount}枚</span>
                 <OffcutCount n={current.offcutSheetCount} />
@@ -105,6 +117,23 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
       {error && <p className="msg err">{error}</p>}
       {isFree ? (
         <StockEditor target={target} choice={choice} label={label} usage={usage} />
+      ) : offcutFree ? (
+        <div className="stk-mat" role="group" aria-label={`${label} の自由入力（端材）`}>
+          <OffcutRows usage={usage} />
+          <p className="sz-short num" role="status">
+            足りない分：
+            {current && current.sheetCount > 0 ? (
+              <b>
+                {SIZE_NAME[choice.sizeKind === 'saburoku' ? 'saburoku' : 'shihachi']} {current.sheetCount}枚
+              </b>
+            ) : (
+              <b>なし</b>
+            )}
+          </p>
+          <button type="button" className="btn ghost" onClick={() => report(run((j) => setRowStockMode(j, target, true)))}>
+            手持ちを入れる
+          </button>
+        </div>
       ) : (
         usage &&
         usage.offcuts.length > 0 && (

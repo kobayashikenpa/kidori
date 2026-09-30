@@ -692,6 +692,18 @@ export function newPart(p: Partial<Part> = {}): Part {
 }
 
 /**
+ * 部材（編集中の下書きなど）の材料が仕事に無くなっていたら外す（第2.8版。部材の編集の上で開いた設定の画面で材料・材料グループを消したとき）。
+ * 材料が無ければ未設定（boardId null）、材料グループが無ければ材料グループを外して未設定。どちらもあればそのまま返す
+ */
+export function forgetMissingMaterial(job: Job, part: Part): Part {
+  if (part.flushId !== undefined) {
+    return job.flushes.some((f) => f.id === part.flushId) ? part : { ...part, flushId: undefined, boardId: null }
+  }
+  if (part.boardId !== null && !job.boards.some((b) => b.id === part.boardId)) return { ...part, boardId: null }
+  return part
+}
+
+/**
  * 材料とフラッシュをそろえる：flushId があれば boardId は null・checks.cut は false。材料なら cutByBoard を消す。flushId が undefined ならキーごと消す
  * （材料に戻すときは updatePart に flushId: undefined を渡す）
  */
