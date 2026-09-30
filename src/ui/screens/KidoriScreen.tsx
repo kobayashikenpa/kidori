@@ -24,7 +24,8 @@ import {
 import { sheetProgress, type SheetProgress } from '../../engine/progress/sheetProgress'
 import { sheetChecklist, type SheetChecklistRow } from '../../engine/progress/sheetChecklist'
 import type { Board, BoardGrain, MaterialResult, PackingResult, SheetChoice, SheetLayout } from '../../engine/types'
-import { boardLabel, clearLegacyCut, newId, setPieceCheck, updateSettings, type SheetTarget } from '../../store/jobs'
+import { boardTokenLabel } from '../../engine/defaults'
+import { boardLabel, clearLegacyCut, newId, setPieceCheck, setStacking, updateSettings, type SheetTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { SavingHints } from '../components/SavingHints'
 import { Segmented } from '../components/Segmented'
@@ -35,6 +36,11 @@ import { StockShortageNotice } from '../components/StockShortageNotice'
 import { CUT_MODE_HINT, CUT_MODES, cutModeLabel } from '../cutModes'
 import { fmt, pct } from '../format'
 import { Help } from '../components/Help'
+
+const STACKING_OPTIONS: { value: 'on' | 'off'; label: string }[] = [
+  { value: 'on', label: 'オン' },
+  { value: 'off', label: 'オフ' },
+]
 
 const SKIP_REASON: Record<PackingResult['skipped'][number]['reason'], string> = {
   noBoard: '材料が未設定',
@@ -148,6 +154,10 @@ export function KidoriScreen() {
   const empty = summaries.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
+  const tokenOf = (boardId: string): string => {
+    const b = boardOf(boardId)
+    return b ? boardTokenLabel(b) : boardId
+  }
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
 
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
@@ -238,6 +248,19 @@ export function KidoriScreen() {
         />
       </div>
 
+      <div className="field">
+        <Help className="label" title="重ね切り（2枚重ね）">
+          材料グループの部材で、違う材料の同じ片を2枚重ねて1回で切ります（例：メラミン1＋ラワン4）。同じ材料どうしは重ねません。
+          重ねると材料が増えるときは重ねません。重ねた板の端材は、ほかの部材に使います。
+        </Help>
+        <Segmented
+          ariaLabel="重ね切り（2枚重ね）"
+          value={job.stacking}
+          options={STACKING_OPTIONS}
+          onChange={(v) => run((j) => setStacking(j, v))}
+        />
+      </div>
+
       {empty ? (
         <div className="card placeholder" style={{ marginTop: 14 }}>
           <p style={{ margin: 0, fontWeight: 700 }}>切り出す部材がありません</p>
@@ -252,6 +275,20 @@ export function KidoriScreen() {
       )}
 
       <StockShortageNotice shortages={shortages} />
+
+      {result.stacks.rejected.length > 0 && (
+        <div className="card kd-issues warn" role="note">
+          <h4>重ねなかった組</h4>
+          <ul>
+            {result.stacks.rejected.map((p) => (
+              <li key={p.key}>
+                <b>{p.boardIds.map(tokenOf).join('＋')}</b>
+                ：重ねると材料が増えるので、重ねずに木取りしています
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {!empty && (
         <div className="card kd-summary" style={{ marginTop: 14 }}>
