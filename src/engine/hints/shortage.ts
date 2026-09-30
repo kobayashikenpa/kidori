@@ -47,7 +47,7 @@ function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId:
   const partIds = new Set(m.unplaced.filter((u) => u.reason === 'noStock').map((u) => u.partId))
   const expected = new Map<string, { n: number; shape?: PieceShape }>()
   for (const g of expandPieces(job, dims).groups) {
-    if ((g.stack?.key ?? g.board.id) !== boardId) continue
+    if (g.board.id !== boardId) continue
     for (const p of g.pieces) {
       if (!partIds.has(p.partId)) continue
       const e = expected.get(p.partId) ?? { n: 0, shape: p.shape }
@@ -56,7 +56,8 @@ function targetOf(job: Job, dims: DimensionResult, base: PackingResult, boardId:
     }
   }
   for (const r of base.materials) {
-    if (r.boardId !== boardId) continue
+    // 重ねた板（第2.6版）の片も、その材料から切った片として数える
+    if (r.boardId !== boardId && !r.stack?.boardIds.includes(boardId)) continue
     for (const s of r.sheets) {
       for (const p of s.placements) {
         const e = expected.get(p.partId)
@@ -105,6 +106,8 @@ function withAdded(job: Job, ids: readonly string[], kind: AddKind, n: number): 
 export function stockShortage(job: Job, dims: DimensionResult, base?: PackingResult): StockShortage[] {
   if (!job.boards.some((b) => usesStock(b))) return []
   const r0 = base ?? packJob(job, dims)
+  // 今の仕事で決まった組（第2.6版。architecture.md 18.5）のまま試す（確かめをやり直さない）
+  const plan = r0.stacks.accepted.map((p) => p.key)
   // 手持ちの行だけが noStock を出す（サイズを選んだ行は tooLarge）
   const ids = r0.materials.filter((m) => !m.stack && short(r0, m.boardId)).map((m) => m.boardId)
   if (ids.length === 0) return []
@@ -128,7 +131,7 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
     const trial = (n: number) => {
       let r = memo.get(n)
       if (!r) {
-        r = packJob(withAdded(job, ids, kind, n), dims)
+        r = packJob(withAdded(job, ids, kind, n), dims, plan)
         memo.set(n, r)
       }
       return r
@@ -161,7 +164,7 @@ export function stockShortage(job: Job, dims: DimensionResult, base?: PackingRes
       const left = ids.filter((id) => !changes.has(id))
       if (left.length === 0) return
       const trial: Job = { ...job, settings: { ...job.settings, [kind]: value } }
-      const r = packJob(trial, kind === 'allowance' ? computeDimensions(trial) : dims)
+      const r = packJob(trial, kind === 'allowance' ? computeDimensions(trial) : dims, plan)
       for (const id of left) if (!short(r, id)) changes.set(id, { kind, value })
     }
   }

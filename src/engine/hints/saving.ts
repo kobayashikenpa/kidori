@@ -9,7 +9,7 @@ import type { Job, PackingResult } from '../types'
 
 export interface SavingHint {
   change: { kind: 'allowance' | 'trim'; value: number }
-  /** 減る材料（板の登録順）。label は「ラワン 4mm」。重ね切りの組（boardId が stackKey）は「メラミン1＋ラワン4（重ね切り）」 */
+  /** 減る材料（板の登録順）。label は「ラワン 4mm」。重ね切りの組（boardId が stackKey）は「2枚重ね：メラミン1＋ラワン4」 */
   materials: { boardId: string; label: string; from: number; to: number }[]
   message: string
 }
@@ -20,8 +20,9 @@ function mm(v: number): string {
   return String(round1(v))
 }
 
-function pack(job: Job): PackingResult {
-  return packJob(job, computeDimensions(job))
+/** plan：重ねる組（第2.6版。今の仕事で決まった組のまま試す。無ければ今の仕事の確かめで決める） */
+function pack(job: Job, plan?: readonly string[]): PackingResult {
+  return packJob(job, computeDimensions(job), plan)
 }
 
 /** 試す値の最後（0mm は試さない） */
@@ -80,6 +81,8 @@ export function findSavingHints(job: Job): SavingHint[] {
   if (allowances.length === 0 && trims.length === 0) return []
 
   const base = pack(job)
+  // 今の仕事で決まった組（第2.6版。architecture.md 18.5）。試す設定でも同じ組で重ねる（確かめをやり直さない）
+  const plan = base.stacks.accepted.map((p) => p.key)
   // 手持ちが足りない行（noStock のある材料・組）は、減らせるお知らせの対象にしない（第2.2版。解決策だけを出す）。
   // 第2.3版から組は組の手持ちを持つので、材料が足りなくても組は外さない（逆も同じ）
   const excluded = new Set(base.materials.filter((m) => m.unplaced.some((u) => u.reason === 'noStock')).map((m) => m.boardId))
@@ -92,7 +95,7 @@ export function findSavingHints(job: Job): SavingHint[] {
   const tryKind = (kind: 'allowance' | 'trim', values: number[], only: (boardId: string) => boolean) => {
     for (const value of values) {
       if (reducible.every((id) => shown.has(id))) return
-      const trial = pack({ ...job, settings: { ...job.settings, [kind]: value } })
+      const trial = pack({ ...job, settings: { ...job.settings, [kind]: value } }, plan)
       const materials = reduced(job, base, trial).filter((m) => only(m.boardId) && !excluded.has(m.boardId))
       if (!materials.some((m) => !shown.has(m.boardId))) continue
       for (const m of materials) shown.add(m.boardId)
