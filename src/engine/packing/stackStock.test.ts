@@ -120,7 +120,7 @@ describe('重ね切りの組の木取りは手持ちを使わない（E-64）', 
 describe('手持ちの残り・足りないときに組の行は出ない（E-64）', () => {
   it('組の行に手持ちが残っていても stockUsage に組の行は出ない。ラワン 4 の手持ちは背板の1枚だけ数える', () => {
     const job = withStock(withLeftoverStackStock(sampleGroupJob(true), [['3×6', 6]]), LAUAN_4_ID, [['3×6', 1]])
-    expect(stockUsage(job, run(job))).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
+    expect(stockUsage(job, run(job)).map(({ boardId, rows }) => ({ boardId, rows }))).toEqual([{ boardId: LAUAN_4_ID, rows: [{ stockId: 's1', label: '3×6', count: 1, used: 1, left: 0 }] }])
   })
 
   it('組の行に手持ち 3×6 ×1 が残っていても stockShortage は []', () => {

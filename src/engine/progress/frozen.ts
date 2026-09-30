@@ -1,5 +1,6 @@
 // 固定した1枚（第1.8版。architecture.md 11.3〜11.5）：画面に出ていた1枚をまるごと写して持つ。
 // 写しから描き、写しから進み具合を計算するので、部材や設定が変わっても固定した1枚は動かない
+import { offcutStock, stackSheetNumbers } from '../packing/offcuts'
 import { stackKey, stackLabel } from '../packing/stack'
 import { sameStockSize, stackChoice, stockSizeLabel, usesStock } from '../packing/stock'
 import { combineYield } from '../packing/yield'
@@ -241,21 +242,40 @@ export function materialSizeCounts(
   })
 }
 
+/** 重ねた板の端材の行（第2.6版。読むだけ。architecture.md 18.9） */
+export interface OffcutUsage {
+  stockId: string
+  /** 「端材 780×1800（重ねた板1から）」（短辺×長辺） */
+  label: string
+  /** 重ねた板の番号 */
+  source: number
+  /** 枚数（いつも 1） */
+  count: number
+  /** 使った枚数（端材の固定した1枚 ＋ 端材の計算した1枚） */
+  used: number
+}
+
 /** 手持ちの行ごとの使った枚数と残り（第2.2版。architecture.md 14.9） */
 export interface StockUsage {
   /** 材料の id（重ね切りの組は手持ちを使わないので出ない。architecture.md 15.9） */
   boardId: string
+  /** 手持ちの行（手持ちで木取りしない材料は空） */
   rows: { stockId: string; label: string; count: number; used: number; left: number }[]
+  /** 重ねた板の端材の行（第2.6版。サイズを選んでいる材料も。無ければ空） */
+  offcuts: OffcutUsage[]
 }
 
 /**
  * 手持ちで木取りする材料の行ごとに、手持ちの行ごとの 使った枚数 と 残り（count − used。0 未満にしない）。並びは材料の保存の並び。
- * 使った枚数 ＝ その材料だけの 固定した1枚（切り終わりを含む。未決事項 40）＋ ふつうの計算した1枚（組の1枚は数えない。第2.3版）。
+ * 使った枚数 ＝ その材料だけの 固定した1枚（切り終わりを含む。未決事項 40。端材の1枚を除く）＋ ふつうの計算した1枚（組の1枚は数えない。第2.3版）。
  * 重ね切りの組の行は手持ちを使わないので出さない（15.9）。
- * 固定した1枚は、木取りと同じく大きさ・木目のそろう最初の行（残り1以上）に数える。計算した1枚は layout.sheet の行
+ * 固定した1枚は、木取りと同じく大きさ・木目のそろう最初の行（残り1以上）に数える。計算した1枚は layout.sheet の行。
+ * 第2.6版：重ねた板の端材の行（offcuts）を足す。サイズを選んでいる材料も、端材の行があれば出す。
+ * ただし、まとめに材料の行が無い材料（組だけで使う材料）には出さない（18.9）
  */
 export function stockUsage(job: Job, result: PackingResult): StockUsage[] {
   const out: StockUsage[] = []
+  const offcutRows = offcutStock(stackSheetNumbers(job, result.materials))
   const count = (choice: SheetChoice, frozen: FrozenSheet[], computed: SheetLayout[]): StockUsage['rows'] => {
     const src = choice.stock!
     const rows = src.map((s) => ({ stockId: s.id, label: stockSizeLabel(s), count: s.count, used: 0, left: s.count }))
@@ -272,16 +292,40 @@ export function stockUsage(job: Job, result: PackingResult): StockUsage[] {
     return rows
   }
   for (const board of job.boards) {
-    if (usesStock(board)) {
-      out.push({
-        boardId: board.id,
-        rows: count(
+    const own = job.frozenSheets.filter((f) => f.boardId === board.id && !f.stackWith)
+    const computed = result.materials.filter((m) => !m.stack && m.boardId === board.id).flatMap((m) => m.sheets)
+    const rows = usesStock(board)
+      ? count(
           board,
-          job.frozenSheets.filter((f) => f.boardId === board.id && !f.stackWith),
-          result.materials.filter((m) => !m.stack && m.boardId === board.id).flatMap((m) => m.sheets),
-        ),
+          own.filter((f) => !f.layout.sheet?.offcut),
+          computed.filter((s) => !s.sheet?.offcut),
+        )
+      : []
+    const hasRow = own.length > 0 || result.materials.some((m) => !m.stack && m.boardId === board.id)
+    const offcuts: OffcutUsage[] = hasRow
+      ? (offcutRows.get(board.id) ?? []).map((k) => ({
+          stockId: k.stockId!,
+          label: `端材 ${round1(k.width)}×${round1(k.length)}（重ねた板${k.offcut!.source}から）`,
+          source: k.offcut!.source,
+          count: k.count,
+          used: 0,
+        }))
+      : []
+    // 固定した端材の1枚は、大きさ・木目のそろう最初の行（残り1以上）に数える（木取りと同じ）
+    for (const f of own) {
+      if (!f.layout.sheet?.offcut) continue
+      const size = { width: f.layout.boardWidth, length: f.layout.boardLength, grain: f.grain }
+      const i = offcuts.findIndex((o, k) => {
+        const kind = offcutRows.get(board.id)![k]
+        return o.used < o.count && sameStockSize(kind, size)
       })
+      if (i >= 0) offcuts[i].used++
     }
+    for (const s of computed) {
+      const o = offcuts.find((x) => x.stockId === s.sheet?.stockId)
+      if (o) o.used++
+    }
+    if (usesStock(board) || offcuts.length > 0) out.push({ boardId: board.id, rows, offcuts })
   }
   return out
 }

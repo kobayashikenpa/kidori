@@ -47,6 +47,7 @@ describe('stockUsage（手持ちの行ごとの使う・残り）', () => {
     expect(stockUsage(job, pack(job))).toEqual([
       {
         boardId: LUMBER_18_ID,
+        offcuts: [],
         rows: [
           { stockId: 's1', label: '3×6', count: 5, used: 3, left: 2 },
           { stockId: 's2', label: '4×8', count: 1, used: 0, left: 1 },

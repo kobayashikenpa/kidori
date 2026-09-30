@@ -20,7 +20,11 @@ function lauanTo48(job: Job): Job {
   job.boards = job.boards.map((b) => (b.id === LAUAN_4_ID ? { ...b, sizeKind: 'shihachi', width: 1220, length: 2440 } : b))
   return job
 }
-const usage = (job: Job) => stockUsage(job, packJob(job, computeDimensions(job), allStacks(job)))
+/** 手持ちの行（端材の行は offcutRows.test.ts で確かめる） */
+const usage = (job: Job) =>
+  stockUsage(job, packJob(job, computeDimensions(job), allStacks(job)))
+    .filter((u) => u.rows.length > 0)
+    .map(({ boardId, rows }) => ({ boardId, rows }))
 const shortage = (job: Job) => stockShortage(job, computeDimensions(job))
 
 describe('compareStandardSizes と組の行', () => {
