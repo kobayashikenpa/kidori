@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../engine/dimensions'
 import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, SAMPLE_FLUSH_ID, sampleGroupJob } from '../engine/fixtures/flush'
 import { formulaLabels } from '../engine/formula/display'
-import { stackPlan } from '../engine/packing/stack'
+import { pairCandidates } from '../engine/packing/pairing'
+import { expandPieces } from '../engine/packing/pieces'
 import type { Job } from '../engine/types'
 import { addBoard, addFlush, newBoard, refreshAutoNames, removeBoards, updateBoard, updateFlush, type OpResult } from './jobs'
 
@@ -18,21 +19,21 @@ const msg = (r: OpResult): string => {
 const flushOf = (job: Job, id = SAMPLE_FLUSH_ID) => job.flushes.find((f) => f.id === id)!
 
 describe('updateBoard：木取りしない（noCut）の付け外し', () => {
-  it('メラミン1 を木取りしないにすると フラッシュ25 の stack が外れ、組の行は残る', () => {
+  it('メラミン1 を木取りしないにすると組の候補が無くなる。stack はそのまま（第2.6版）、組の行は残る', () => {
     const job = sampleGroupJob(true)
     const j = ok(updateBoard(job, MELAMINE_1_ID, { noCut: true }))
     expect(j.boards.find((b) => b.id === MELAMINE_1_ID)!.noCut).toBe(true)
-    expect(flushOf(j).stack).toBeUndefined()
+    expect(flushOf(j).stack).toBe(true)
     expect(j.stackSheets).toEqual(job.stackSheets)
-    expect(stackPlan(j).groups).toEqual([])
+    expect(pairCandidates(j, expandPieces(j, computeDimensions(j)))).toEqual([])
   })
 
-  it('木取りしないを外すと noCut のキーが消える。芯材15 を外すと重ね切りも外れる', () => {
+  it('木取りしないを外すと noCut のキーが消える。stack はそのまま（第2.6版）', () => {
     const job = sampleGroupJob(true)
     const j = ok(updateBoard(job, CORE_15_ID, { noCut: undefined }))
     const core = j.boards.find((b) => b.id === CORE_15_ID)!
     expect('noCut' in core).toBe(false)
-    expect(flushOf(j).stack).toBeUndefined()
+    expect(flushOf(j).stack).toBe(true)
   })
 
   it('厚みを変えても重ね切りが続けられるなら残す', () => {
@@ -82,12 +83,12 @@ describe('自動の名前（refreshAutoNames）', () => {
     expect(flushOf(j).name).toBe('フラッシュ24')
   })
 
-  it('メラミン1 を削除すると中身から外れ、名前がついてくる（重ね切りも外れる）', () => {
+  it('メラミン1 を削除すると中身から外れ、名前がついてくる（stack はそのまま。第2.6版）', () => {
     const j = ok(removeBoards(sampleGroupJob(true), [MELAMINE_1_ID]))
     const f = flushOf(j)
     expect(f.faces.map((x) => x.boardId)).toEqual([CORE_15_ID, LAUAN_4_ID])
     expect(f.name).toBe('フラッシュ23')
-    expect(f.stack).toBeUndefined()
+    expect(f.stack).toBe(true)
   })
 })
 
@@ -105,12 +106,13 @@ describe('validateFlush（材料グループの検査）', () => {
     expect(msg(addFlush(job(), { name: 'x', faces: [{ boardId: 'なし', count: 1 }] }))).toBe('中身の材料が見つかりません')
   })
 
-  it('重ねて切れないのに stack なら断る（芯材15 は数えない）', () => {
+  it('第2.6版：stack の検査はしない（重ね切りは仕事ごと）。stack があれば残す', () => {
     const faces = [
       { boardId: CORE_15_ID, count: 1 },
       { boardId: MELAMINE_1_ID, count: 1 },
     ]
-    expect(msg(addFlush(job(), { name: 'x', faces, stack: true }))).toBe('重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです')
+    const one = addFlush(job(), { name: 'x', faces, stack: true }, 'gx')
+    expect(one.ok && one.job.flushes.find((f) => f.id === 'gx')!.stack).toBe(true)
     const ok2 = addFlush(job(), { name: 'x', faces: [...faces, { boardId: LAUAN_4_ID, count: 1 }], stack: true })
     expect(ok2.ok).toBe(true)
   })

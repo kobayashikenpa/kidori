@@ -313,7 +313,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
     }
   })
 
-  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は配置が変わらない。そろわない組は重ね切りを外し、第2.2版と同じ配置（S-23）', () => {
+  it('第2.2版のデータの移し替え：3×6／4×8 でそろう組は組の行になる。重ね切りは外さない。重ねない仕事は第2.2版と同じ配置（S-23・S-32）', () => {
     // v22StackGolden.json は第2.2版（コミット dc8e29d）の packJob の結果の要約（legacy の乱数の仕事 150 件）
     const table = golden as Record<string, string[]>
     let unchanged = 0
@@ -323,6 +323,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       const legacyJob = randomJob(rng(seed), seed, false, true)
       const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
       delete raw.stackSheets
+      delete raw.stacking
       const { jobs, fixes, unstacked } = sanitizeJobs([raw])
       expect(fixes).toBe(0)
       const job = jobs[0]
@@ -340,10 +341,12 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         expect(x.sizeKind).not.toBe('custom')
         expect([x.width, x.length, x.grain]).toEqual([a.width, a.length, a.grain])
       }
-      // それ以外の組のフラッシュは重ね切りが外れ、名前を知らせる
-      const offIds = kinds.filter((k) => k.kind !== 'standard').flatMap((k) => k.g.flushIds)
-      expect(job.flushes.filter((f) => offIds.includes(f.id)).every((f) => f.stack === undefined)).toBe(true)
-      expect(unstacked).toEqual([...new Set(legacyJob.flushes.filter((f) => offIds.includes(f.id)).map((f) => f.name))])
+      // 第2.6版：重ね切りは外さず、知らせない（材料グループの stack はそのまま）
+      expect(unstacked).toEqual([])
+      // 仕事の重ね切り：部材が使っている材料グループで、以前の決まりで重ねられたのに外していたものがあれば off（18.8）
+      const used = new Set(legacyJob.parts.filter((p) => p.quantity >= 1).map((p) => p.flushId))
+      const wantOff = job.flushes.some((f) => used.has(f.id) && f.stack !== true && canStack(f, job.boards))
+      expect(job.stacking).toBe(wantOff ? 'off' : 'on')
       // 芯材（core）は 芯材◯（木取りしない）の材料と中身の先頭に移る（第2.5版）。戻すと第2.2版と同じ
       const cores = new Map(job.boards.filter((b) => b.noCut).map((b) => [b.id, b.thickness]))
       const back = job.flushes.map(({ form: _f, autoName: _a, ...f }) => ({
@@ -351,18 +354,13 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         core: cores.get(f.faces[0].boardId),
         faces: f.faces.slice(1),
       }))
-      expect(back.filter((f) => !offIds.includes(f.id))).toEqual(legacyJob.flushes.filter((f) => !offIds.includes(f.id)))
+      expect(back).toEqual(legacyJob.flushes)
       expect(dropAddedBuiltIns(job, legacyJob).boards.filter((b) => !b.noCut)).toEqual(legacyJob.boards)
-      if (unstacked.length > 0) unstackedJobs++
+      if (kinds.some((k) => k.kind !== 'standard')) unstackedJobs++
       const r = checkJob(job)
-      if (kinds.some((k) => k.kind === 'custom')) {
-        // 第2.2版では自由入力の大きさで重ねていた組：重ねなくなるので配置が変わる
-        expect(r.materials.some((m) => m.stack && kinds.some((k) => k.kind === 'custom' && m.boardId === k.g.key))).toBe(false)
-        customCommon++
-      } else if (kinds.every((k) => k.kind === 'mismatch') && r.materials.every((m) => !m.stack)) {
-        // 第2.6版：組も端材も変わるので、第2.2版と同じ配置になるのは、第2.2版で重ねていなかった（そろわない組だけの）仕事で、
-        // 重ね切りがオフになった（または組ができない）ものだけ。
-        // 3×6／4×8 でそろう組は第2.2版と同じ組、そろわない組は第2.2版でも重ねていなかったので、配置がまったく同じ
+      if (kinds.some((k) => k.kind === 'custom')) customCommon++
+      if (kinds.length === 0 && r.materials.every((m) => !m.stack)) {
+        // 第2.6版：組も端材も変わるので、第2.2版と同じ配置になるのは、第2.2版でも今も重ねていない仕事だけ。
         // 第2.5版（E-68）で帯の並べ方（同じ幅を優先）を変えたので、第2.2版と比べるのは第2.4版までの並べ方で並べた結果
         const old = packJob(job, computeDimensions(job), undefined, { sameWidthFirst: false })
         expect(digest(old), `seed ${seed}`).toEqual(table[`s${seed}`])

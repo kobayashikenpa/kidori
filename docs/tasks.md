@@ -1210,7 +1210,7 @@
 
 ### 保存と操作（store）
 
-### [~] S-32 仕事ごとの「重ね切り」の保存と、以前のデータの移し替え
+### [x] S-32 仕事ごとの「重ね切り」の保存と、以前のデータの移し替え
 - 担当：engine-dev ／ 依存：E-70 ／ 仕様書：10.9・10・10.5
 - やること：`storage.ts`（`sanitizeJobs`。保存データ・共有・バックアップのファイル）：`stacking` が無い仕事は、部材が使っている材料グループのうち `canStack` なのに `stack` を外していたものがあれば 'off'、ほかは 'on'（直した数に数えない。未決事項 59 の決定）。`layout.sheet.offcut` の検査。15.9 の「サイズがそろっていないので、重ね切りを外しました」の知らせと `stack` を外す処理をやめる（`stackSheets` の自由入力・手持ちの行を直す処理は残す）。`stackSheets`・`stackWith` の「違う2つの材料」の検査は今のまま。`jobs.ts`：`setStacking`、`createJob` は 'on'、`copyJob`・`rekeyJob` で写す、`validateFlush`・`cleanFlush` から `stack` の検査を外す（あれば残す）。`removeBoards`・`updateBoard` の「`canStack` でなくなったら `stack` を外す」をやめる。`sample.ts`：見本のフラッシュ25 に `stack` を付けない（仕事は `createJob` の 'on'。8.4）（18.7・18.8）
 - 完了の条件：第2.5.1版の見本（フラッシュ25 重ね切りオン）を読むと 'on' で結果が同じ。「重ねて切る」を外したフラッシュ25 を部材が使っている仕事は 'off'。ベタ20 だけの仕事は 'on'。一度 'on' にして保存して読み直すと 'on' のまま（移し替えは1回だけ）。最初の材料の自動の追加（S-34）がある読み込みでも同じ結果。今の見本を作ると 'on' で、フラッシュ25 に `stack` が無く、期待する値が同じ。version 1・dataVersion 3 の共有・バックアップのファイル（fixtures）が取り込め、`stacking` が決まる。仕事のコピーで `stacking` が写る

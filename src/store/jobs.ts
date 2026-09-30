@@ -1,7 +1,6 @@
 // 仕事・板・部材の操作（純粋関数）。元のデータは書き換えず、新しい仕事を返す
 import { builtInKey, isDefaultMaterialKey } from '../engine/boards'
 import { boardTokenLabel, defaultBoards, defaultSettings, defaultSheet, nigeName, nigeNameKey, type BoardSheet } from '../engine/defaults'
-import { canStack } from '../engine/packing/stack'
 import { findStackSheet } from '../engine/packing/stock'
 import { autoGroupName, flushesUsingBoards, flushThickness, partsUsingFlushes } from '../engine/flush'
 import { renamePart } from '../engine/formula/rename'
@@ -224,6 +223,16 @@ export function deleteJob(
   }
 }
 
+/**
+ * 重ね切り（2枚重ね）のオン・オフ（第2.6版。仕事ごと。architecture.md 18.7）。木取りの画面で切り替える。
+ * 固定した重ねた板とその端材の行は、オフでも残る
+ */
+export function setStacking(job: Job, stacking: Job['stacking']): OpResult {
+  if (stacking !== 'on' && stacking !== 'off') return fail('重ね切りの設定が正しくありません')
+  if (job.stacking === stacking) return ok(job)
+  return ok({ ...job, stacking })
+}
+
 /** 設定の一部を変える。数値は 0 以上 */
 export function updateSettings(job: Job, patch: Partial<Settings>): OpResult {
   for (const key of ['kerf', 'trim', 'allowance'] as const) {
@@ -321,16 +330,7 @@ export function updateBoard(job: Job, boardId: string, patch: Partial<Omit<Board
   const removed = job.removedBuiltIns ?? []
   const remember = before !== builtInKey(b.material, b.thickness) && isDefaultMaterialKey(before) && !removed.includes(before)
   const next = remember ? { ...job, boards, removedBuiltIns: [...removed, before] } : { ...job, boards }
-  return ok(refreshAutoNames({ ...next, flushes: unstackUnfit(job.flushes, boards) }))
-}
-
-/** 重ねて切れなくなった材料グループの重ね切りを外す（第2.0版・第2.5版）。組の行（stackSheets）は消さない */
-function unstackUnfit(flushes: readonly Flush[], boards: readonly Board[]): Flush[] {
-  return flushes.map((f) => {
-    if (f.stack !== true || canStack(f, boards)) return f
-    const { stack: _stack, ...rest } = f
-    return rest
-  })
+  return ok(refreshAutoNames(next))
 }
 
 /**
@@ -379,14 +379,8 @@ export function removeBoards(job: Job, boardIds: readonly string[]): OpResult {
     ...(removed.length > 0 ? { removedBuiltIns: removed } : {}),
     boards: job.boards.filter((b) => !ids.has(b.id)),
     // フラッシュの表面材からも外す（第1.5版。フラッシュの厚みはそのぶん薄くなる）。
-    // 重ねて切れなくなったフラッシュは重ね切りを外す（第2.0版）
-    flushes: job.flushes.map((f) => {
-      if (!f.faces.some((x) => ids.has(x.boardId))) return f
-      const { stack, ...rest } = f
-      const next: Flush = { ...rest, faces: f.faces.filter((x) => !ids.has(x.boardId)) }
-      if (stack === true && canStack(next, job.boards.filter((b) => !ids.has(b.id)))) next.stack = true
-      return next
-    }),
+    // 第2.6版：重ね切りは仕事ごと（Job.stacking）なので、材料グループの stack はそのまま
+    flushes: job.flushes.map((f) => (f.faces.some((x) => ids.has(x.boardId)) ? { ...f, faces: f.faces.filter((x) => !ids.has(x.boardId)) } : f)),
     parts: job.parts.map((p) => (p.boardId !== null && ids.has(p.boardId) ? { ...p, boardId: null } : p)),
     // 消した材料の入る重ね切りの組の設定も消す（第2.3版）
     stackSheets: job.stackSheets.filter((s) => !s.boardIds.some((id) => ids.has(id))),
@@ -626,11 +620,10 @@ function validateFlush(job: Job, f: FlushDraft, selfId: string | null): string |
     seen.add(b.id)
     if (!(Number.isInteger(face.count) && face.count >= 1)) return '中身の枚数は 1 以上の整数を入れてください'
   }
-  if (f.stack === true && !canStack(f, job.boards)) return '重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです'
   return null
 }
 
-/** 前後の空白を外す。重ね切り・自動の名前は true のときだけ、初めの形は3つのどれかのときだけ持つ */
+/** 前後の空白を外す。重ね切り（第2.6版からは計算で見ないが、あれば残す）・自動の名前は true のときだけ、初めの形は3つのどれかのときだけ持つ */
 function cleanFlush(f: FlushDraft): FlushDraft {
   const out: FlushDraft = { name: f.name.trim(), faces: f.faces.map((x) => ({ boardId: x.boardId, count: x.count })) }
   if (f.stack === true) out.stack = true

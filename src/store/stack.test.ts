@@ -29,15 +29,14 @@ function memoryStorage(): KeyValueStorage {
   const map = new Map<string, string>()
   return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) }
 }
-const MSG = '重ねて切れるのは、木取りする中身が2種類で枚数が同じときだけです'
 
 describe('フラッシュの重ね切りの設定（validateFlush・cleanFlush）', () => {
-  it('表面材 メラミン1×2・ラワン4×1 で stack: true は断られる（足す・変える）', () => {
+  it('第2.6版：表面材 メラミン1×2・ラワン4×1 でも stack: true を断らない（重ね切りは仕事ごと。stack は計算で見ない）', () => {
     const job = sampleGroupJob(false)
     const faces = [{ boardId: MELAMINE_1_ID, count: 2 }, { boardId: LAUAN_4_ID, count: 1 }]
-    expect(addFlush(job, { name: 'フラッシュ22', faces, stack: true })).toEqual({ ok: false, message: MSG })
+    expect(addFlush(job, { name: 'フラッシュ22', faces, stack: true }).ok).toBe(true)
     const f = job.flushes[0]
-    expect(updateFlush(job, f.id, { name: f.name, faces, stack: true })).toEqual({ ok: false, message: MSG })
+    expect(updateFlush(job, f.id, { name: f.name, faces, stack: true }).ok).toBe(true)
   })
 
   it('条件に合えば stack: true を持ち、オフ（false・無し）は持たない', () => {
@@ -51,9 +50,9 @@ describe('フラッシュの重ね切りの設定（validateFlush・cleanFlush�
     expect(added.flushes[1]).toEqual({ id: 'f2', name: 'フラッシュ21', faces: f.faces, stack: true })
   })
 
-  it('ラワン 4 を削除すると フラッシュ25 の stack が外れる。ほかの材料を消しても外れない', () => {
+  it('第2.6版：材料を削除しても フラッシュ25 の stack はそのまま', () => {
     const job = sampleGroupJob(true)
-    expect('stack' in unwrap(removeBoards(job, [LAUAN_4_ID])).flushes[0]).toBe(false)
+    expect(unwrap(removeBoards(job, [LAUAN_4_ID])).flushes[0].stack).toBe(true)
     expect(unwrap(removeBoards(job, [LAUAN_25_ID])).flushes[0].stack).toBe(true)
   })
 })
@@ -71,11 +70,11 @@ describe('読み込み（sanitizeFlushes・固定した1枚の stackWith）', ()
     expect(r.jobs[0].flushes[0].stack).toBe(true)
   })
 
-  it("stack: 'yes' や条件に合わない stack は外れて直した数 1", () => {
+  it("stack: 'yes' は外れて直した数 1。第2.6版から条件に合わない stack: true もそのまま残す（直した数 0）", () => {
     const a = raw((j) => (j.flushes[0].stack = 'yes'))
     expect([a.fixes, 'stack' in a.jobs[0].flushes[0]]).toEqual([1, false])
     const b = raw((j) => (j.flushes[0].faces[1].count = 1))
-    expect([b.fixes, 'stack' in b.jobs[0].flushes[0]]).toEqual([1, false])
+    expect([b.fixes, b.jobs[0].flushes[0].stack]).toEqual([0, true])
     const c = raw((j) => (j.flushes[0].stack = false))
     expect([c.fixes, 'stack' in c.jobs[0].flushes[0]]).toEqual([1, false])
   })
@@ -129,15 +128,19 @@ describe('保存・引き継ぎ・コピー', () => {
     expect(dropAddedBuiltIns(r.data.jobs[0], job)).toEqual(job)
   })
 
-  it('見本は見本がフラッシュ25 を足すので重ね切りオン（第2.1版）で、重ね切りの見本の値になる', () => {
+  it('見本は仕事の重ね切りがオン（第2.6版。フラッシュ25 に stack は付けない）で、重ね切りの見本の値になる', () => {
     const sample = sampleJob(NOW)
-    expect(sample.flushes[0].stack).toBe(true)
+    expect(sample.stacking).toBe('on')
+    expect(sample.flushes[0].stack).toBeUndefined()
     expect(pack(sample).materials.map((x) => x.sheetCount)).toEqual([5, 1])
   })
 
   it('仕事をコピーすると stack が残る（表面材は新しい材料を指す）', () => {
     const copy = copyJob(sampleGroupJob(true), [], NOW, 'job-copy')
     expect(copy.flushes[0].stack).toBe(true)
+    // 仕事の重ね切り（第2.6版）も写る
+    expect(copy.stacking).toBe('on')
+    expect(copyJob({ ...sampleGroupJob(true), stacking: 'off' }, [], NOW, 'job-copy2').stacking).toBe('off')
     expect(stackPlan(copy).groups[0].boardIds).toEqual([copy.boards[0].id, copy.boards[2].id])
   })
 })
