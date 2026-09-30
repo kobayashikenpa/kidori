@@ -2089,3 +2089,52 @@ button.dim-name {
   min-height: 44px;
   font-weight: 700;
 }
+
+/* 材料グループのタブ：1行に名前と厚み（第2.7版）。押すと中身と「編集」「削除」を開く */
+.list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.list-compact-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.list-compact-head .list-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.list-compact-sub {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.list-compact-arrow {
+  margin-left: auto;
+  font-size: 22px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.list-compact-arrow.open {
+  transform: rotate(90deg);
+}
+.list-compact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}

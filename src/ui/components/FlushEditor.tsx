@@ -15,6 +15,7 @@ import {
 import type { Flush, GroupForm, Job } from '../../engine/types'
 import { addFlush, flushesUsages, newId, removeFlushes, updateFlush, type FlushDraft } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
+import { fmt } from '../format'
 import { closeKeyboard } from '../keyboard'
 import { materialLabel, materialRuns } from '../materials'
 import { NumberField } from './NumberField'
@@ -36,6 +37,7 @@ export function FlushEditor() {
         idPrefix="flush"
         items={job.flushes}
         label={(f) => f.name}
+        compact={(f) => `${fmt(flushBreakdown(job, f.id)?.total ?? 0)}mm`}
         usage={(f) => {
           const b = flushBreakdown(job, f.id)
           const users = flushesUsages(job, [f.id]).parts
