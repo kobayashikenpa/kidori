@@ -10,7 +10,7 @@ import { computeFinished } from '../../engine/dimensions/finished'
 import { thicknessChoice } from '../../engine/dimensions/thickness'
 import { validatePartForSave } from '../../engine/dimensions/validate'
 import { AXES, type Axis, type Part, type PartGrain } from '../../engine/types'
-import { addPart, boardLabel, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
+import { addPart, boardLabel, forgetMissingMaterial, newPart, partsReferencing, removePart, updatePart } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { fmt } from '../format'
 import { materialLabel, materialName, materialNameGroups } from '../materials'
@@ -55,6 +55,11 @@ export function PartEditor({ part, onClose }: Props) {
   const [pickState, setPick] = useState<MaterialPick>(pickFromDraft)
   // 部材の編集の上に重ねて開いている設定の画面（第2.8版。仕様書 9.3）。閉じても下書きとスクロールの位置は残る
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // 設定の画面を閉じる。下書きの材料・材料グループを設定で消していたら、未設定に戻す（材料グループは外す）
+  const closeSettings = () => {
+    setSettingsOpen(false)
+    setDraft((d) => forgetMissingMaterial(job, d))
+  }
   // 材料・材料グループの表示名（式の {t:…} の名前と同じ）
   const thicknessName = (id: string | null): string => {
     const f = job.flushes.find((x) => x.id === id)
@@ -113,7 +118,8 @@ export function PartEditor({ part, onClose }: Props) {
       return
     }
     setSwapped(null)
-    const next = { ...draft, grain }
+    // 設定の画面で材料・材料グループを消していたら、下書きの材料を外してから保存する（第2.8版）
+    const next = forgetMissingMaterial(job, { ...draft, grain })
     const r = run((j) => (part ? updatePart(j, part.id, next) : addPart(j, next)))
     if (r.ok) onClose()
     else setError(r.message)
@@ -397,10 +403,10 @@ export function PartEditor({ part, onClose }: Props) {
           ))}
       </Sheet>
       {settingsOpen && (
-        <Sheet title="設定" closeText="×" onClose={() => setSettingsOpen(false)}>
+        <Sheet title="設定" closeText="×" onClose={closeSettings}>
           <SettingsScreen initialTab="materials" embedded />
           <div className="sheet-foot">
-            <button type="button" className="btn primary" onClick={() => setSettingsOpen(false)}>
+            <button type="button" className="btn primary" onClick={closeSettings}>
               完了
             </button>
           </div>
