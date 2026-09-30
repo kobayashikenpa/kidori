@@ -2291,3 +2291,15 @@ button.dim-name {
   min-height: 48px;
   justify-content: center;
 }
+
+/* 設定の［材料］タブの一番下：追加（左）と 選んで削除（右）を1行に（第2.9版） */
+.list-foot {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.list-foot .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+}

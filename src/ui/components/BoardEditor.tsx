@@ -1,6 +1,6 @@
 // 設定の画面の材料のタブ（第2.7版。architecture.md 19.3）：材料名ごとに1行、厚みのボタンと［＋］。
 // 厚みのボタン → 下から出る編集（材料名・厚み・木取りしない・使っている部材・削除）。［＋］→ その材料名の厚みを足す。
-// 一番下に「＋ 材料名を追加」。選んで削除は、厚みのボタンを選ぶ形。
+// 一番下に「＋ 材料名を追加」と「選んで削除」を1行に（第2.9版）。選んで削除は、厚みのボタンを選ぶ形。
 // 材料のサイズ（3×6・4×8・自由入力）と木目の方向は、木取りの画面で選ぶ（仕様書 5.1・9）
 import { useEffect, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
@@ -75,18 +75,6 @@ export function BoardEditor() {
           材料がまだありません。
         </p>
       )}
-      {boards.length > 0 && !selecting && (
-        <button
-          type="button"
-          className="btn danger list-select-start"
-          onClick={() => {
-            setSelected([])
-            setSelecting(true)
-          }}
-        >
-          選んで削除
-        </button>
-      )}
       {selecting && (
         <p className="lead" style={{ margin: 0 }}>
           削除する材料の厚みを選んでください（いくつでも選べます）。
@@ -151,9 +139,24 @@ export function BoardEditor() {
         </div>
       ))}
       {!selecting && (
-        <button type="button" className="btn ghost" onClick={() => setSheet({ kind: 'new' })}>
-          ＋ 材料名を追加
-        </button>
+        // 一番下に 追加（左）と 選んで削除（右）を1行に（第2.9版。仕様書 9.4）
+        <div className="list-foot">
+          <button type="button" className="btn ghost" onClick={() => setSheet({ kind: 'new' })}>
+            ＋ 材料名を追加
+          </button>
+          {boards.length > 0 && (
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => {
+                setSelected([])
+                setSelecting(true)
+              }}
+            >
+              選んで削除
+            </button>
+          )}
+        </div>
       )}
       {selecting &&
         (bulkConfirm && chosen.length > 0 ? (
