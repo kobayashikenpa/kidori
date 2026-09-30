@@ -1,3 +1,4 @@
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -10,7 +11,8 @@ import { stackKey } from './stack'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const pct = (r: number) => Math.round(r * 1000) / 10
-const run = (job: Job) => packJob(job, computeDimensions(job))
+/** 組はすべて重ねる（組の配置の確かめ。板が増えないかの確かめは stackDecide.test.ts） */
+const run = (job: Job) => packJob(job, computeDimensions(job), allStacks(job))
 const names = (s: SheetLayout) => s.placements.map((p) => p.name)
 
 function frozen(layout: SheetLayout, stackWith?: boolean): FrozenSheet {

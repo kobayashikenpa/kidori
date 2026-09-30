@@ -307,9 +307,91 @@ class Packer {
   }
 }
 
+/** 材料 1つの比べる数：入らない片の数・板の枚数（その材料を含む重ねた板 ＋ 材料の1枚。端材の1枚を除く）・使う板の面積 */
+interface MaterialCount {
+  unplaced: number
+  sheets: number
+  area: number
+}
+
+/** 採った組 accepted のときの、材料 boardId の数（固定した1枚はどちらでも同じなので数えない） */
+function countOf(packer: Packer, boardId: string, accepted: readonly PairCandidate[]): MaterialCount {
+  const mine = accepted.filter((c) => c.boardIds.includes(boardId))
+  const stacks = packer.stacks(mine)
+  let sheets = 0
+  let area = 0
+  let unplaced = 0
+  for (const st of stacks) {
+    for (const s of st.sheets) {
+      sheets++
+      area += s.boardWidth * s.boardLength
+    }
+  }
+  for (const m of packer.materials(new Set([boardId]), mine, packer.offcuts(stacks))) {
+    unplaced += m.unplacedPieces
+    for (const s of m.result.sheets) {
+      if (s.sheet?.offcut) continue
+      sheets++
+      area += s.boardWidth * s.boardLength
+    }
+  }
+  return { unplaced, sheets, area: round1(area) }
+}
+
+/**
+ * after が before より悪くない。比べる順（おまかせの比べ方と同じ考え）：入らない片が少なければ採る・多ければ採らない →
+ * 同じなら枚数が少なければ採る・多ければ採らない → 同じなら面積が増えなければ採る
+ */
+function notWorse(after: MaterialCount, before: MaterialCount): boolean {
+  if (after.unplaced !== before.unplaced) return after.unplaced < before.unplaced
+  if (after.sheets !== before.sheets) return after.sheets < before.sheets
+  return after.area <= before.area
+}
+
+/**
+ * 板が増えないかの確かめ（第2.6版。architecture.md 18.5。未決事項 57）。重ねない状態から、候補の組を並びの順に1つずつ足し、
+ * その組の a・b の材料がどちらも足す前より悪くならなければ採る。足すたびに確かめるので、どの材料も重ねないときより悪くならない
+ */
+function decide(packer: Packer, cands: readonly PairCandidate[]): { accepted: PairCandidate[]; rejected: PairCandidate[] } {
+  const accepted: PairCandidate[] = []
+  const rejected: PairCandidate[] = []
+  const current = new Map<string, MaterialCount>()
+  const now = (id: string) => {
+    let c = current.get(id)
+    if (!c) {
+      c = countOf(packer, id, accepted)
+      current.set(id, c)
+    }
+    return c
+  }
+  for (const c of cands) {
+    const before = c.boardIds.map(now)
+    const trial = [...accepted, c]
+    const after = c.boardIds.map((id) => countOf(packer, id, trial))
+    if (after.every((x, i) => notWorse(x, before[i]))) {
+      accepted.push(c)
+      c.boardIds.forEach((id, i) => current.set(id, after[i]))
+    } else {
+      rejected.push(c)
+    }
+  }
+  return { accepted, rejected }
+}
+
+/**
+ * 重ねる組を決める（第2.6版。architecture.md 18.5）：組の候補のうち、重ねても材料が増えない組（accepted）と、
+ * 重ねると 入らない片・枚数・（枚数が同じなら）面積 のどれかが増えるので重ねない組（rejected）。組の並び
+ */
+export function decideStacks(job: Job, dims: DimensionResult, expanded?: ExpandResult): { accepted: StackPair[]; rejected: StackPair[] } {
+  const ex = expanded ?? expandPieces(job, dims)
+  const d = decide(new Packer(job, ex, undefined), pairCandidates(job, ex))
+  const pair = (c: PairCandidate): StackPair => ({ key: c.key, boardIds: [c.boardIds[0], c.boardIds[1]] })
+  return { accepted: d.accepted.map(pair), rejected: d.rejected.map(pair) }
+}
+
 /**
  * 木取りの計算（第2.6版。architecture.md 18.4）。
- * 1. 材料ごとの片（expandPieces）→ 2. 組の候補（pairCandidates）のうち plan（重ねる組の key。無ければ候補すべて）の組
+ * 1. 材料ごとの片（expandPieces）→ 2. 組の候補（pairCandidates）のうち plan（重ねる組の key。無ければ decideStacks で決める）の組
  * → 3. 重ねた板を並べる → 4. 重ねた板の端材を a・b の手持ちの行にする → 5. 残りの片を材料の手持ち ＋ 端材の行で並べる。
  * 組の結果は boardId: stackKey・stack 付き（material・thickness は a）。材料の sheetCount は端材の1枚を除いた枚数。
  * 全体の歩留まりは、重ねた板を2枚（a と b）、端材の1枚は板の面積に数えない（重ねた板の中なので）
@@ -319,7 +401,7 @@ export function packJob(job: Job, dims: DimensionResult, plan?: StackPlanFixed, 
   const cands = pairCandidates(job, ex)
   const packer = new Packer(job, ex, options.sameWidthFirst)
   const keys = plan === undefined ? null : new Set(plan)
-  const accepted = keys ? cands.filter((c) => keys.has(c.key)) : cands
+  const accepted = keys ? cands.filter((c) => keys.has(c.key)) : decide(packer, cands).accepted
   const rejected = cands.filter((c) => !accepted.includes(c))
 
   const stackResults = packer.stacks(accepted)

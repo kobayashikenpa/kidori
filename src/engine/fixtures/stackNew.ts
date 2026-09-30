@@ -1,7 +1,10 @@
 // 第2.6版（新しい重ね切り）のテスト用の仕事。材料はすべて 3×6（芯材15 だけ木取りしない 4×8）。
 // 部材は切り代 0 で書くので、木取り寸法＝式の値（例：H1800・D800 の側板は 1800×800）
 import { defaultSettings } from '../defaults'
-import { BOARD_SIZES, type Board, type Flush, type Job, type Part } from '../types'
+import { computeDimensions } from '../dimensions'
+import { pairCandidates } from '../packing/pairing'
+import { expandPieces } from '../packing/pieces'
+import { BOARD_SIZES, type Board, type DimensionResult, type Flush, type Job, type Part } from '../types'
 
 export const MEL = 'b-mel1'
 export const L4 = 'b-lauan4'
@@ -112,4 +115,12 @@ export function stackJob(parts: Part[], stacking: Job['stacking'] = 'on'): Job {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
+}
+
+/**
+ * 組の候補の key すべて（packJob の plan。板が増えないかの確かめ（decideStacks）を通さずに、候補の組をすべて重ねる）。
+ * 組の配置そのものを確かめるテストで使う
+ */
+export function allStacks(job: Job, dims: DimensionResult = computeDimensions(job)): string[] {
+  return pairCandidates(job, expandPieces(job, dims)).map((c) => c.key)
 }

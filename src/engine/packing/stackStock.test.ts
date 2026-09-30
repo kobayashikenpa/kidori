@@ -1,6 +1,7 @@
 // E-58 → E-61 → 第2.3版の追補で書き直し（E-64。architecture.md 15.9）：重ね切りの組は 3×6／4×8 だけ。
 // 組の行に手持ち・自由入力が残っていても木取りは見ない。組は選んだサイズで足りるだけ使い、組の noStock は出ない。
 // 材料の手持ちは、その材料をふつうに木取りする片だけに使う（組の分を引かない）
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -14,7 +15,8 @@ import { availableStackStock, stackChoice } from './stock'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
-const run = (job: Job) => packJob(job, computeDimensions(job))
+/** 組はすべて重ねる（組の配置の確かめ。板が増えないかの確かめは stackDecide.test.ts） */
+const run = (job: Job) => packJob(job, computeDimensions(job), allStacks(job))
 const find = (ms: MaterialResult[], id: string) => ms.find((m) => m.boardId === id)
 
 function sample(melamine: StockRowDraft[] | null, lauan: StockRowDraft[] | null): Job {

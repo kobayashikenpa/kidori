@@ -1,5 +1,6 @@
 // E-61：重ね切りの組の行のサイズの設定（第2.3版。architecture.md 15.2〜15.4）。
 // 組は自分のサイズ（3×6／4×8 だけ。組の手持ちは使わない。E-64・15.9）で並べ、材料の行のサイズはその材料のふつうの片だけに効く
+import { allStacks } from '../fixtures/stackNew'
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob } from '../fixtures/flush'
@@ -13,7 +14,8 @@ import { availableStackStock, availableStock, stackChoice } from './stock'
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
 const pct = (r: number) => Math.round(r * 1000) / 10
-const run = (job: Job) => packJob(job, computeDimensions(job))
+/** 組はすべて重ねる（組の配置の確かめ。板が増えないかの確かめは stackDecide.test.ts） */
+const run = (job: Job) => packJob(job, computeDimensions(job), allStacks(job))
 const find = (ms: MaterialResult[], id: string) => ms.find((m) => m.boardId === id)
 const names = (s: SheetLayout) => s.placements.map((p) => p.name).join(',')
 const size = (s: SheetLayout) => `${s.boardWidth}×${s.boardLength}`

@@ -177,7 +177,9 @@ describe('組のチェック・サイズ', () => {
     expect(job.stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...SHIHACHI }])
     for (const id of [MELAMINE_1_ID, LAUAN_4_ID]) expect(job.boards.find((b) => b.id === id)?.sizeKind).toBe('saburoku')
     expect(stackPlan(job)).toMatchObject({ groups: [{ key: KEY }] })
-    const g = pack(job).materials.find((m) => m.boardId === KEY)!
+    // 第2.6版：4×8 で重ねると 3×6 で重ねないより板の面積が増えるので、確かめで重ねなくなる（rejected）。組を指定すれば 4×8 で並ぶ
+    expect(pack(job).stacks.rejected.map((p) => p.key)).toEqual([KEY])
+    const g = packJob(job, computeDimensions(job), [KEY]).materials.find((m) => m.boardId === KEY)!
     expect(g.sheets.every((s) => s.boardWidth === 1220 && s.boardLength === 2440)).toBe(true)
     expect(setRowSize(job, [MELAMINE_1_ID, 'board-none'], SHIHACHI).ok).toBe(false)
     expect(setRowSize(job, [MELAMINE_1_ID, MELAMINE_1_ID], SHIHACHI).ok).toBe(false)
