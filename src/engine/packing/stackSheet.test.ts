@@ -9,7 +9,7 @@ import { freezeSheet } from '../progress/frozen'
 import type { Job, MaterialResult, SheetLayout } from '../types'
 import { packJob } from './index'
 import { stackKey } from './stack'
-import { availableStackStock, availableStock, stackChoice } from './stock'
+import { availableStock, stackChoice } from './stock'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
@@ -118,7 +118,7 @@ describe('組は手持ちを使わない（E-64）', () => {
   })
 })
 
-describe('固定した1枚と手持ち（availableStock・availableStackStock）', () => {
+describe('固定した1枚と手持ち（availableStock）', () => {
   function frozenStack(job: Job, stack: boolean) {
     const g = find(run(job).materials, KEY)!
     return freezeSheet(job, MELAMINE_1_ID, 'vertical', g.sheets[0], 'f1', new Date('2026-09-28T00:00:00Z'), stack ? LAUAN_4_ID : undefined)
@@ -127,7 +127,6 @@ describe('固定した1枚と手持ち（availableStock・availableStackStock）
   it('組の固定した1枚は材料の手持ちから引かない。組は何枚でも（組の片の残りだけ並ぶ）', () => {
     const job = withStock(sampleGroupJob(true), LAUAN_4_ID, [['3×6', 1]])
     job.frozenSheets = [frozenStack(job, true)]
-    expect(availableStackStock(job, PAIR).map((k) => k.count)).toEqual([Infinity])
     expect(availableStock(job, LAUAN_4_ID).map((k) => k.count)).toEqual([1])
     const r = run(job)
     expect(r.materials.map((m) => [m.boardId, m.sheetCount, m.unplaced.length])).toEqual([
@@ -140,13 +139,6 @@ describe('固定した1枚と手持ち（availableStock・availableStackStock）
     const job = withStock(sampleGroupJob(true), MELAMINE_1_ID, [['3×6', 2]])
     job.frozenSheets = [frozenStack(job, false)]
     expect(availableStock(job, MELAMINE_1_ID).map((k) => k.count)).toEqual([1])
-    expect(availableStackStock(job, PAIR).map((k) => k.count)).toEqual([Infinity])
-  })
-
-  it('availableStackStock は組の大きさが何枚でも（1行・Infinity）', () => {
-    expect(availableStackStock(sampleGroupJob(true), PAIR)).toEqual([
-      { stockId: null, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: Infinity },
-    ])
   })
 
   it('freezeSheet：組の1枚の木目は組の設定から（材料 a が短手でも長手。組の行が自由入力・短手でも 4×8 の長手）', () => {

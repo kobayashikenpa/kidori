@@ -7,8 +7,9 @@
 // （横切り優先は長手も端切りするので、縦切り優先でしか入らない片がありうる）
 // 手持ちの材料（第2.2版。architecture.md 14.5）：stockOn の材料は、固定した1枚を引いた手持ち（availableStock）で並べる。
 // 1枚ごとにその大きさで端切り・切る順番・端材・歩留まりを出し、sheet を付ける。入らない片は noStock
-// 重ね切りの組（第2.3版。architecture.md 15.4）：組は組の行のサイズの設定（stackChoice）で並べる。
-// 組の手持ちは availableStackStock（材料の手持ちから引かない）。組に置けなかった片は組の noStock（a・b に回さない。未決事項 42）
+// 重ね切り（第2.6版。architecture.md 18.4）：組（材料グループの同じ部材の、違う材料の片の対）を先に、組の行のサイズ
+// （stackChoice。3×6／4×8 だけ。手持ちは使わない）で重ねた板に並べる。重ねた板の端材を上下の材料の手持ちの行にしてから、
+// 残りの片を材料ごとに並べる（端材の行を先に使う）。重ねる組は decideStacks（材料が増える組は重ねない。18.5）
 import { round1 } from '../round'
 import type { Board, DimensionResult, Job, MaterialResult, PackingResult, SheetLayout, StackPair } from '../types'
 import { buildCuts } from './cutOrder'

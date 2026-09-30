@@ -114,14 +114,3 @@ export function availableStock(job: Pick<Job, 'boards' | 'frozenSheets'>, boardI
     job.frozenSheets.filter((f) => f.boardId === boardId && !f.stackWith && !f.layout.sheet?.offcut),
   )
 }
-
-/**
- * 固定した組の1枚（boardId と stackWith.boardId が組の2つの材料）の分を引いた、組の手持ち（第2.3版。architecture.md 15.3）。
- * 組は手持ちを使わないので（15.9）、いつも組のサイズ1行（枚数 Infinity）
- */
-export function availableStackStock(job: Pick<Job, 'stackSheets' | 'boards' | 'frozenSheets'>, boardIds: readonly [string, string]): StockKind[] {
-  return subtractFrozen(
-    stockKinds(stackChoice(job, boardIds)),
-    job.frozenSheets.filter((f) => f.stackWith && samePair([f.boardId, f.stackWith.boardId], boardIds)),
-  )
-}

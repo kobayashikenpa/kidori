@@ -115,8 +115,6 @@ interface Fixes {
    * 読んでいるデータの版。第1版には逃げ・メモ・チェックが無いのが当たり前なので、無くても直した数に数えない
    */
   version: DataVersion
-  /** 読み込むときに重ね切りを外したフラッシュの名前（サイズがそろわない組。15.9）。知らせに出す */
-  unstacked: string[]
 }
 
 const isNonNegative = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -720,8 +718,8 @@ function sanitizeJob(v: unknown, fx: Fixes): LegacyJob | null {
 export function sanitizeJobs(
   list: readonly unknown[],
   version: DataVersion = DATA_VERSION,
-): { jobs: Job[]; fixes: number; changed: string[]; unstacked: string[] } {
-  const fx: Fixes = { count: 0, version, unstacked: [] }
+): { jobs: Job[]; fixes: number; changed: string[] } {
+  const fx: Fixes = { count: 0, version }
   const jobs: Job[] = []
   const changed: string[] = []
   for (const raw of list) {
@@ -735,15 +733,12 @@ export function sanitizeJobs(
     jobs.push(addMissingBuiltIns(m.job, newId))
     if (m.changed.length > 0) changed.push(`${m.job.name}の ${m.changed.map((c) => c.name).join('・')}`)
   }
-  return { jobs, fixes: fx.count, changed, unstacked: [...new Set(fx.unstacked)] }
+  return { jobs, fixes: fx.count, changed }
 }
 
-/** 移し替えで寸法が変わった部材・重ね切りを外したフラッシュの知らせ（「。」でつなぐ）。無ければ null */
-export function changedMessage(changed: readonly string[], unstacked: readonly string[] = []): string | null {
-  const out: string[] = []
-  if (changed.length > 0) out.push(`以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）`)
-  if (unstacked.length > 0) out.push(`サイズがそろっていないので、重ね切りを外しました：${unstacked.join('、')}`)
-  return out.length > 0 ? out.join('。') : null
+/** 移し替えで寸法が変わった部材の知らせ。無ければ null（第2.6版で「重ね切りを外しました」の知らせはなくした。architecture.md 18.7） */
+export function changedMessage(changed: readonly string[]): string | null {
+  return changed.length > 0 ? `以前の版から移したときに寸法が変わった部材：${changed.join('、')}（寸法表で確かめてください）` : null
 }
 
 /** 保存データの外側（版と仕事の配列）が読めれば、その配列。読めなければ null */
@@ -853,7 +848,7 @@ export function loadSaved(storage: KeyValueStorage | null, now: Date = new Date(
   }
   const { jobs, fixes } = sanitized
   const currentJobId = current !== null && jobs.some((j) => j.id === current) ? current : null
-  const notice = changedMessage(sanitized.changed, sanitized.unstacked)
+  const notice = changedMessage(sanitized.changed)
   if (fixes === 0) return { status: 'ok', data: { jobs, currentJobId }, ...(notice ? { message: notice } : {}) }
   const canSave = backupBroken(storage, raw, now)
   const repaired = canSave

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDimensions } from '../dimensions'
 import { CORE_15_ID, LAUAN_4_ID, MELAMINE_1_ID, sampleGroupJob, flushPart } from '../fixtures/flush'
-import { cutFaces, defaultFlushStack, flushBreakdown, flushThickness, partIsNoCut } from '../flush'
+import { cutFaces, flushBreakdown, flushThickness, partIsNoCut } from '../flush'
 import { materialSummaries, frozenSheetViews } from '../progress/frozen'
 import type { Job } from '../types'
 import { packJob } from './index'
@@ -81,10 +81,9 @@ describe('重ね切りの見本（材料グループの形）は以前と同じ�
   it('芯材15 の片は出ない', () => {
     expect(expand(sampleGroupJob()).groups.some((g) => g.board.id === CORE_15_ID)).toBe(false)
   })
-  it('canStack・defaultFlushStack は木取りする中身で判定する', () => {
+  it('canStack は木取りする中身で判定する', () => {
     const job = sampleGroupJob()
     expect(canStack(job.flushes[0], job.boards)).toBe(true)
-    expect(defaultFlushStack(job.flushes[0].faces, job.boards)).toBe(true)
   })
   it('芯材15 を木取りする材料にすると 芯材15 の片が出て、canStack が false（組は無くなる）', () => {
     const job = sampleGroupJob(true)
@@ -105,10 +104,9 @@ describe('ベタ20（ラワン18×1・メラミン1×2。全部木取りする�
       [LAUAN_18_ID, 2],
     ])
   })
-  it('枚数が違うので canStack は false・重ね切りの初期値もオフ', () => {
+  it('枚数が違うので canStack は false', () => {
     const job = betaJob()
     expect(canStack(job.flushes[1], job.boards)).toBe(false)
-    expect(defaultFlushStack(job.flushes[1].faces, job.boards)).toBe(false)
   })
   it('切り代 10 が足される（1800 → 1810）', () => {
     const d = computeDimensions(betaJob()).parts[0]

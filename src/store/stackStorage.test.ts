@@ -7,7 +7,7 @@ import { stockRows } from '../engine/fixtures/stock'
 import { packJob } from '../engine/packing'
 import { stackKey } from '../engine/packing/stack'
 import type { Job } from '../engine/types'
-import { loadSaved, sanitizeJobs, saveSaved, type KeyValueStorage } from './storage'
+import { changedMessage, loadSaved, sanitizeJobs, saveSaved, type KeyValueStorage } from './storage'
 import { dropAddedBuiltIns } from './fixtures/builtIns'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
@@ -37,7 +37,6 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
     const r = sanitizeJobs([legacy()])
     const job = r.jobs[0]
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(job.stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36 }])
     expect(stackOf(job)).toBe(true)
     expect(rows(job)).toEqual([
@@ -59,7 +58,6 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
     const r = sanitizeJobs([legacy((j) => Object.assign(lauan(j), S48))])
     const job = r.jobs[0]
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(stackOf(job)).toBe(true)
     expect(job.stackSheets).toEqual([])
     // 第2.6版：重ね切りを外さず、仕事の重ね切りはオン（組の大きさは初期値の 4×8。重ねると材料が増えるなら確かめで重ねない）
@@ -68,13 +66,11 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
 
   it('木目だけ違う（自由入力 910×1820 の妻手）ときもそろっていない（組の行は作らない。重ね切りは外さない）', () => {
     const r = sanitizeJobs([legacy((j) => Object.assign(lauan(j), { ...S36, sizeKind: 'custom', grain: 'short' }))])
-    expect(r.unstacked).toEqual([])
     expect(stackOf(r.jobs[0])).toBe(true)
   })
 
   it('2つとも自由入力 910×1820（共通の大きさが自由入力）→ 組の行は作らない（重ね切りは外さない）', () => {
     const r = sanitizeJobs([legacy((j) => j.boards.forEach((b) => Object.assign(b, { ...S36, sizeKind: 'custom' })))])
-    expect(r.unstacked).toEqual([])
     expect(stackOf(r.jobs[0])).toBe(true)
     expect(r.jobs[0].stackSheets).toEqual([])
   })
@@ -88,7 +84,6 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
     ])
     const job = r.jobs[0]
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(stackOf(job)).toBe(true)
     expect(job.stackSheets).toEqual([])
     expect(melamine(job).stock).toEqual(stockRows([['3×6', 6]]))
@@ -97,10 +92,9 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
 
   it('片方だけ手持ち（メラミン 1 が手持ち 3×6 ×10）でも重ね切りを外さない（第2.6版）。手持ちの行があるだけ（オフ）ならそのまま重ねる', () => {
     const on = sanitizeJobs([legacy((j) => Object.assign(melamine(j), { stockOn: true, stock: stockRows([['3×6', 10]]) }))])
-    expect(on.unstacked).toEqual([])
     const off = sanitizeJobs([legacy((j) => Object.assign(melamine(j), { stock: stockRows([['3×6', 10]]) }))])
-    expect(off.unstacked).toEqual([])
     expect(off.jobs[0].stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36 }])
+    expect([on.jobs[0].stacking, on.fixes, on.changed]).toEqual(['on', 0, []])
   })
 
   it('固定した組の1枚は切った記録として残る（重ね切りを外しても）', () => {
@@ -124,14 +118,12 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
       Object.assign(lauan(j), S48)
       j.frozenSheets = [frozen as Job['frozenSheets'][number]]
     })])
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].frozenSheets).toEqual([frozen])
   })
 
   it('重ね切りがオフの組・重ね切りの無い仕事は行を作らない（知らせなし）', () => {
     const r = sanitizeJobs([legacy((j) => delete (j.flushes[0] as { stack?: true }).stack)])
     expect(r.jobs[0].stackSheets).toEqual([])
-    expect(r.unstacked).toEqual([])
   })
 
   it('stackSheets: [] の仕事は移し替えない（ラワン 4 が 4×8 でも組 4×8 で重ねる）', () => {
@@ -141,7 +133,6 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
     })
     const r = sanitizeJobs([raw])
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].stackSheets).toEqual([])
     expect(stackOf(r.jobs[0])).toBe(true)
   })
@@ -162,7 +153,8 @@ describe('stackSheets の無い仕事の移し替え（1回だけ）', () => {
       j.id = 'job-2'
       j.flushes.push({ ...j.flushes[0], id: 'flush-2', name: 'フラッシュ22' })
     }) as Job
-    expect(sanitizeJobs([a, b]).unstacked).toEqual([])
+    const r = sanitizeJobs([a, b])
+    expect([r.jobs.length, r.fixes, changedMessage(r.changed)]).toEqual([2, 0, null])
   })
 })
 
@@ -176,14 +168,12 @@ describe('stackSheets のある仕事の組の行が自由入力・手持ち（S
   it('組の行が手持ち（stockOn）→ 手持ちを外して 3×6／4×8 の行は残し、重ね切りは外さず知らせない（第2.6版）', () => {
     const r = sanitizeJobs([withRows([{ boardIds: [LAUAN_4_ID, MELAMINE_1_ID], ...S48, stockOn: true, stock: [{ id: 'x', ...S36, count: 2 }] }])])
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].stackSheets).toEqual([{ boardIds: [LAUAN_4_ID, MELAMINE_1_ID], ...S48 }])
     expect(stackOf(r.jobs[0])).toBe(true)
   })
 
   it('組の行が自由入力の大きさ → 行を消す。重ね切りは外さず知らせない（第2.6版）', () => {
     const r = sanitizeJobs([withRows([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], sizeKind: 'custom', width: 910, length: 1820, grain: 'long' }])])
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].stackSheets).toEqual([])
     expect(stackOf(r.jobs[0])).toBe(true)
   })
@@ -191,7 +181,6 @@ describe('stackSheets のある仕事の組の行が自由入力・手持ち（S
   it('組の行に手持ちの行があるだけ（オフ）→ 黙って手持ちを外し、重ね切りは残す', () => {
     const r = sanitizeJobs([withRows([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36, stock: [{ id: 'x', ...S36, count: 2 }] }])])
     expect(r.fixes).toBe(0)
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36 }])
     expect(stackOf(r.jobs[0])).toBe(true)
   })
@@ -203,7 +192,6 @@ describe('stackSheets のある仕事の組の行が自由入力・手持ち（S
         (j) => delete (j.flushes[0] as { stack?: true }).stack,
       ),
     ])
-    expect(r.unstacked).toEqual([])
     expect(r.jobs[0].stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36 }])
   })
 })
@@ -237,7 +225,6 @@ describe('stackSheets の検査・修復', () => {
     const r = sanitizeJobs([withRows([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36, stockOn: true, stock: [{ id: 'x', ...S36, count: 0 }] }])])
     expect(r.jobs[0].stackSheets).toEqual([{ boardIds: [MELAMINE_1_ID, LAUAN_4_ID], ...S36 }])
     expect(r.fixes).toBe(2)
-    expect(r.unstacked).toEqual([])
   })
 
   it('大きさの読めない行は外す（直した数）', () => {

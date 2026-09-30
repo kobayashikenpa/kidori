@@ -1,6 +1,6 @@
 // 材料グループ（コードは第1.5版からの Flush。仕様書 4）：厚み＝中身の材料の厚み×枚数の合計、厚みの内訳、使っているものの一覧
 import { boardTokenLabel } from './defaults'
-import { canStack, cutFaces } from './packing/stack'
+import { cutFaces } from './packing/stack'
 import { eq1, exactText, round1 } from './round'
 import type { Board, Flush, GroupForm, Job, Part } from './types'
 
@@ -133,14 +133,6 @@ export function defaultFlushFaces(job: Pick<Job, 'boards'>): Flush['faces'] {
     const b = job.boards.find((x) => nameKey(x.material) === material && eq1(x.thickness, thickness))
     return b ? [{ boardId: b.id, count: 2 }] : []
   })
-}
-
-/**
- * 新しいフラッシュの「表面材を重ねて切る」の初期値（第2.1版。仕様書 4）：重ねられる表面材（canStack：2種類で枚数が同じ）ならオン、
- * それ以外はオフ
- */
-export function defaultFlushStack(faces: Flush['faces'], boards: readonly Pick<Board, 'id' | 'noCut'>[]): boolean {
-  return canStack({ faces }, boards)
 }
 
 /** 材料グループの中身の行。boardId が null の行は空欄（材料をまだ選んでいない） */

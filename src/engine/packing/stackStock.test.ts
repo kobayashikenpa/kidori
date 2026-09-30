@@ -11,7 +11,7 @@ import { stockUsage } from '../progress/frozen'
 import type { Job, MaterialResult } from '../types'
 import { packJob } from './index'
 import { stackKey, stackPlan } from './stack'
-import { availableStackStock, stackChoice } from './stock'
+import { stackChoice } from './stock'
 
 const KEY = stackKey(MELAMINE_1_ID, LAUAN_4_ID)
 const PAIR = [MELAMINE_1_ID, LAUAN_4_ID] as const
@@ -64,11 +64,9 @@ describe('stackChoice は 3×6／4×8 だけ（E-64）', () => {
     expect(stackChoice(job, PAIR).grain).toBe('long')
   })
 
-  it('組の手持ちは選んだサイズ1行（枚数 無限）', () => {
+  it('組の行に手持ちが残っていても、組のサイズは選んだ 3×6（手持ちは返さない）', () => {
     const job = withLeftoverStackStock(sampleGroupJob(true), [['3×6', 1]])
-    expect(availableStackStock(job, PAIR)).toEqual([
-      { stockId: null, sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long', count: Infinity },
-    ])
+    expect(stackChoice(job, PAIR)).toEqual({ sizeKind: 'saburoku', width: 910, length: 1820, grain: 'long' })
   })
 })
 

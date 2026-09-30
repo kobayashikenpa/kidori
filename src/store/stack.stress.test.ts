@@ -324,7 +324,7 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       const raw = JSON.parse(JSON.stringify(legacyJob)) as Record<string, unknown>
       delete raw.stackSheets
       delete raw.stacking
-      const { jobs, fixes, unstacked } = sanitizeJobs([raw])
+      const { jobs, fixes } = sanitizeJobs([raw])
       expect(fixes).toBe(0)
       const job = jobs[0]
       // 第2.2版の組を3つに分ける：3×6／4×8 でそろう・自由入力でそろう・そろわない
@@ -341,8 +341,6 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
         expect(x.sizeKind).not.toBe('custom')
         expect([x.width, x.length, x.grain]).toEqual([a.width, a.length, a.grain])
       }
-      // 第2.6版：重ね切りは外さず、知らせない（材料グループの stack はそのまま）
-      expect(unstacked).toEqual([])
       // 仕事の重ね切り：部材が使っている材料グループで、以前の決まりで重ねられたのに外していたものがあれば off（18.8）
       const used = new Set(legacyJob.parts.filter((p) => p.quantity >= 1).map((p) => p.flushId))
       const wantOff = job.flushes.some((f) => used.has(f.id) && f.stack !== true && canStack(f, job.boards))
