@@ -21,6 +21,9 @@ import { NumberField } from './NumberField'
 import { Segmented } from './Segmented'
 import { Sheet } from './Sheet'
 
+/** 材料の欄の1段目で選んでいるもの（材料名、または材料グループ。何も選んでいなければ null） */
+type MaterialPick = { kind: 'name'; name: string } | { kind: 'group' } | null
+
 interface Props {
   /** 編集する部材。null なら新しく足す */
   part: Part | null
@@ -44,11 +47,12 @@ export function PartEditor({ part, onClose }: Props) {
   // 材料を変えたときの厚みの置き換えの知らせ（仕様書 5.4・architecture.md 15.7）。before は置き換える前の下書きの式（元に戻す用）
   const [swapped, setSwapped] = useState<{ message: string; before: Part['expr'] } | null>(null)
   // 材料の欄の1段目で選んでいるもの（材料名、または材料グループ）。画面の中だけの状態で、開いたときは下書きの材料から決める（第2.7版）
-  const [pick, setPick] = useState<{ kind: 'name'; name: string } | { kind: 'group' } | null>(() => {
+  const pickFromDraft = (): MaterialPick => {
     if (draft.flushId !== undefined) return { kind: 'group' }
     const b = job.boards.find((x) => x.id === draft.boardId)
     return b ? { kind: 'name', name: materialName(b) } : null
-  })
+  }
+  const [pickState, setPick] = useState<MaterialPick>(pickFromDraft)
   // 部材の編集の上に重ねて開いている、設定の材料・材料グループの編集（architecture.md 17.10）
   const [materialEdit, setMaterialEdit] = useState<MaterialEditTarget | null>(null)
   // 「＋ 材料グループを作る」で作った材料グループ。仕事に入ったあと（次の描画）で部材の下書きに選ぶ
@@ -83,6 +87,9 @@ export function PartEditor({ part, onClose }: Props) {
 
   // 材料の欄の材料名ごとのまとまり（名前は最初に出てくる順、厚みは小さい順）
   const nameGroups = materialNameGroups(orderedBoards(job))
+  // 選んでいた材料名が無くなったら（「編集」で材料名を直したときなど）、下書きの今の材料から決め直す
+  const pick: MaterialPick =
+    pickState?.kind === 'name' && !nameGroups.some((g) => g.name === pickState.name) ? pickFromDraft() : pickState
 
   // 入力中の内容で寸法を計算し直す（計算は engine に任せる）
   const draftJob = useMemo(

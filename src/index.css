@@ -1396,14 +1396,6 @@ select.input {
   background: var(--err-soft);
   color: var(--err);
 }
-.sz-form {
-  background: var(--surface);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
 /* 部材の編集：厚みの寸法の自動表示 */
 .thick-auto {
@@ -1832,11 +1824,6 @@ button.dim-name {
 .stk {
   margin-top: 14px;
 }
-.stk-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 .stk-mat {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1944,12 +1931,6 @@ button.dim-name {
 }
 
 /* ---------- 設定の一覧の見出し（材料名ごと）・木取りしない の印（第2.5版） ---------- */
-.list-group-head {
-  margin: 10px 0 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-}
 .list-name .chip {
   margin-left: 8px;
   vertical-align: middle;
