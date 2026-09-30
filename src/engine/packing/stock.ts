@@ -68,8 +68,9 @@ export function findStackSheet(job: Pick<Job, 'stackSheets'>, boardIds: readonly
 /**
  * 組の行のサイズの設定（第2.3版。architecture.md 15.3・15.9・18.3）。重ね切りの組は 3×6 か 4×8 だけ（仕様書 4。自由入力・手持ちは使わない）。
  * 行の 3×6／4×8 を寸法の決まった値（木目 長手）で返す。行が自由入力なら 4×8。
- * 行が無ければ（第2.6版。未決事項 58 の案 B）：2つの材料の行がどちらもサイズを選んでいて（手持ち・自由入力でない）同じ 3×6／4×8 なら
- * そのサイズ、そうでなければ 4×8。保存データに手持ち（stock・stockOn）が残っていても返さない（木取りは見ない）
+ * 行が無ければ（第2.6版。未決事項 58 の案 B・63 の決定）：2つの材料の行の 3×6／4×8 で決める。手持ち・自由入力の行はサイズなしとみなし、
+ * 片方だけサイズがあればそのサイズ、両方あって同じならそのサイズ、違う・両方サイズなしなら 4×8。
+ * 保存データに手持ち（stock・stockOn）が残っていても返さない（木取りは見ない）
  */
 export function stackChoice(job: Pick<Job, 'stackSheets' | 'boards'>, boardIds: readonly [string, string]): SheetChoice {
   const s = findStackSheet(job, boardIds)
@@ -81,7 +82,9 @@ export function stackChoice(job: Pick<Job, 'stackSheets' | 'boards'>, boardIds: 
       const b = (job.boards ?? []).find((x) => x.id === id)
       return b && !usesStock(b) && b.sizeKind !== 'custom' ? b.sizeKind : null
     })
-    if (kinds[0] !== null && kinds[0] === kinds[1]) sizeKind = kinds[0]
+    const [x, y] = kinds
+    if (x !== null && (y === null || x === y)) sizeKind = x
+    else if (x === null && y !== null) sizeKind = y
   }
   const [width, length] = BOARD_SIZES[sizeKind]
   return { sizeKind, width, length, grain: 'long' }

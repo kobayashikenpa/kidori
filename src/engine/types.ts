@@ -100,7 +100,7 @@ export interface Board extends SheetChoice {
 
 /**
  * 重ね切りの組の行のサイズの設定（第2.3版）。組は2つの材料で決まる（違うフラッシュでも同じ2つの材料なら1つの組）。
- * 行が無い組は、2つの材料の行のサイズがそろえばそのサイズ、そうでなければ 4×8（第2.6版。packing/stock.ts の stackChoice）
+ * 行が無い組は、2つの材料の行のサイズがそろえばそのサイズ、違えば 4×8。片方が手持ちならもう片方のサイズ、両方が手持ちなら 4×8（第2.6版。packing/stock.ts の stackChoice）
  */
 export interface StackSheet extends SheetChoice {
   /** 組の2つの材料（a・b。材料の保存の並び）。探すときは並びを問わない */

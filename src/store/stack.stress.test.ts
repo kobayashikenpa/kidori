@@ -362,7 +362,8 @@ describe('重ね切りの負荷・つじつま（乱数の仕事）', () => {
       if (kinds.length === 0 && r.materials.every((m) => !m.stack)) {
         // 第2.6版：組も端材も変わるので、第2.2版と同じ配置になるのは、第2.2版でも今も重ねていない仕事だけ。
         // 第2.5版（E-68）で帯の並べ方（同じ幅を優先）を変えたので、第2.2版と比べるのは第2.4版までの並べ方で並べた結果
-        const old = packJob(job, computeDimensions(job), undefined, { sameWidthFirst: false })
+        // 重ねない仕事なので組は使わない（plan は空）。並べ方を変えると確かめ（decideStacks）の結果が変わりうるため（E-79 で組のサイズの初期値が変わり seed 114 で起きた）
+        const old = packJob(job, computeDimensions(job), [], { sameWidthFirst: false })
         expect(digest(old), `seed ${seed}`).toEqual(table[`s${seed}`])
         unchanged++
       }
