@@ -11,7 +11,10 @@ export interface SizeSummary {
   width: number
   /** 長辺（mm） */
   length: number
+  /** 必要な板の枚数（端材から取った1枚は数えない。第2.6版） */
   sheetCount: number
+  /** 重ねた板の端材から取った1枚の数（第2.6版。まとめの「（端材から ◯枚）」と同じ） */
+  offcutSheetCount: number
   /** その材料の歩留まり */
   yieldRate: number
   /** 入らない部材の数 */
@@ -25,7 +28,7 @@ export interface MaterialSizeComparison {
   stack?: { boardIds: [string, string] }
   /** 3×6、4×8 の順 */
   options: [SizeSummary, SizeSummary]
-  /** 枚数が少ない方。入らない部材が出るサイズ・枚数 0 のサイズがあれば比べない。同じ枚数なら null */
+  /** 枚数が少ない方。入らない部材が出るサイズ・使う板が無い（枚数 0 で端材からも 0）サイズがあれば比べない。同じ枚数なら null */
   fewer: StandardSize | null
   /** 歩留まりが高い方（小数第1位の % で比べる）。比べない条件は fewer と同じ。同じなら null */
   higher: StandardSize | null
@@ -34,7 +37,8 @@ export interface MaterialSizeComparison {
 /** 3×6・4×8 のどちらが枚数が少ないか・歩留まりが高いか（画面の「枚数が少ない」「歩留まりが高い」の印） */
 export function pickBetterSize(options: readonly [SizeSummary, SizeSummary]): Pick<MaterialSizeComparison, 'fewer' | 'higher'> {
   const [a, b] = options
-  const fits = (o: SizeSummary) => o.unplacedCount === 0 && o.sheetCount > 0
+  // 端材から取った1枚だけで足りる（0枚・端材から1枚）サイズも比べる（第2.6版）
+  const fits = (o: SizeSummary) => o.unplacedCount === 0 && o.sheetCount + o.offcutSheetCount > 0
   if (!fits(a) || !fits(b)) return { fewer: null, higher: null }
   const ya = round1(a.yieldRate * 100)
   const yb = round1(b.yieldRate * 100)
@@ -87,6 +91,7 @@ export function compareStandardSizes(job: Job, dims: DimensionResult): MaterialS
         width,
         length,
         sheetCount: r?.sheetCount ?? 0,
+        offcutSheetCount: r?.offcutSheetCount ?? 0,
         yieldRate: r?.yieldRate ?? 0,
         unplacedCount: r?.unplaced.length ?? 0,
       }

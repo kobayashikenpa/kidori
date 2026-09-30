@@ -2081,6 +2081,8 @@ decideStacks(job, dims, expanded?): { accepted: StackPair[]; rejected: StackPair
 
 - `stockUsage`（`progress/frozen.ts`）に `offcuts: { stockId; label; count; used }[]` を足す（材料ごと。サイズを選んでいる材料も）。使った枚数は 端材の固定した1枚 ＋ 端材の計算した1枚
 - `materialSummaries`：材料の行の `sheetCount`・`bySize` から端材の1枚を除き、`offcutCount` を足す。組の行は今のまま
+- `compareStandardSizes` の `SizeSummary` にも `offcutSheetCount` を足す（E-80）。3×6／4×8 のボタンはまとめと同じく「0枚（端材から 1枚）」。「枚数が少ない」などの比べは、端材だけで足りるサイズ（0枚・端材から1枚）も比べる
+- 重ねなかった組の名前「メラミン1＋ラワン18」は `stackPairName`（`packing/stack.ts`。`stackLabel` はこれに「2枚重ね：」を付けたもの）
 
 ### 18.10 以前の仕事で結果が変わるとき
 

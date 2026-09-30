@@ -174,6 +174,7 @@ describe('枚数が少ない方・歩留まりが高い方（fewer・higher）',
     width: kind === 'saburoku' ? 910 : 1220,
     length: kind === 'saburoku' ? 1820 : 2440,
     sheetCount,
+    offcutSheetCount: 0,
     yieldRate,
     unplacedCount,
   })
