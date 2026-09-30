@@ -1965,3 +1965,17 @@ button.dim-name {
   font-weight: 400;
   color: var(--muted);
 }
+
+/* 重ねた板の端材の行（第2.6版。読むだけ） */
+.stk-row.stk-offcut {
+  border: 1px dashed var(--line);
+}
+.stk-offcut-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+  font-size: 14px;
+}
+.stk-offcut .stk-use {
+  flex: 0 0 auto;
+}

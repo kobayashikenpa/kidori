@@ -11,7 +11,7 @@ import { setRowSize, setRowStockMode, type SizeTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
 import { pct } from '../format'
 import { selectedSize, sizeChoices } from '../sheetSize'
-import { StockEditor } from './StockEditor'
+import { OffcutRows, StockEditor } from './StockEditor'
 
 const SIZE_NAME: Record<StandardSize, string> = { saburoku: '3×6', shihachi: '4×8' }
 
@@ -95,7 +95,17 @@ export function SheetSizePicker({ target, choice, label, compare, current, usage
         )}
       </div>
       {error && <p className="msg err">{error}</p>}
-      {isFree && <StockEditor target={target} choice={choice} label={label} usage={usage} />}
+      {isFree ? (
+        <StockEditor target={target} choice={choice} label={label} usage={usage} />
+      ) : (
+        usage &&
+        usage.offcuts.length > 0 && (
+          // サイズを選んでいる行でも、重ねた板の端材の行があれば行の下に出す（読むだけ。第2.6版）
+          <div className="stk-mat" role="group" aria-label={`${label} の端材`}>
+            <OffcutRows usage={usage} />
+          </div>
+        )
+      )}
     </div>
   )
 }

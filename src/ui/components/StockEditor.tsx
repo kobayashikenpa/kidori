@@ -61,6 +61,7 @@ export function StockEditor({ target, choice, label, usage }: Props) {
           {fmt(choice.width)}×{fmt(choice.length)}（枚数の指定なし）
         </p>
       )}
+      <OffcutRows usage={usage} />
       <button
         type="button"
         className="btn ghost"
@@ -133,6 +134,30 @@ function StockRow({ target, label, sheet, use, onResult }: RowProps) {
         </button>
       </div>
     </li>
+  )
+}
+
+/**
+ * 重ねた板の端材の行（第2.6版。仕様書 10.9・architecture.md 18.9）。読むだけ（消す・枚数を変えるはできない）。
+ * 「端材 780×1800（重ねた板1から）」と、状態（不採用／◯枚採用／採用）。端材の行が無ければ何も出さない
+ */
+export function OffcutRows({ usage }: { usage: StockUsage | null }) {
+  const list = usage?.offcuts ?? []
+  if (list.length === 0) return null
+  return (
+    <>
+      <div className="kd-k">重ねた板の端材（自動・読むだけ）</div>
+      <ul className="stk-rows" aria-label="重ねた板の端材">
+      {list.map((o) => (
+        <li key={o.stockId} className="stk-row stk-offcut">
+          <div className="stk-foot">
+            <span className="stk-name num stk-offcut-name">{o.label}</span>
+            <StockRowStatus used={o.used} count={o.count} />
+          </div>
+        </li>
+      ))}
+      </ul>
+    </>
   )
 }
 
