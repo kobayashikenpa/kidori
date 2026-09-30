@@ -72,7 +72,7 @@ describe('stockUsage の端材の行', () => {
     const u = stockUsage(job, run(job))
     const l18 = u.find((x) => x.boardId === L18)!
     expect(l18.rows).toEqual([])
-    expect(l18.offcuts).toEqual([{ stockId: `offcut:${KEY}#1:0`, label: '端材 102×1820（重ねた板1から）', source: 1, count: 1, used: 1 }])
+    expect(l18.offcuts).toEqual([{ stockId: `offcut:${KEY}#1:0`, label: '端材 102×1820（重ねた板1から）', width: 102, length: 1820, source: 1, count: 1, used: 1 }])
     // メラミン1 の行（残りの側板）にも同じ端材の行（側板は入らないので使わない）
     expect(u.find((x) => x.boardId === MEL)!.offcuts.map((o) => [o.label, o.used])).toEqual([['端材 102×1820（重ねた板1から）', 0]])
   })

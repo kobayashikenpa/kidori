@@ -3,6 +3,7 @@
 // 使う・残りの枚数は engine の stockUsage の結果をそのまま出す。保存は store の操作（addRowStock など。SizeTarget で行を指す）
 import { useState } from 'react'
 import type { StockUsage } from '../../engine/progress/frozen'
+import { groupOffcuts, type OffcutGroup } from '../../engine/progress/offcutGroups'
 import type { BoardGrain, BoardSizeKind, SheetChoice, StockSheet } from '../../engine/types'
 import { addRowStock, removeRowStock, setRowStockMode, updateRowStock, type SizeTarget } from '../../store/jobs'
 import { useCurrentJob } from '../../store/useJobStore'
@@ -139,24 +140,43 @@ function StockRow({ target, label, sheet, use, onResult }: RowProps) {
 
 /**
  * 重ねた板の端材の行（第2.6版。仕様書 10.9・architecture.md 18.9）。読むだけ（消す・枚数を変えるはできない）。
- * 「端材 780×1800（重ねた板1から）」と、状態（不採用／◯枚採用／採用）。端材の行が無ければ何も出さない
+ * 第2.9版（仕様書 9.4）：同じ大きさ・同じ重ねた板の端材は1行（「端材 96×390 ×2枚（重ねた板4から）」。まとめは engine の groupOffcuts）。
+ * 使う端材だけを並べ、使わない端材は「使わない端材 ◯枚」の1行にたたむ（押すと開く）。端材の行が無ければ何も出さない
  */
 export function OffcutRows({ usage }: { usage: StockUsage | null }) {
+  const [open, setOpen] = useState(false)
   const list = usage?.offcuts ?? []
   if (list.length === 0) return null
-  return (
-    <>
-      <div className="kd-k">重ねた板の端材（自動・読むだけ）</div>
-      <ul className="stk-rows" aria-label="重ねた板の端材">
-      {list.map((o) => (
-        <li key={o.stockId} className="stk-row stk-offcut">
+  const g = groupOffcuts(list)
+  const rows = (items: OffcutGroup[], label: string) => (
+    <ul className="stk-rows" aria-label={label}>
+      {items.map((o) => (
+        <li key={o.stockIds[0]} className="stk-row stk-offcut">
           <div className="stk-foot">
             <span className="stk-name num stk-offcut-name">{o.label}</span>
             <StockRowStatus used={o.used} count={o.count} />
           </div>
         </li>
       ))}
-      </ul>
+    </ul>
+  )
+  return (
+    <>
+      {g.used.length > 0 && (
+        <>
+          <div className="kd-k">使う端材（重ねた板から・自動）</div>
+          {rows(g.used, '使う端材')}
+        </>
+      )}
+      {g.unused.length > 0 && (
+        <>
+          <button type="button" className="stk-off-more" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            <span className="num">使わない端材 {g.unusedCount}枚</span>
+            <span className="stk-off-hint">{open ? '閉じる' : '開いて見る'}</span>
+          </button>
+          {open && rows(g.unused, '使わない端材')}
+        </>
+      )}
     </>
   )
 }

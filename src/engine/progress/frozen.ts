@@ -247,6 +247,10 @@ export interface OffcutUsage {
   stockId: string
   /** 「端材 780×1800（重ねた板1から）」（短辺×長辺） */
   label: string
+  /** 短辺（小数第1位まで。第2.9版） */
+  width: number
+  /** 長辺（小数第1位まで。第2.9版） */
+  length: number
   /** 重ねた板の番号 */
   source: number
   /** 枚数（いつも 1） */
@@ -306,6 +310,8 @@ export function stockUsage(job: Job, result: PackingResult): StockUsage[] {
       ? (offcutRows.get(board.id) ?? []).map((k) => ({
           stockId: k.stockId!,
           label: `端材 ${round1(k.width)}×${round1(k.length)}（重ねた板${k.offcut!.source}から）`,
+          width: round1(k.width),
+          length: round1(k.length),
           source: k.offcut!.source,
           count: k.count,
           used: 0,
