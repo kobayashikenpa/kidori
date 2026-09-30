@@ -6,7 +6,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { orderedBoards } from '../../engine/boards'
 import { computeDimensions } from '../../engine/dimensions'
 import { packJob } from '../../engine/packing'
-import { stackKey, stackLabel } from '../../engine/packing/stack'
+import { stackKey, stackLabel, stackPairName } from '../../engine/packing/stack'
 import { stackedSheetId, stackSheetNumbers } from '../../engine/packing/offcuts'
 import { stackChoice, usesStock } from '../../engine/packing/stock'
 import { stockShortage } from '../../engine/hints/shortage'
@@ -169,10 +169,6 @@ export function KidoriScreen() {
   const empty = summaries.materials.length === 0
   const colorOf = (partId: string) => Math.max(0, job.parts.findIndex((p) => p.id === partId))
   const boardOf = (boardId: string): Board | null => job.boards.find((b) => b.id === boardId) ?? null
-  const tokenOf = (boardId: string): string => {
-    const b = boardOf(boardId)
-    return b ? boardTokenLabel(b) : boardId
-  }
   const resultOf = (boardId: string): MaterialResult | null => result.materials.find((m) => m.boardId === boardId) ?? null
 
   // 材料ごとの段：材料の表示の並び（orderedBoards）。材料を削除した固定した1枚は最後に、写しの材料名で。
@@ -312,7 +308,7 @@ export function KidoriScreen() {
           <ul>
             {result.stacks.rejected.map((p) => (
               <li key={p.key}>
-                <b>{p.boardIds.map(tokenOf).join('＋')}</b>
+                <b>{stackPairName(job, p.boardIds)}</b>
                 ：重ねると材料が増えるので、重ねずに木取りしています
               </li>
             ))}

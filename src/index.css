@@ -1363,6 +1363,12 @@ select.input {
 .sz-y {
   font-size: 13px;
 }
+/* 端材から取った1枚の数（第2.6版。「0枚（端材から 1枚）」の括弧の部分） */
+.sz-off {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--muted);
+}
 .sz-muted {
   color: var(--muted);
   margin-top: 6px;
