@@ -1995,3 +1995,17 @@ button.dim-name {
   flex: 0 0 auto;
   min-height: 0;
 }
+
+/* 設定の画面のタブ（第2.7版）。幅 375px で4つが1行に収まる（長い名前は2行に折り返す） */
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0 12px;
+}
+.settings-tabs .pad-tab {
+  padding: 4px 2px;
+  line-height: 1.2;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
