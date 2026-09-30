@@ -1373,6 +1373,11 @@ select.input {
   color: var(--muted);
   margin-top: 6px;
 }
+/* 端材を使う材料の行の「足りない分：4×8 ◯枚」（第2.8版） */
+.sz-short {
+  margin: 0;
+  font-size: 14px;
+}
 .sz-tags {
   display: flex;
   flex-direction: column;
