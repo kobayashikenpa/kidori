@@ -1958,3 +1958,10 @@ button.dim-name {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* 端材から取った1枚の枚数（第2.6版。まとめの材料の行の「0枚（端材から 1枚）」） */
+.kd-v-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}

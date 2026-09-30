@@ -91,6 +91,17 @@ const DRIFT_REASON: Record<FrozenSheetView['drift'][number]['reason'], string> =
   removed: '部材の削除・材料の変更',
 }
 
+/** 端材から取った1枚（第2.6版）か。枚数に数えない */
+const isOffcut = (e: SheetEntry): boolean => e.layout.sheet?.offcut !== undefined
+/** 「◯枚目 / ◯枚」の番号は、端材から取った1枚・重ねた板を除いて振る */
+const plainCount = (list: SheetEntry[]): number => list.filter((e) => !e.name).length
+const plainNo = (list: SheetEntry[], e: SheetEntry): number => list.filter((x) => !x.name).indexOf(e) + 1
+/** 段の見出しの枚数。端材から取った1枚は「（端材から ◯枚）」で添える */
+const sheetCountText = (list: SheetEntry[]): string => {
+  const off = list.filter(isOffcut).length
+  return `${list.length - off}枚${off > 0 ? `（端材から ${off}枚）` : ''}`
+}
+
 const frozenEntry = (v: FrozenSheetView, name: string | null): SheetEntry => ({
   key: v.sheet.id,
   layout: v.sheet.layout,
@@ -190,11 +201,19 @@ export function KidoriScreen() {
         : v.sheet.boardId === boardId && !v.sheet.stackWith,
     )
     // 重ねた板の名前「重ねた板1」（番号は engine の stackSheetNumbers）
-    const nameOf = (id: string): string | null => {
+    // 端材から取った1枚は「重ねた板1の端材（メラミン1）780×1800」（短辺×長辺）
+    const token = board ? boardTokenLabel(board) : (mine[0]?.label ?? '')
+    const nameOf = (id: string, layout: SheetLayout): string | null => {
+      const src = layout.sheet?.offcut?.source
+      if (!pair && src !== undefined) {
+        const a = Math.min(layout.boardWidth, layout.boardLength)
+        const b = Math.max(layout.boardWidth, layout.boardLength)
+        return `重ねた板${src}の端材（${token}）${fmt(a)}×${fmt(b)}`
+      }
       const n = pair ? stackNo.get(id) : undefined
       return n === undefined ? null : `重ねた板${n}`
     }
-    const frozen = mine.filter((v) => !v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id)))
+    const frozen = mine.filter((v) => !v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id, v.sheet.layout)))
     const computed: SheetEntry[] = (m?.sheets ?? []).map((sh) => ({
       key: `c${boardId}:${sh.index}`,
       layout: sh,
@@ -206,7 +225,7 @@ export function KidoriScreen() {
       trim: s.trim,
       progress: sheetProgress(sh, s.kerf, []),
       view: null,
-      name: nameOf(stackedSheetId(boardId, sh)),
+      name: nameOf(stackedSheetId(boardId, sh), sh),
     }))
     return [
       {
@@ -223,7 +242,7 @@ export function KidoriScreen() {
         summary,
         mode: m && m.sheets.length > 0 ? m.mode : (mine[0]?.sheet.mode ?? null),
         sheets: [...frozen, ...computed],
-        finished: mine.filter((v) => v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id))),
+        finished: mine.filter((v) => v.complete).map((v) => frozenEntry(v, nameOf(v.sheet.id, v.sheet.layout))),
         choice,
         stocked: choice !== null && usesStock(choice),
       },
@@ -390,7 +409,7 @@ export function KidoriScreen() {
             {sec.label}
             <span className="kd-h3-sub num">
               {sec.sheets.length > 0
-                ? `${sec.sheets.length}枚${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
+                ? `${sheetCountText(sec.sheets)}${sec.mode ? `・${cutModeLabel(sec.mode)}` : ''}`
                 : sec.finished.length > 0
                   ? 'すべて切り終わり'
                   : '切り出す板はありません'}
@@ -413,11 +432,11 @@ export function KidoriScreen() {
                 <SheetCard
                   key={e.key}
                   entry={e}
-                  no={i + 1}
-                  count={sec.finished.length}
+                  no={e.name ? i + 1 : plainNo(sec.finished, e)}
+                  count={plainCount(sec.finished)}
                   finished
                   label={sec.label}
-                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
+                  size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -431,10 +450,10 @@ export function KidoriScreen() {
                 <SheetCard
                   key={e.key}
                   entry={e}
-                  no={i + 1}
-                  count={sec.sheets.length}
+                  no={e.name ? i + 1 : plainNo(sec.sheets, e)}
+                  count={plainCount(sec.sheets)}
                   label={sec.label}
-                  size={sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
+                  size={isOffcut(e) ? null : sec.stocked || e.layout.sheet ? layoutSizeLabel(e.layout) : null}
                   rows={sheetChecklist(job, e.layout, e.checked)}
                   colorOf={colorOf}
                   onToggle={(row, key, el) => toggle(sec.boardId, e, row, key, el)}
@@ -469,20 +488,23 @@ interface MaterialRowProps {
 
 function MaterialRow({ label, summary, stack, mode, m, auto, target, choice, usage, comparison, bySize }: MaterialRowProps) {
   const n = summary.sheetCount
+  const off = summary.offcutCount
   return (
     <li className={stack ? 'kd-mat kd-mat-stack' : 'kd-mat'}>
       <div className="kd-mat-name">{label}</div>
       <div className="kd-mat-nums">
         <span>
           <span className="kd-k">必要な材料</span>
-          <span className="kd-v num">{n}枚</span>
+          <span className="kd-v num">
+            {n}枚{off > 0 && <span className="kd-v-sub">（端材から {off}枚）</span>}
+          </span>
         </span>
         <span>
           <span className="kd-k">歩留まり</span>
-          <span className="kd-v num">{n > 0 ? pct(summary.yieldRate) : '―'}</span>
+          <span className="kd-v num">{n + off > 0 ? pct(summary.yieldRate) : '―'}</span>
         </span>
       </div>
-      {n > 0 && mode && (
+      {n + off > 0 && mode && (
         <div className="kd-mat-mode">
           切り方：<b>{cutModeLabel(mode)}</b>
           {auto && m && m.sheets.length > 0 && <span className="chip ok">おまかせで選択</span>}
